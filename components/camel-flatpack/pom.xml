@@ -41,10 +41,6 @@
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-core</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.apache.camel</groupId>
-      <artifactId>camel-spring</artifactId>
-    </dependency>
     <!-- Using the servicemix wrapped one as the centrl mvn repo doesn't have one -->
     <dependency>
       <groupId>org.apache.servicemix.bundles</groupId>
@@ -70,11 +66,6 @@
 	<dependency>
 		<groupId>org.slf4j</groupId>
 		<artifactId>slf4j-log4j12</artifactId>
-		<scope>test</scope>
-	</dependency>
-	<dependency>
-		<groupId>log4j</groupId>
-		<artifactId>log4j</artifactId>
 		<scope>test</scope>
 	</dependency>
 

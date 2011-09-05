@@ -41,16 +41,11 @@ import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 public class CxfWsdlFirstTest extends AbstractCxfWsdlFirstTest {
-    private static int port1 = AvailablePortFinder.getNextAvailable(); 
-    private static int port2 = AvailablePortFinder.getNextAvailable(); 
-    static {
-        System.setProperty("CxfWsdlFirstTest.port1", Integer.toString(port1));
-        System.setProperty("CxfWsdlFirstTest.port2", Integer.toString(port2));
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
     }
 
-    public String getPort() {
-        return Integer.toString(port2);
-    }
     protected ClassPathXmlApplicationContext createApplicationContext() {
         return new ClassPathXmlApplicationContext("org/apache/camel/component/cxf/WsdlFirstBeans.xml");
     }
@@ -58,7 +53,7 @@ public class CxfWsdlFirstTest extends AbstractCxfWsdlFirstTest {
     @BeforeClass
     public static void startService() {
         Object implementor = new PersonImpl();
-        String address = "http://localhost:" + port1 + "/PersonService/";
+        String address = "http://localhost:" + getPort1() + "/CxfWsdlFirstTest/PersonService/";
         Endpoint.publish(address, implementor);
     }
 

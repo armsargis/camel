@@ -19,6 +19,7 @@ package org.apache.camel.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -32,9 +33,9 @@ import org.apache.camel.ExchangePattern;
 import org.apache.camel.Expression;
 import org.apache.camel.Processor;
 import org.apache.camel.processor.WireTapProcessor;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
-import org.apache.camel.util.concurrent.ExecutorServiceHelper;
 
 /**
  * Represents an XML &lt;wireTap/&gt; element
@@ -71,10 +72,12 @@ public class WireTapDefinition<Type extends ProcessorDefinition> extends NoOutpu
     }
 
     public WireTapDefinition(String uri) {
+        this();
         setUri(uri);
     }
 
     public WireTapDefinition(Endpoint endpoint) {
+        this();
         setEndpoint(endpoint);
     }
 
@@ -82,10 +85,9 @@ public class WireTapDefinition<Type extends ProcessorDefinition> extends NoOutpu
     public Processor createProcessor(RouteContext routeContext) throws Exception {
         Endpoint endpoint = resolveEndpoint(routeContext);
 
-        executorService = ExecutorServiceHelper.getConfiguredExecutorService(routeContext, "WireTap", this);
-        if (executorService == null) {
-            executorService = routeContext.getCamelContext().getExecutorServiceStrategy().newDefaultThreadPool(this, "WireTap");
-        }
+        String ref = this.executorServiceRef != null ? this.executorServiceRef : "WireTap";
+        ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
+        executorService = manager.newDefaultThreadPool(this, ref);
         WireTapProcessor answer = new WireTapProcessor(endpoint, getPattern(), executorService);
 
         answer.setCopy(isCopy());
@@ -120,12 +122,21 @@ public class WireTapDefinition<Type extends ProcessorDefinition> extends NoOutpu
 
     @Override
     public String toString() {
-        return "WireTap[" + getLabel() + "]";
+        return "WireTap[" + description() + "]";
+    }
+    
+    protected String description() {
+        return FromDefinition.description(getUri(), getRef(), getEndpoint());
     }
 
     @Override
     public String getShortName() {
         return "wireTap";
+    }
+    
+    @Override
+    public String getLabel() {
+        return "wireTap[" + description() + "]";
     }
 
     @Override
@@ -147,11 +158,6 @@ public class WireTapDefinition<Type extends ProcessorDefinition> extends NoOutpu
         } else {
             return endpoint;
         }
-    }
-
-    @Override
-    public String getLabel() {
-        return FromDefinition.description(getUri(), getRef(), getEndpoint());
     }
 
     // Fluent API

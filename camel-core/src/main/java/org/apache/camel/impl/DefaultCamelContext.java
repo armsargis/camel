@@ -61,6 +61,7 @@ import org.apache.camel.ServiceStatus;
 import org.apache.camel.ShutdownRoute;
 import org.apache.camel.ShutdownRunningTask;
 import org.apache.camel.StartupListener;
+import org.apache.camel.StatefulService;
 import org.apache.camel.SuspendableService;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.VetoCamelContextStartException;
@@ -69,11 +70,9 @@ import org.apache.camel.component.properties.PropertiesComponent;
 import org.apache.camel.impl.converter.BaseTypeConverterRegistry;
 import org.apache.camel.impl.converter.DefaultTypeConverter;
 import org.apache.camel.impl.converter.LazyLoadingTypeConverter;
-import org.apache.camel.management.DefaultManagementAgent;
-import org.apache.camel.management.DefaultManagementLifecycleStrategy;
-import org.apache.camel.management.DefaultManagementStrategy;
+import org.apache.camel.management.DefaultManagementMBeanAssembler;
 import org.apache.camel.management.JmxSystemPropertyKeys;
-import org.apache.camel.management.ManagedManagementStrategy;
+import org.apache.camel.management.ManagementStrategyFactory;
 import org.apache.camel.model.Constants;
 import org.apache.camel.model.DataFormatDefinition;
 import org.apache.camel.model.RouteDefinition;
@@ -91,7 +90,7 @@ import org.apache.camel.spi.DataFormatResolver;
 import org.apache.camel.spi.Debugger;
 import org.apache.camel.spi.EndpointStrategy;
 import org.apache.camel.spi.EventNotifier;
-import org.apache.camel.spi.ExecutorServiceStrategy;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.FactoryFinder;
 import org.apache.camel.spi.FactoryFinderResolver;
 import org.apache.camel.spi.InflightRepository;
@@ -100,6 +99,7 @@ import org.apache.camel.spi.InterceptStrategy;
 import org.apache.camel.spi.Language;
 import org.apache.camel.spi.LanguageResolver;
 import org.apache.camel.spi.LifecycleStrategy;
+import org.apache.camel.spi.ManagementMBeanAssembler;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.NodeIdFactory;
 import org.apache.camel.spi.PackageScanClassResolver;
@@ -111,6 +111,7 @@ import org.apache.camel.spi.ServicePool;
 import org.apache.camel.spi.ShutdownStrategy;
 import org.apache.camel.spi.TypeConverterRegistry;
 import org.apache.camel.spi.UuidGenerator;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.EndpointHelper;
@@ -152,6 +153,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
     private Registry registry;
     private List<LifecycleStrategy> lifecycleStrategies = new ArrayList<LifecycleStrategy>();
     private ManagementStrategy managementStrategy;
+    private ManagementMBeanAssembler managementMBeanAssembler;
     private AtomicBoolean managementStrategyInitialized = new AtomicBoolean(false);
     private final List<RouteDefinition> routeDefinitions = new ArrayList<RouteDefinition>();
     private List<InterceptStrategy> interceptStrategies = new ArrayList<InterceptStrategy>();
@@ -193,7 +195,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
     private ShutdownStrategy shutdownStrategy = new DefaultShutdownStrategy(this);
     private ShutdownRoute shutdownRoute = ShutdownRoute.Default;
     private ShutdownRunningTask shutdownRunningTask = ShutdownRunningTask.CompleteCurrentTaskOnly;
-    private ExecutorServiceStrategy executorServiceStrategy = new DefaultExecutorServiceStrategy(this);
+    private ExecutorServiceManager executorServiceManager;
     private Debugger debugger;
     private UuidGenerator uuidGenerator = createDefaultUuidGenerator();
     private final StopWatch stopWatch = new StopWatch(false);
@@ -201,6 +203,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
     public DefaultCamelContext() {
         super();
+        this.executorServiceManager = new DefaultExecutorServiceManager(this);
 
         // create endpoint registry at first since end users may access endpoints before CamelContext is started
         this.endpoints = new EndpointRegistry(this);
@@ -294,7 +297,9 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
                         addComponent(name, component);
                         if (isStarted() || isStarting()) {
                             // If the component is looked up after the context is started, lets start it up.
-                            startServices(component);
+                            if (component instanceof Service) {
+                                startService((Service)component);
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -331,40 +336,34 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
     // -----------------------------------------------------------------------
 
     public Collection<Endpoint> getEndpoints() {
-        synchronized (endpoints) {
-            return new ArrayList<Endpoint>(endpoints.values());
-        }
+        return new ArrayList<Endpoint>(endpoints.values());
     }
 
     public Map<String, Endpoint> getEndpointMap() {
-        synchronized (endpoints) {
-            TreeMap<String, Endpoint> answer = new TreeMap<String, Endpoint>();
-            for (Map.Entry<EndpointKey, Endpoint> entry : endpoints.entrySet()) {
-                answer.put(entry.getKey().get(), entry.getValue());
-            }
-            return answer;
+        TreeMap<String, Endpoint> answer = new TreeMap<String, Endpoint>();
+        for (Map.Entry<EndpointKey, Endpoint> entry : endpoints.entrySet()) {
+            answer.put(entry.getKey().get(), entry.getValue());
         }
+        return answer;
     }
 
     public Endpoint hasEndpoint(String uri) {
-        synchronized (endpoints) {
-            return endpoints.get(getEndpointKey(uri));
-        }
+        return endpoints.get(getEndpointKey(uri));
     }
 
     public Endpoint addEndpoint(String uri, Endpoint endpoint) throws Exception {
         Endpoint oldEndpoint;
-        synchronized (endpoints) {
-            startServices(endpoint);
-            oldEndpoint = endpoints.remove(getEndpointKey(uri));
-            for (LifecycleStrategy strategy : lifecycleStrategies) {
-                strategy.onEndpointAdd(endpoint);
-            }
-            addEndpointToRegistry(uri, endpoint);
-            if (oldEndpoint != null) {
-                stopServices(oldEndpoint);
-            }
+
+        startService(endpoint);
+        oldEndpoint = endpoints.remove(getEndpointKey(uri));
+        for (LifecycleStrategy strategy : lifecycleStrategies) {
+            strategy.onEndpointAdd(endpoint);
         }
+        addEndpointToRegistry(uri, endpoint);
+        if (oldEndpoint != null) {
+            stopServices(oldEndpoint);
+        }
+
         return oldEndpoint;
     }
 
@@ -416,39 +415,37 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
         Endpoint answer;
         String scheme = null;
-        synchronized (endpoints) {
-            answer = endpoints.get(getEndpointKey(uri));
-            if (answer == null) {
-                try {
-                    // Use the URI prefix to find the component.
-                    String splitURI[] = ObjectHelper.splitOnCharacter(uri, ":", 2);
-                    if (splitURI[1] != null) {
-                        scheme = splitURI[0];
-                        Component component = getComponent(scheme);
+        answer = endpoints.get(getEndpointKey(uri));
+        if (answer == null) {
+            try {
+                // Use the URI prefix to find the component.
+                String splitURI[] = ObjectHelper.splitOnCharacter(uri, ":", 2);
+                if (splitURI[1] != null) {
+                    scheme = splitURI[0];
+                    Component component = getComponent(scheme);
 
-                        // Ask the component to resolve the endpoint.
-                        if (component != null) {
-                            // Have the component create the endpoint if it can.
-                            answer = component.createEndpoint(uri);
+                    // Ask the component to resolve the endpoint.
+                    if (component != null) {
+                        // Have the component create the endpoint if it can.
+                        answer = component.createEndpoint(uri);
 
-                            if (answer != null && log.isDebugEnabled()) {
-                                log.debug("{} converted to endpoint: {} by component: {}", new Object[]{uri, answer, component});
-                            }
+                        if (answer != null && log.isDebugEnabled()) {
+                            log.debug("{} converted to endpoint: {} by component: {}", new Object[]{uri, answer, component});
                         }
                     }
-
-                    if (answer == null) {
-                        // no component then try in registry and elsewhere
-                        answer = createEndpoint(uri);
-                    }
-
-                    if (answer != null) {
-                        addService(answer);
-                        answer = addEndpointToRegistry(uri, answer);
-                    }
-                } catch (Exception e) {
-                    throw new ResolveEndpointFailedException(uri, e);
                 }
+
+                if (answer == null) {
+                    // no component then try in registry and elsewhere
+                    answer = createEndpoint(uri);
+                }
+
+                if (answer != null) {
+                    addService(answer);
+                    answer = addEndpointToRegistry(uri, answer);
+                }
+            } catch (Exception e) {
+                throw new ResolveEndpointFailedException(uri, e);
             }
         }
 
@@ -908,7 +905,11 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         }
 
         // and then ensure service is started (as stated in the javadoc)
-        startServices(object);
+        if (object instanceof Service) {
+            startService((Service)object);
+        } else if (object instanceof Collection<?>) {
+            startServices((Collection)object);
+        }
     }
 
     public boolean hasService(Object object) {
@@ -1030,6 +1031,17 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
     public void setInjector(Injector injector) {
         this.injector = injector;
+    }
+
+    public ManagementMBeanAssembler getManagementMBeanAssembler() {
+        if (managementMBeanAssembler == null) {
+            managementMBeanAssembler = createManagementMBeanAssembler();
+        }
+        return managementMBeanAssembler;
+    }
+
+    public void setManagementMBeanAssembler(ManagementMBeanAssembler managementMBeanAssembler) {
+        this.managementMBeanAssembler = managementMBeanAssembler;
     }
 
     public ComponentResolver getComponentResolver() {
@@ -1179,7 +1191,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         answer.setMaximumCacheSize(maximumCacheSize);
         // start it so its ready to use
         try {
-            startServices(answer);
+            startService(answer);
         } catch (Exception e) {
             throw ObjectHelper.wrapRuntimeCamelException(e);
         }
@@ -1196,7 +1208,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         answer.setMaximumCacheSize(maximumCacheSize);
         // start it so its ready to use
         try {
-            startServices(answer);
+            startService(answer);
         } catch (Exception e) {
             throw ObjectHelper.wrapRuntimeCamelException(e);
         }
@@ -1393,7 +1405,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
             log.info("Debugger: " + getDebugger() + " is enabled on CamelContext: " + getName());
             // register this camel context on the debugger
             getDebugger().setCamelContext(this);
-            startServices(getDebugger());
+            startService(getDebugger());
             addInterceptStrategy(new Debug(getDebugger()));
         }
 
@@ -1424,7 +1436,9 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
                     strategy.onServiceAdd(this, service, null);
                 }
             }
-            startServices(notifier);
+            if (notifier instanceof Service) {
+                startService((Service)notifier);
+            }
         }
 
         // must let some bootstrap service be started before we can notify the starting event
@@ -1436,7 +1450,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         // and we needed to create endpoints up-front as it may be accessed before this context is started
         endpoints = new EndpointRegistry(this, endpoints);
         addService(endpoints);
-        addService(executorServiceStrategy);
+        addService(executorServiceManager);
         addService(producerServicePool);
         addService(inflightRepository);
         addService(shutdownStrategy);
@@ -1545,9 +1559,9 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
             if (consumer instanceof SuspendableService) {
                 // consumer could be suspended, which is not reflected in the RouteService status
                 startable = ((SuspendableService) consumer).isSuspended();
-            } else if (consumer instanceof ServiceSupport) {
+            } else if (consumer instanceof StatefulService) {
                 // consumer could be stopped, which is not reflected in the RouteService status
-                startable = ((ServiceSupport) consumer).getStatus().isStartable();
+                startable = ((StatefulService) consumer).getStatus().isStartable();
             } else {
                 // no consumer so use state from route service
                 startable = entry.getValue().getStatus().isStartable();
@@ -1584,7 +1598,11 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
         // allow us to do custom work before delegating to service helper
         try {
-            ServiceHelper.stopAndShutdownService(service);
+            if (service instanceof Service) {
+                ServiceHelper.stopAndShutdownService((Service)service);
+            } else if (service instanceof Collection) {
+                ServiceHelper.stopAndShutdownServices((Collection<?>)service);
+            }
         } catch (Throwable e) {
             log.warn("Error occurred while shutting down service: " + service + ". This exception will be ignored.", e);
             // fire event
@@ -1610,14 +1628,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         }
     }
 
-    private void startServices(Object service) throws Exception {
-        // it can be a collection so ensure we look inside it
-        if (service instanceof Collection<?>) {
-            for (Object element : (Collection<?>)service) {
-                startServices(element);
-            }
-        }
-
+    private void startService(Service service) throws Exception {
         // and register startup aware so they can be notified when
         // camel context has been started
         if (service instanceof StartupListener) {
@@ -1625,20 +1636,15 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
             addStartupListener(listener);
         }
 
-        // and then start the service
-        ServiceHelper.startService(service);
+        service.start();
     }
-
-    private void resumeServices(Object service) throws Exception {
-        // it can be a collection so ensure we look inside it
-        if (service instanceof Collection<?>) {
-            for (Object element : (Collection<?>)service) {
-                resumeServices(element);
+    
+    private void startServices(Collection services) throws Exception {
+        for (Object element : services) {
+            if (element instanceof Service) {
+                startService((Service)element);
             }
         }
-
-        // and then start the service
-        ServiceHelper.resumeService(service);
     }
 
     private void stopServices(Object service) throws Exception {
@@ -1895,14 +1901,14 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
                 if (resumeOnly && route.supportsSuspension()) {
                     // if we are resuming and the route can be resumed
-                    resumeServices(consumer);
+                    ServiceHelper.resumeService(consumer);
                     log.info("Route: " + route.getId() + " resumed and consuming from: " + endpoint);
                 } else {
                     // when starting we should invoke the lifecycle strategies
                     for (LifecycleStrategy strategy : lifecycleStrategies) {
                         strategy.onServiceAdd(this, consumer, route);
                     }
-                    startServices(consumer);
+                    startService(consumer);
                     log.info("Route: " + route.getId() + " started and consuming from: " + endpoint);
                 }
 
@@ -1993,6 +1999,13 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
             // lets use the default
             return new ReflectionInjector();
         }
+    }
+
+    /**
+     * Lazily create a default implementation
+     */
+    protected ManagementMBeanAssembler createManagementMBeanAssembler() {
+        return new DefaultManagementMBeanAssembler();
     }
 
     /**
@@ -2254,12 +2267,19 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         this.shutdownRunningTask = shutdownRunningTask;
     }
 
-    public ExecutorServiceStrategy getExecutorServiceStrategy() {
-        return executorServiceStrategy;
+    public ExecutorServiceManager getExecutorServiceManager() {
+        return this.executorServiceManager;
     }
 
-    public void setExecutorServiceStrategy(ExecutorServiceStrategy executorServiceStrategy) {
-        this.executorServiceStrategy = executorServiceStrategy;
+    @Deprecated
+    public org.apache.camel.spi.ExecutorServiceStrategy getExecutorServiceStrategy() {
+        // its okay to create a new instance as its stateless, and just delegate
+        // ExecutorServiceManager which is the new API
+        return new DefaultExecutorServiceStrategy(this);
+    }
+
+    public void setExecutorServiceManager(ExecutorServiceManager executorServiceManager) {
+        this.executorServiceManager = executorServiceManager;
     }
 
     public ProcessorFactory getProcessorFactory() {
@@ -2291,46 +2311,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
     }
 
     protected ManagementStrategy createManagementStrategy() {
-        ManagementStrategy answer;
-
-        if (disableJMX || Boolean.getBoolean(JmxSystemPropertyKeys.DISABLED)) {
-            log.info("JMX is disabled. Using DefaultManagementStrategy.");
-            answer = new DefaultManagementStrategy();
-        } else {
-            try {
-                log.info("JMX enabled. Using ManagedManagementStrategy.");
-                answer = new ManagedManagementStrategy(new DefaultManagementAgent(this));
-                // must start it to ensure JMX works and can load needed Spring JARs
-                startServices(answer);
-                // prefer to have it at first strategy
-                lifecycleStrategies.add(0, new DefaultManagementLifecycleStrategy(this));
-            } catch (NoClassDefFoundError e) {
-                answer = null;
-
-                // if we can't instantiate the JMX enabled strategy then fallback to default
-                // could be because of missing .jars on the classpath
-                log.warn("Cannot find needed classes for JMX lifecycle strategy."
-                        + " Needed class is in spring-context.jar using Spring 2.5 or newer"
-                        + " (spring-jmx.jar using Spring 2.0.x)."
-                        + " NoClassDefFoundError: " + e.getMessage());
-            } catch (Exception e) {
-                answer = null;
-                log.warn("Cannot create JMX lifecycle strategy. Fallback to using DefaultManagementStrategy (non JMX).", e);
-            }
-        }
-
-        if (answer == null) {
-            log.warn("Cannot use JMX. Fallback to using DefaultManagementStrategy (non JMX).");
-            answer = new DefaultManagementStrategy();
-        }
-
-        // inject CamelContext
-        if (answer instanceof CamelContextAware) {
-            CamelContextAware aware = (CamelContextAware) answer;
-            aware.setCamelContext(this);
-        }
-
-        return answer;
+        return new ManagementStrategyFactory().create(this, disableJMX || Boolean.getBoolean(JmxSystemPropertyKeys.DISABLED));
     }
 
     @Override

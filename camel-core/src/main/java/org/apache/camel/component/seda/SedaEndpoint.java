@@ -41,8 +41,6 @@ import org.apache.camel.util.ServiceHelper;
  * An implementation of the <a
  * href="http://camel.apache.org/queue.html">Queue components</a> for
  * asynchronous SEDA exchanges on a {@link BlockingQueue} within a CamelContext
- *
- * @version 
  */
 public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, MultipleConsumersSupport {
     private volatile BlockingQueue<Exchange> queue;
@@ -56,6 +54,7 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
     private final Set<SedaConsumer> consumers = new CopyOnWriteArraySet<SedaConsumer>();
     private volatile MulticastProcessor consumerMulticastProcessor;
     private volatile boolean multicastStarted;
+    private boolean blockWhenFull;
 
     public SedaEndpoint() {
     }
@@ -71,19 +70,8 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         this.concurrentConsumers = concurrentConsumers;
     }
 
-    public SedaEndpoint(String endpointUri, BlockingQueue<Exchange> queue) {
-        this(endpointUri, queue, 1);
-    }
-
-    public SedaEndpoint(String endpointUri, BlockingQueue<Exchange> queue, int concurrentConsumers) {
-        super(endpointUri);
-        this.queue = queue;
-        this.size = queue.remainingCapacity();
-        this.concurrentConsumers = concurrentConsumers;
-    }
-    
     public Producer createProducer() throws Exception {
-        return new SedaProducer(this, getQueue(), getWaitForTaskToComplete(), getTimeout());
+        return new SedaProducer(this, getQueue(), getWaitForTaskToComplete(), getTimeout(), isBlockWhenFull());
     }
 
     public Consumer createConsumer(Processor processor) throws Exception {
@@ -100,7 +88,7 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         }
         return queue;
     }
-    
+
     protected synchronized MulticastProcessor getConsumerMulticastProcessor() throws Exception {
         if (!multicastStarted && consumerMulticastProcessor != null) {
             // only start it on-demand to avoid starting it during stopping
@@ -109,7 +97,7 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         }
         return consumerMulticastProcessor;
     }
-    
+
     protected synchronized void updateMulticastProcessor() throws Exception {
         if (consumerMulticastProcessor != null) {
             ServiceHelper.stopService(consumerMulticastProcessor);
@@ -118,13 +106,13 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         int size = getConsumers().size();
         if (size == 0 && multicastExecutor != null) {
             // stop the multicast executor as its not needed anymore when size is zero
-            getCamelContext().getExecutorServiceStrategy().shutdown(multicastExecutor);
+            getCamelContext().getExecutorServiceManager().shutdown(multicastExecutor);
             multicastExecutor = null;
         }
         if (size > 1) {
             if (multicastExecutor == null) {
                 // create multicast executor as we need it when we have more than 1 processor
-                multicastExecutor = getCamelContext().getExecutorServiceStrategy().newDefaultThreadPool(this, getEndpointUri() + "(multicast)");
+                multicastExecutor = getCamelContext().getExecutorServiceManager().newDefaultThreadPool(this, getEndpointUri() + "(multicast)");
             }
             // create list of consumers to multicast to
             List<Processor> processors = new ArrayList<Processor>(size);
@@ -153,10 +141,18 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         this.size = size;
     }
 
+    public void setBlockWhenFull(boolean blockWhenFull) {
+        this.blockWhenFull = blockWhenFull;
+    }
+
+    public boolean isBlockWhenFull() {
+        return blockWhenFull;
+    }
+
     public void setConcurrentConsumers(int concurrentConsumers) {
         this.concurrentConsumers = concurrentConsumers;
     }
-    
+
     public int getConcurrentConsumers() {
         return concurrentConsumers;
     }
@@ -213,7 +209,7 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
     public Set<SedaProducer> getProducers() {
         return new HashSet<SedaProducer>(producers);
     }
-    
+
     void onStarted(SedaProducer producer) {
         producers.add(producer);
     }

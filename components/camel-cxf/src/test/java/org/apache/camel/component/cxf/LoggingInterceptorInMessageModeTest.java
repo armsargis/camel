@@ -21,11 +21,14 @@ import java.io.StringWriter;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.test.AvailablePortFinder;
+import org.apache.cxf.endpoint.Server;
 import org.apache.cxf.frontend.ClientFactoryBean;
 import org.apache.cxf.frontend.ClientProxyFactoryBean;
 import org.apache.cxf.frontend.ServerFactoryBean;
 import org.apache.cxf.interceptor.Interceptor;
 import org.apache.cxf.interceptor.LoggingOutInterceptor;
+
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,16 +46,14 @@ import static org.junit.Assert.assertNotNull;
  */
 @ContextConfiguration
 public class LoggingInterceptorInMessageModeTest extends AbstractJUnit4SpringContextTests {
-    protected static int port1 = AvailablePortFinder.getNextAvailable(); 
-    protected static int port2 = AvailablePortFinder.getNextAvailable(); 
-    static {
-        System.setProperty("LoggingInterceptorInMessageModeTest.port1", Integer.toString(port1));
-        System.setProperty("LoggingInterceptorInMessageModeTest.port2", Integer.toString(port2));
-    }
+    protected static int port1 = CXFTestSupport.getPort1(); 
+    protected static int port2 = CXFTestSupport.getPort2(); 
 
-    protected static final String ROUTER_ADDRESS = "http://localhost:" + port1 + "/router";
-    protected static final String SERVICE_ADDRESS = "http://localhost:" + port2 + "/helloworld";
+    protected static final String ROUTER_ADDRESS = "http://localhost:" + port1 + "/LoggingInterceptorInMessageModeTest/router";
+    protected static final String SERVICE_ADDRESS = "http://localhost:" + port2 + "/LoggingInterceptorInMessageModeTest/helloworld";
 
+    static Server server;
+    
     @Autowired
     protected CamelContext context;
     
@@ -65,8 +66,12 @@ public class LoggingInterceptorInMessageModeTest extends AbstractJUnit4SpringCon
         svrBean.setServiceClass(HelloService.class);
         svrBean.setServiceBean(new HelloServiceImpl());
     
-        svrBean.create();
-        
+        server = svrBean.create();
+    }
+    @AfterClass
+    public static void stopService() {
+        server.stop();
+        server.destroy();
     }
     
     @Test
@@ -103,7 +108,7 @@ public class LoggingInterceptorInMessageModeTest extends AbstractJUnit4SpringCon
     }
     
     @SuppressWarnings("unused")
-    private final class StringPrintWriter extends PrintWriter {
+    private static final class StringPrintWriter extends PrintWriter {
         private StringPrintWriter() {
             super(new StringWriter());
         }

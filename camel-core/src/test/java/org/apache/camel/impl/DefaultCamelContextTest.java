@@ -35,6 +35,7 @@ import org.apache.camel.component.direct.DirectComponent;
 import org.apache.camel.component.log.LogComponent;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.spi.UuidGenerator;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.CamelContextHelper;
 
 /**
@@ -116,6 +117,7 @@ public class DefaultCamelContextTest extends TestSupport {
 
         list = ctx.removeEndpoints("log:*");
         assertEquals(2, list.size());
+
         Iterator<Endpoint> it = list.iterator();
         assertEquals("log://bar", it.next().getEndpointUri());
         assertEquals("log://baz", it.next().getEndpointUri());
@@ -208,23 +210,17 @@ public class DefaultCamelContextTest extends TestSupport {
         }
     }
 
-    public void testGetEndpointMap() throws Exception {
-        DefaultCamelContext ctx = new DefaultCamelContext();
-        ctx.disableJMX();
-        ctx.addEndpoint("mock://foo", new MockEndpoint("mock://foo"));
-
-        Map<String, Endpoint> map = ctx.getEndpointMap();
-        assertEquals(1, map.size());
-    }
-
     public void testHasEndpoint() throws Exception {
         DefaultCamelContext ctx = new DefaultCamelContext();
         ctx.disableJMX();
-        ctx.addEndpoint("mock://foo", new MockEndpoint("mock://foo"));
+        ctx.getEndpoint("mock://foo");
 
         assertNotNull(ctx.hasEndpoint("mock://foo"));
         assertNull(ctx.hasEndpoint("mock://bar"));
 
+        Map<String, Endpoint> map = ctx.getEndpointMap();
+        assertEquals(1, map.size());
+        
         try {
             Endpoint endpoint = ctx.hasEndpoint(null);
             assertNull("Should not have endpoint", endpoint);
@@ -340,7 +336,7 @@ public class DefaultCamelContextTest extends TestSupport {
         assertEquals("Stopped", my.getStatus().name());
     }
 
-    private class MyService extends ServiceSupport implements CamelContextAware {
+    private static class MyService extends ServiceSupport implements CamelContextAware {
 
         private CamelContext camelContext;
 

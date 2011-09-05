@@ -25,12 +25,12 @@ import org.apache.camel.EndpointInject;
 import org.apache.camel.Exchange;
 import org.apache.camel.NoSuchBeanException;
 import org.apache.camel.PollingConsumer;
-import org.apache.camel.Processor;
 import org.apache.camel.Produce;
 import org.apache.camel.Producer;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.ResolveEndpointFailedException;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.support.SynchronizationAdapter;
 import org.apache.camel.util.ObjectHelper;
 
 /**
@@ -331,7 +331,7 @@ public class CamelPostProcessorHelperTest extends ContextTestSupport {
         }
     }
 
-    private class MySynchronization extends SynchronizationAdapter {
+    private static class MySynchronization extends SynchronizationAdapter {
 
         private boolean onDone;
 

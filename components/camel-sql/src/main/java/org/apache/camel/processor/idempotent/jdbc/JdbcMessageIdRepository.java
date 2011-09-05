@@ -20,13 +20,13 @@ import java.sql.Timestamp;
 
 import javax.sql.DataSource;
 
-import org.apache.camel.impl.ServiceSupport;
 import org.apache.camel.spi.IdempotentRepository;
+import org.apache.camel.spi.management.ManagedAttribute;
+import org.apache.camel.spi.management.ManagedOperation;
+import org.apache.camel.spi.management.ManagedResource;
+import org.apache.camel.support.ServiceSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedOperation;
-import org.springframework.jmx.export.annotation.ManagedResource;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
@@ -35,7 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * @version 
  */
-@ManagedResource("JdbcMessageIdRepository")
+@ManagedResource(description = "JDBC based message id repository")
 public class JdbcMessageIdRepository extends ServiceSupport implements IdempotentRepository<String> {
     
     protected static final String QUERY_STRING = "SELECT COUNT(*) FROM CAMEL_MESSAGEPROCESSED WHERE processorName = ? AND messageId = ?";
@@ -69,11 +69,10 @@ public class JdbcMessageIdRepository extends ServiceSupport implements Idempoten
     }
 
     @ManagedOperation(description = "Adds the key to the store")
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     public boolean add(final String messageId) {
         // Run this in single transaction.
-        Boolean rc = (Boolean)transactionTemplate.execute(new TransactionCallback() {
-            public Object doInTransaction(TransactionStatus status) {
+        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus status) {
                 int count = jdbcTemplate.queryForInt(QUERY_STRING, processorName, messageId);
                 if (count == 0) {
                     jdbcTemplate.update(INSERT_STRING, processorName, messageId, new Timestamp(System.currentTimeMillis()));
@@ -87,11 +86,10 @@ public class JdbcMessageIdRepository extends ServiceSupport implements Idempoten
     }
 
     @ManagedOperation(description = "Does the store contain the given key")
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     public boolean contains(final String messageId) {
         // Run this in single transaction.
-        Boolean rc = (Boolean)transactionTemplate.execute(new TransactionCallback() {
-            public Object doInTransaction(TransactionStatus status) {
+        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus status) {
                 int count = jdbcTemplate.queryForInt(QUERY_STRING, processorName, messageId);
                 if (count == 0) {
                     return Boolean.FALSE;
@@ -104,10 +102,9 @@ public class JdbcMessageIdRepository extends ServiceSupport implements Idempoten
     }
 
     @ManagedOperation(description = "Remove the key from the store")
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     public boolean remove(final String messageId) {
-        Boolean rc = (Boolean)transactionTemplate.execute(new TransactionCallback() {
-            public Object doInTransaction(TransactionStatus status) {
+        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus status) {
                 int updateCount = jdbcTemplate.update(DELETE_STRING, processorName, messageId);
                 if (updateCount == 0) {
                     return Boolean.FALSE;

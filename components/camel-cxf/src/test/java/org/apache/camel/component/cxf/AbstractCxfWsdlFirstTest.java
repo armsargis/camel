@@ -41,8 +41,19 @@ import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 public abstract class AbstractCxfWsdlFirstTest extends CamelSpringTestSupport {
-    public abstract String getPort();
+    static int port1 = CXFTestSupport.getPort1();
     
+    public static int getPort1() {
+        return port1;
+    }
+    public static int getPort2() {
+        return CXFTestSupport.getPort2();
+    }
+    
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
     @Test
     public void testInvokingServiceFromCXFClient() throws Exception {
 
@@ -57,7 +68,8 @@ public abstract class AbstractCxfWsdlFirstTest extends CamelSpringTestSupport {
         Person client = ss.getSoap();
         ((BindingProvider)client).getRequestContext()
             .put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
-                 "http://localhost:" + getPort() + "/PersonService/");
+                 "http://localhost:" + getPort2() + "/" + getClass().getSimpleName()
+                 + "/PersonService/");
                                                           
         Holder<String> personId = new Holder<String>();
         personId.value = "hello";

@@ -43,11 +43,13 @@ import net.sf.saxon.om.DocumentInfo;
 import net.sf.saxon.om.Item;
 import net.sf.saxon.om.SequenceIterator;
 import net.sf.saxon.query.DynamicQueryContext;
+import net.sf.saxon.query.ModuleURIResolver;
 import net.sf.saxon.query.StaticQueryContext;
 import net.sf.saxon.query.XQueryExpression;
 import net.sf.saxon.trans.XPathException;
 import net.sf.saxon.value.Whitespace;
 
+import org.apache.camel.BytesSource;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Message;
@@ -55,11 +57,10 @@ import org.apache.camel.NoTypeConversionAvailableException;
 import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.RuntimeExpressionException;
+import org.apache.camel.StringSource;
+import org.apache.camel.WrappedFile;
 import org.apache.camel.component.bean.BeanInvocation;
-import org.apache.camel.component.file.GenericFile;
 import org.apache.camel.converter.IOConverter;
-import org.apache.camel.converter.jaxp.BytesSource;
-import org.apache.camel.converter.jaxp.StringSource;
 import org.apache.camel.converter.jaxp.XmlConverter;
 import org.apache.camel.spi.NamespaceAware;
 import org.apache.camel.util.MessageHelper;
@@ -87,6 +88,7 @@ public abstract class XQueryBuilder implements Expression, Predicate, NamespaceA
     private Class resultType;
     private final AtomicBoolean initialized = new AtomicBoolean(false);
     private boolean stripsAllWhiteSpace = true;
+    private ModuleURIResolver moduleURIResolver;
 
     @Override
     public String toString() {
@@ -393,6 +395,14 @@ public abstract class XQueryBuilder implements Expression, Predicate, NamespaceA
         this.resultType = resultType;
     }
 
+    public ModuleURIResolver getModuleURIResolver() {
+        return moduleURIResolver;
+    }
+
+    public void setModuleURIResolver(ModuleURIResolver moduleURIResolver) {
+        this.moduleURIResolver = moduleURIResolver;
+    }
+
     public boolean isStripsAllWhiteSpace() {
         return stripsAllWhiteSpace;
     }
@@ -428,7 +438,7 @@ public abstract class XQueryBuilder implements Expression, Predicate, NamespaceA
                 Object body = in.getBody();
 
                 // lets try coerce some common types into something JAXP can deal with
-                if (body instanceof GenericFile) {
+                if (body instanceof WrappedFile) {
                     // special for files so we can work with them out of the box
                     InputStream is = exchange.getContext().getTypeConverter().convertTo(InputStream.class, body);
                     source = converter.toDOMSource(is);
@@ -515,6 +525,10 @@ public abstract class XQueryBuilder implements Expression, Predicate, NamespaceA
             configuration.setStripsWhiteSpace(isStripsAllWhiteSpace() ? Whitespace.ALL : Whitespace.IGNORABLE);
 
             staticQueryContext = new StaticQueryContext(getConfiguration());
+            if (moduleURIResolver != null) {
+                staticQueryContext.setModuleURIResolver(moduleURIResolver);
+            }
+
             Set<Map.Entry<String, String>> entries = namespacePrefixes.entrySet();
             for (Map.Entry<String, String> entry : entries) {
                 String prefix = entry.getKey();
@@ -522,7 +536,6 @@ public abstract class XQueryBuilder implements Expression, Predicate, NamespaceA
                 staticQueryContext.declareNamespace(prefix, uri);
                 staticQueryContext.setInheritNamespaces(true);
             }
-
             expression = createQueryExpression(staticQueryContext);
 
             initialized.set(true);

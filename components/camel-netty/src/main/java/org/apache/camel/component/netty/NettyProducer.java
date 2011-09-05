@@ -208,9 +208,9 @@ public class NettyProducer extends DefaultAsyncProducer implements ServicePoolAw
 
     protected void setupTCPCommunication() throws Exception {
         if (channelFactory == null) {
-            ExecutorService bossExecutor = context.getExecutorServiceStrategy().newThreadPool(this, "NettyTCPBoss",
+            ExecutorService bossExecutor = context.getExecutorServiceManager().newThreadPool(this, "NettyTCPBoss",
                     configuration.getCorePoolSize(), configuration.getMaxPoolSize());
-            ExecutorService workerExecutor = context.getExecutorServiceStrategy().newThreadPool(this, "NettyTCPWorker",
+            ExecutorService workerExecutor = context.getExecutorServiceManager().newThreadPool(this, "NettyTCPWorker",
                     configuration.getCorePoolSize(), configuration.getMaxPoolSize());
             channelFactory = new NioClientSocketChannelFactory(bossExecutor, workerExecutor);
         }
@@ -218,7 +218,7 @@ public class NettyProducer extends DefaultAsyncProducer implements ServicePoolAw
 
     protected void setupUDPCommunication() throws Exception {
         if (datagramChannelFactory == null) {
-            ExecutorService workerExecutor = context.getExecutorServiceStrategy().newThreadPool(this, "NettyUDPWorker",
+            ExecutorService workerExecutor = context.getExecutorServiceManager().newThreadPool(this, "NettyUDPWorker",
                     configuration.getCorePoolSize(), configuration.getMaxPoolSize());
             datagramChannelFactory = new NioDatagramChannelFactory(workerExecutor);
         }

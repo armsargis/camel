@@ -16,6 +16,7 @@
  */
 package org.apache.camel.component.bean;
 
+
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.AnnotatedElement;
@@ -158,13 +159,13 @@ public class MethodInfo {
             recipientList.setShareUnitOfWork(annotation.shareUnitOfWork());
 
             if (ObjectHelper.isNotEmpty(annotation.executorServiceRef())) {
-                ExecutorService executor = CamelContextHelper.mandatoryLookup(camelContext, annotation.executorServiceRef(), ExecutorService.class);
+                ExecutorService executor = camelContext.getExecutorServiceManager().newDefaultThreadPool(this, annotation.executorServiceRef());
                 recipientList.setExecutorService(executor);
             }
 
             if (annotation.parallelProcessing() && recipientList.getExecutorService() == null) {
                 // we are running in parallel so we need a thread pool
-                ExecutorService executor = camelContext.getExecutorServiceStrategy().newDefaultThreadPool(this, "@RecipientList");
+                ExecutorService executor = camelContext.getExecutorServiceManager().newDefaultThreadPool(this, "@RecipientList");
                 recipientList.setExecutorService(executor);
             }
 
@@ -367,6 +368,13 @@ public class MethodInfo {
                 if (methodParameters != null) {
                     it = ObjectHelper.createIterator(methodParameters);
                 }
+
+                // remove headers as they should not be propagated
+                // we need to do this before the expressions gets evaluated as it may contain
+                // a @Bean expression which would by mistake read these headers. So the headers
+                // must be removed at this point of time
+                exchange.getIn().removeHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY);
+                exchange.getIn().removeHeader(Exchange.BEAN_METHOD_NAME);
 
                 for (int i = 0; i < size; i++) {
                     // grab the parameter value for the given index

@@ -38,8 +38,9 @@ import javax.management.remote.JMXServiceURL;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
-import org.apache.camel.impl.ServiceSupport;
 import org.apache.camel.spi.ManagementAgent;
+import org.apache.camel.spi.ManagementMBeanAssembler;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,7 +61,6 @@ public class DefaultManagementAgent extends ServiceSupport implements Management
     private ExecutorService executorService;
     private MBeanServer server;
     private final Set<ObjectName> mbeansRegistered = new HashSet<ObjectName>();
-    private JmxMBeanAssembler assembler;
     private JMXConnectorServer cs;
 
     private Integer registryPort;
@@ -231,7 +231,9 @@ public class DefaultManagementAgent extends ServiceSupport implements Management
             registerMBeanWithServer(obj, name, forceRegistration);
         } catch (NotCompliantMBeanException e) {
             // If this is not a "normal" MBean, then try to deploy it using JMX annotations
-            Object mbean = assembler.assemble(obj, name);
+            ManagementMBeanAssembler assembler = camelContext.getManagementMBeanAssembler();
+            ObjectHelper.notNull(assembler, "ManagementMBeanAssembler", camelContext);
+            Object mbean = assembler.assemble(server, obj, name);
             // and register the mbean
             registerMBeanWithServer(mbean, name, forceRegistration);
         }
@@ -257,8 +259,6 @@ public class DefaultManagementAgent extends ServiceSupport implements Management
             finalizeSettings();
             createMBeanServer();
         }
-
-        assembler = new JmxMBeanAssembler(server);
 
         LOG.debug("Starting JMX agent on server: {}", getMBeanServer());
     }
@@ -412,8 +412,8 @@ public class DefaultManagementAgent extends ServiceSupport implements Management
         cs = JMXConnectorServerFactory.newJMXConnectorServer(url, null, server);
 
         if (executorService == null) {
-            // we only need a single for the JMX connector
-            executorService = camelContext.getExecutorServiceStrategy().newSingleThreadExecutor(this, "JMXConnector: " + url);
+            // we only need a single thread for the JMX connector
+            executorService = camelContext.getExecutorServiceManager().newSingleThreadExecutor(this, "JMXConnector: " + url);
         }
 
         // execute the JMX connector

@@ -33,9 +33,9 @@ import org.apache.camel.ExchangePattern;
 import org.apache.camel.MultipleConsumersSupport;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
+import org.apache.camel.StatefulService;
 import org.apache.camel.component.quickfixj.converter.QuickfixjConverters;
 import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.camel.impl.ServiceSupport;
 import org.apache.camel.impl.converter.StaticMethodTypeConverter;
 import org.apache.camel.util.ServiceHelper;
 import org.apache.mina.common.TransportType;
@@ -228,7 +228,7 @@ public class QuickfixjComponentTest {
         ServiceHelper.startService(consumer);
 
         // Endpoint automatically starts the consumer
-        assertThat(((ServiceSupport)consumer).isStarted(), is(true));
+        assertThat(((StatefulService)consumer).isStarted(), is(true));
         
         component.start();
         

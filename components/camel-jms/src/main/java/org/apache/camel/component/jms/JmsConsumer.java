@@ -22,20 +22,23 @@ import org.apache.camel.FailedToCreateConsumerException;
 import org.apache.camel.Processor;
 import org.apache.camel.SuspendableService;
 import org.apache.camel.impl.DefaultConsumer;
-import org.springframework.jms.listener.DefaultMessageListenerContainer;
+import org.springframework.jms.listener.AbstractMessageListenerContainer;
 import org.springframework.jms.support.JmsUtils;
 
 /**
- * A {@link org.apache.camel.Consumer} which uses Spring's {@link DefaultMessageListenerContainer} implementations to consume JMS messages
+ * A {@link org.apache.camel.Consumer} which uses Spring's {@link AbstractMessageListenerContainer} implementations
+ * to consume JMS messages.
  *
- * @version 
+ * @version
+ * @see DefaultJmsMessageListenerContainer
+ * @see SimpleJmsMessageListenerContainer
  */
 public class JmsConsumer extends DefaultConsumer implements SuspendableService {
-    private DefaultMessageListenerContainer listenerContainer;
+    private AbstractMessageListenerContainer listenerContainer;
     private EndpointMessageListener messageListener;
     private volatile boolean initialized;
 
-    public JmsConsumer(JmsEndpoint endpoint, Processor processor, DefaultMessageListenerContainer listenerContainer) {
+    public JmsConsumer(JmsEndpoint endpoint, Processor processor, AbstractMessageListenerContainer listenerContainer) {
         super(endpoint, processor);
         this.listenerContainer = listenerContainer;
         this.listenerContainer.setMessageListener(getEndpointMessageListener());
@@ -45,7 +48,7 @@ public class JmsConsumer extends DefaultConsumer implements SuspendableService {
         return (JmsEndpoint) super.getEndpoint();
     }
 
-    public DefaultMessageListenerContainer getListenerContainer() throws Exception {
+    public AbstractMessageListenerContainer getListenerContainer() throws Exception {
         if (listenerContainer == null) {
             createMessageListenerContainer();
         }
@@ -128,6 +131,8 @@ public class JmsConsumer extends DefaultConsumer implements SuspendableService {
         if (listenerContainer != null) {
             listenerContainer.stop();
             listenerContainer.destroy();
+            // TODO: The async destroy code does not work well see https://issues.apache.org/jira/browse/CAMEL-4309
+            // getEndpoint().destroyMessageListenerContainer(listenerContainer);
         }
 
         // null container and listener so they are fully re created if this consumer is restarted

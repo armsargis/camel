@@ -33,6 +33,7 @@ import org.apache.camel.ServicePoolAware;
 import org.apache.camel.impl.converter.AsyncProcessorTypeConverter;
 import org.apache.camel.processor.UnitOfWorkProducer;
 import org.apache.camel.spi.ServicePool;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.EventHelper;
 import org.apache.camel.util.LRUCache;
@@ -259,11 +260,12 @@ public class ProducerCache extends ServiceSupport {
      * @param producerCallback the producer template callback to be executed
      * @return (doneSync) <tt>true</tt> to continue execute synchronously, <tt>false</tt> to continue being executed asynchronously
      */
-    public boolean doInAsyncProducer(Endpoint endpoint, Exchange exchange, ExchangePattern pattern, AsyncCallback callback, AsyncProducerCallback producerCallback) {
+    public boolean doInAsyncProducer(final Endpoint endpoint, final Exchange exchange, final ExchangePattern pattern,
+                                     final AsyncCallback callback, final AsyncProducerCallback producerCallback) {
         boolean sync = true;
 
         // get the producer and we do not mind if its pooled as we can handle returning it back to the pool
-        Producer producer = doGetProducer(endpoint, true);
+        final Producer producer = doGetProducer(endpoint, true);
 
         if (producer == null) {
             if (isStopped()) {
@@ -274,38 +276,43 @@ public class ProducerCache extends ServiceSupport {
             }
         }
 
-        StopWatch watch = null;
-        if (exchange != null) {
-            // record timing for sending the exchange using the producer
-            watch = new StopWatch();
-        }
+        // record timing for sending the exchange using the producer
+        final StopWatch watch = exchange != null ? new StopWatch() : null;
 
         try {
             // invoke the callback
             AsyncProcessor asyncProcessor = AsyncProcessorTypeConverter.convert(producer);
-            sync = producerCallback.doInAsyncProducer(producer, asyncProcessor, exchange, pattern, callback);
+            sync = producerCallback.doInAsyncProducer(producer, asyncProcessor, exchange, pattern, new AsyncCallback() {
+                @Override
+                public void done(boolean doneSync) {
+                    try {
+                        if (watch != null) {
+                            long timeTaken = watch.stop();
+                            // emit event that the exchange was sent to the endpoint
+                            EventHelper.notifyExchangeSent(exchange.getContext(), exchange, endpoint, timeTaken);
+                        }
+
+                        if (producer instanceof ServicePoolAware) {
+                            // release back to the pool
+                            pool.release(endpoint, producer);
+                        } else if (!producer.isSingleton()) {
+                            // stop non singleton producers as we should not leak resources
+                            try {
+                                ServiceHelper.stopService(producer);
+                            } catch (Exception e) {
+                                // ignore and continue
+                                LOG.warn("Error stopping producer: " + producer, e);
+                            }
+                        }
+                    } finally {
+                        callback.done(doneSync);
+                    }
+                }
+            });
         } catch (Throwable e) {
             // ensure exceptions is caught and set on the exchange
             if (exchange != null) {
                 exchange.setException(e);
-            }
-        } finally {
-            if (exchange != null && exchange.getException() == null) {
-                long timeTaken = watch.stop();
-                // emit event that the exchange was sent to the endpoint
-                EventHelper.notifyExchangeSent(exchange.getContext(), exchange, endpoint, timeTaken);
-            }
-            if (producer instanceof ServicePoolAware) {
-                // release back to the pool
-                pool.release(endpoint, producer);
-            } else if (!producer.isSingleton()) {
-                // stop non singleton producers as we should not leak resources
-                try {
-                    ServiceHelper.stopService(producer);
-                } catch (Exception e) {
-                    // ignore and continue
-                    LOG.warn("Error stopping producer: " + producer, e);
-                }
             }
         }
 
@@ -388,12 +395,14 @@ public class ProducerCache extends ServiceSupport {
     }
 
     protected void doStop() throws Exception {
-        ServiceHelper.stopServices(producers, pool);
+        ServiceHelper.stopServices(pool);
+        ServiceHelper.stopServices(producers.values());
         producers.clear();
     }
 
     protected void doStart() throws Exception {
-        ServiceHelper.startServices(pool, producers);
+        ServiceHelper.startServices(producers.values());
+        ServiceHelper.startServices(pool);
     }
 
     /**
@@ -419,7 +428,7 @@ public class ProducerCache extends ServiceSupport {
     public int getCapacity() {
         int capacity = -1;
         if (producers instanceof LRUCache) {
-            LRUCache cache = (LRUCache) producers;
+            LRUCache<String, Producer> cache = (LRUCache<String, Producer>)producers;
             capacity = cache.getMaxCacheSize();
         }
         return capacity;
@@ -435,7 +444,7 @@ public class ProducerCache extends ServiceSupport {
     public long getHits() {
         long hits = -1;
         if (producers instanceof LRUCache) {
-            LRUCache cache = (LRUCache) producers;
+            LRUCache<String, Producer> cache = (LRUCache<String, Producer>)producers;
             hits = cache.getHits();
         }
         return hits;
@@ -451,7 +460,7 @@ public class ProducerCache extends ServiceSupport {
     public long getMisses() {
         long misses = -1;
         if (producers instanceof LRUCache) {
-            LRUCache cache = (LRUCache) producers;
+            LRUCache<String, Producer> cache = (LRUCache<String, Producer>)producers;
             misses = cache.getMisses();
         }
         return misses;
@@ -462,7 +471,7 @@ public class ProducerCache extends ServiceSupport {
      */
     public void resetCacheStatistics() {
         if (producers instanceof LRUCache) {
-            LRUCache cache = (LRUCache) producers;
+            LRUCache<String, Producer> cache = (LRUCache<String, Producer>)producers;
             cache.resetStatistics();
         }
     }

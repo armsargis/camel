@@ -29,6 +29,7 @@ import org.apache.camel.management.event.ExchangeCreatedEvent;
 import org.apache.camel.management.event.ExchangeFailureHandledEvent;
 import org.apache.camel.management.event.ExchangeRedeliveryEvent;
 import org.apache.camel.management.event.ExchangeSentEvent;
+import org.apache.camel.support.EventNotifierSupport;
 
 /**
  * @version 
@@ -100,9 +101,9 @@ public class EventNotifierRedeliveryEventsTest extends ContextTestSupport {
         assertEquals(3, e.getAttempt());
         e = assertIsInstanceOf(ExchangeRedeliveryEvent.class, events.get(4));
         assertEquals(4, e.getAttempt());
-        assertIsInstanceOf(ExchangeFailureHandledEvent.class, events.get(5));
-        assertIsInstanceOf(ExchangeCompletedEvent.class, events.get(6));
-        assertIsInstanceOf(ExchangeSentEvent.class, events.get(7));
+        assertIsInstanceOf(ExchangeSentEvent.class, events.get(5));
+        assertIsInstanceOf(ExchangeFailureHandledEvent.class, events.get(6));
+        assertIsInstanceOf(ExchangeCompletedEvent.class, events.get(7));
         assertIsInstanceOf(ExchangeSentEvent.class, events.get(8));
     }
 
@@ -134,7 +135,6 @@ public class EventNotifierRedeliveryEventsTest extends ContextTestSupport {
         assertEquals(3, e.getAttempt());
         e = assertIsInstanceOf(ExchangeRedeliveryEvent.class, events.get(4));
         assertEquals(4, e.getAttempt());
-        assertIsInstanceOf(ExchangeFailureHandledEvent.class, events.get(5));
 
         // since its async the ordering of the rest can be different depending per OS and timing
     }

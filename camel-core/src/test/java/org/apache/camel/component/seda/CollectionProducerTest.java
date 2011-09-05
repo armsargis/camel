@@ -28,9 +28,10 @@ import org.apache.camel.impl.DefaultExchange;
 /**
  * @version 
  */
+@Deprecated
 public class CollectionProducerTest extends ContextTestSupport {
 
-    private class MyProducer extends CollectionProducer {
+    private static class MyProducer extends CollectionProducer {
 
         public MyProducer(Endpoint endpoint, Collection<Exchange> queue) {
             super(endpoint, queue);

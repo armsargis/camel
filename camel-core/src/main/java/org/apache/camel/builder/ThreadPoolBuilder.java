@@ -17,13 +17,11 @@
 package org.apache.camel.builder;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.ThreadPoolRejectedPolicy;
-import org.apache.camel.model.ThreadPoolProfileDefinition;
-import org.apache.camel.util.CamelContextHelper;
+import org.apache.camel.spi.ThreadPoolProfile;
 
 /**
  * A builder to create thread pools.
@@ -32,43 +30,54 @@ import org.apache.camel.util.CamelContextHelper;
  */
 public final class ThreadPoolBuilder {
 
-    private final CamelContext camelContext;
-    private ThreadPoolProfileDefinition threadPoolDefinition;
+    // reuse a profile to store the settings
+    private final ThreadPoolProfile profile;
+    private final CamelContext context;
 
-    public ThreadPoolBuilder(CamelContext camelContext) {
-        this.camelContext = camelContext;
-        // use the default thread profile as the base
-        this.threadPoolDefinition = new ThreadPoolProfileDefinition(camelContext.getExecutorServiceStrategy().getDefaultThreadPoolProfile());
+    public ThreadPoolBuilder(CamelContext context) {
+        this.context = context;
+        this.profile = new ThreadPoolProfile();
     }
-
+    
     public ThreadPoolBuilder poolSize(int poolSize) {
-        threadPoolDefinition.poolSize(poolSize);
+        profile.setPoolSize(poolSize);
         return this;
     }
 
     public ThreadPoolBuilder maxPoolSize(int maxPoolSize) {
-        threadPoolDefinition.maxPoolSize(maxPoolSize);
+        profile.setMaxPoolSize(maxPoolSize);
+        return this;
+    }
+    
+    public ThreadPoolBuilder keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
+        profile.setKeepAliveTime(keepAliveTime);
+        profile.setTimeUnit(timeUnit);
         return this;
     }
 
     public ThreadPoolBuilder keepAliveTime(long keepAliveTime) {
-        threadPoolDefinition.keepAliveTime(keepAliveTime);
-        return this;
-    }
-
-    public ThreadPoolBuilder timeUnit(TimeUnit timeUnit) {
-        threadPoolDefinition.timeUnit(timeUnit);
+        profile.setKeepAliveTime(keepAliveTime);
         return this;
     }
 
     public ThreadPoolBuilder maxQueueSize(int maxQueueSize) {
-        threadPoolDefinition.maxQueueSize(maxQueueSize);
+        profile.setMaxQueueSize(maxQueueSize);
         return this;
     }
 
     public ThreadPoolBuilder rejectedPolicy(ThreadPoolRejectedPolicy rejectedPolicy) {
-        threadPoolDefinition.rejectedPolicy(rejectedPolicy);
+        profile.setRejectedPolicy(rejectedPolicy);
         return this;
+    }
+    
+    /**
+     * Builds the new thread pool
+     *
+     * @return the created thread pool
+     * @throws Exception is thrown if error building the thread pool
+     */
+    public ExecutorService build() throws Exception {
+        return build(null, null);
     }
 
     /**
@@ -91,16 +100,7 @@ public final class ThreadPoolBuilder {
      * @throws Exception is thrown if error building the thread pool
      */
     public ExecutorService build(Object source, String name) throws Exception {
-        int size = CamelContextHelper.parseInteger(camelContext, threadPoolDefinition.getPoolSize());
-        int max = CamelContextHelper.parseInteger(camelContext, threadPoolDefinition.getMaxPoolSize());
-        long keepAlive = CamelContextHelper.parseLong(camelContext, threadPoolDefinition.getKeepAliveTime());
-        int queueSize = CamelContextHelper.parseInteger(camelContext, threadPoolDefinition.getMaxQueueSize());
-        TimeUnit unit = threadPoolDefinition.getTimeUnit();
-        RejectedExecutionHandler handler = threadPoolDefinition.getRejectedExecutionHandler();
-
-        ExecutorService answer = camelContext.getExecutorServiceStrategy().newThreadPool(source, name,
-                size, max, keepAlive, unit, queueSize, handler, true);
-        return answer;
+        return context.getExecutorServiceManager().newThreadPool(source, name, profile);
     }
 
 }

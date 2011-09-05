@@ -19,8 +19,8 @@ package org.apache.camel.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.TimeUnit;
+
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -30,12 +30,13 @@ import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
 import org.apache.camel.Processor;
 import org.apache.camel.ThreadPoolRejectedPolicy;
+import org.apache.camel.builder.ThreadPoolProfileBuilder;
 import org.apache.camel.builder.xml.TimeUnitAdapter;
 import org.apache.camel.processor.Pipeline;
 import org.apache.camel.processor.ThreadsProcessor;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.spi.ThreadPoolProfile;
-import org.apache.camel.util.concurrent.ExecutorServiceHelper;
 
 /**
  * Represents an XML &lt;threads/&gt; element
@@ -57,7 +58,7 @@ public class ThreadsDefinition extends OutputDefinition<ThreadsDefinition> imple
     @XmlAttribute
     private Integer maxPoolSize;
     @XmlAttribute
-    private Integer keepAliveTime;
+    private Long keepAliveTime;
     @XmlAttribute
     @XmlJavaTypeAdapter(TimeUnitAdapter.class)
     private TimeUnit timeUnit;
@@ -69,31 +70,29 @@ public class ThreadsDefinition extends OutputDefinition<ThreadsDefinition> imple
     private ThreadPoolRejectedPolicy rejectedPolicy;
     @XmlAttribute
     private Boolean callerRunsWhenRejected;
+    
+    public ThreadsDefinition() {
+        this.threadName =  "Threads";
+    }
 
     @Override
     public Processor createProcessor(RouteContext routeContext) throws Exception {
         // the threads name
         String name = getThreadName() != null ? getThreadName() : "Threads";
-
         // prefer any explicit configured executor service
-        executorService = ExecutorServiceHelper.getConfiguredExecutorService(routeContext, name, this);
+        executorService = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, name, this);
         // if no explicit then create from the options
         if (executorService == null) {
-            ThreadPoolProfile profile = routeContext.getCamelContext().getExecutorServiceStrategy().getDefaultThreadPoolProfile();
-            // use the default thread pool profile as base and then override with values
-            // use a custom pool based on the settings
-            int core = getPoolSize() != null ? getPoolSize() : profile.getPoolSize();
-            int max = getMaxPoolSize() != null ? getMaxPoolSize() : profile.getMaxPoolSize();
-            long keepAlive = getKeepAliveTime() != null ? getKeepAliveTime() : profile.getKeepAliveTime();
-            int maxQueue = getMaxQueueSize() != null ? getMaxQueueSize() : profile.getMaxQueueSize();
-            TimeUnit tu = getTimeUnit() != null ? getTimeUnit() : profile.getTimeUnit();
-            RejectedExecutionHandler rejected = profile.getRejectedExecutionHandler();
-            if (rejectedPolicy != null) {
-                rejected = rejectedPolicy.asRejectedExecutionHandler();
-            }
-
-            executorService = routeContext.getCamelContext().getExecutorServiceStrategy()
-                                    .newThreadPool(this, name, core, max, keepAlive, tu, maxQueue, rejected, true);
+            ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
+            // create the thread pool using a builder
+            ThreadPoolProfile profile = new ThreadPoolProfileBuilder(name)
+                    .poolSize(getPoolSize())
+                    .maxPoolSize(getMaxPoolSize())
+                    .keepAliveTime(getKeepAliveTime(), getTimeUnit())
+                    .maxQueueSize(getMaxQueueSize())
+                    .rejectedPolicy(getRejectedPolicy())
+                    .build();
+            executorService = manager.newThreadPool(this, name, profile);
         }
 
         ThreadsProcessor thread = new ThreadsProcessor(routeContext.getCamelContext(), executorService);
@@ -164,7 +163,7 @@ public class ThreadsDefinition extends OutputDefinition<ThreadsDefinition> imple
      * @param keepAliveTime keep alive time
      * @return the builder
      */
-    public ThreadsDefinition keepAliveTime(int keepAliveTime) {
+    public ThreadsDefinition keepAliveTime(long keepAliveTime) {
         setKeepAliveTime(keepAliveTime);
         return this;
     }
@@ -261,11 +260,11 @@ public class ThreadsDefinition extends OutputDefinition<ThreadsDefinition> imple
         this.maxPoolSize = maxPoolSize;
     }
 
-    public Integer getKeepAliveTime() {
+    public Long getKeepAliveTime() {
         return keepAliveTime;
     }
 
-    public void setKeepAliveTime(Integer keepAliveTime) {
+    public void setKeepAliveTime(Long keepAliveTime) {
         this.keepAliveTime = keepAliveTime;
     }
 

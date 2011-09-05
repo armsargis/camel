@@ -28,7 +28,7 @@ import java.io.OutputStream;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.StreamCache;
-import org.apache.camel.impl.SynchronizationAdapter;
+import org.apache.camel.support.SynchronizationAdapter;
 import org.apache.camel.util.FileUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -216,7 +216,7 @@ public class CachedOutputStream extends OutputStream {
     }
     
     // This class will close the CachedOutputStream when it is closed
-    private class WrappedInputStream extends InputStream {
+    private static class WrappedInputStream extends InputStream {
         private CachedOutputStream cachedOutputStream;
         private InputStream inputStream;
         

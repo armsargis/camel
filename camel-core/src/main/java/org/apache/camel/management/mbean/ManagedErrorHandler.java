@@ -23,8 +23,8 @@ import org.apache.camel.processor.ErrorHandlerSupport;
 import org.apache.camel.processor.RedeliveryErrorHandler;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.RouteContext;
-import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedResource;
+import org.apache.camel.spi.management.ManagedAttribute;
+import org.apache.camel.spi.management.ManagedResource;
 
 /**
  * @version 

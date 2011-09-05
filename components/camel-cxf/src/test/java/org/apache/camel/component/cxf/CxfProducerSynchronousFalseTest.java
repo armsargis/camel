@@ -27,7 +27,8 @@ import org.junit.Test;
 
 public class CxfProducerSynchronousFalseTest extends CamelTestSupport {
 
-    private static final String SIMPLE_SERVER_ADDRESS = "http://localhost:28081/test";
+    private static final String SIMPLE_SERVER_ADDRESS = "http://localhost:" + CXFTestSupport.getPort1() 
+            + "/CxfProducerSynchronousFalseTest/test";
     private static final String REQUEST_MESSAGE = "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">"
             + "<soap:Body><ns1:echo xmlns:ns1=\"http://cxf.component.camel.apache.org/\">"
             + "<arg0 xmlns=\"http://cxf.component.camel.apache.org/\">Hello World!</arg0>"
@@ -39,6 +40,10 @@ public class CxfProducerSynchronousFalseTest extends CamelTestSupport {
 
     private String url = "cxf://" + SIMPLE_SERVER_ADDRESS
                 + "?serviceClass=org.apache.camel.component.cxf.HelloService&dataFormat=MESSAGE&synchronous=false";
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
 
     @BeforeClass
     public static void startServer() throws Exception {        

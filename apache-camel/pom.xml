@@ -461,6 +461,10 @@
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-xstream</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-zookeeper</artifactId>
+    </dependency>
 
     <!-- camel karaf -->
     <dependency>
@@ -527,10 +531,6 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.fusesource.commonman</groupId>
-      <artifactId>commons-management</artifactId>
     </dependency>
 
     <dependency>

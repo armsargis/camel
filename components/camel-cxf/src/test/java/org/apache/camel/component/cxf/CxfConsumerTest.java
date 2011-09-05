@@ -39,7 +39,7 @@ import org.junit.Test;
 
 public class CxfConsumerTest extends CamelTestSupport {
     protected static final String SIMPLE_ENDPOINT_ADDRESS = "http://localhost:"
-        + AvailablePortFinder.getNextAvailable() + "/test";
+        + CXFTestSupport.getPort1() + "/CxfConsumerTest/test";
     protected static final String SIMPLE_ENDPOINT_URI = "cxf://" + SIMPLE_ENDPOINT_ADDRESS
         + "?serviceClass=org.apache.camel.component.cxf.HelloService"
         + "&publishedEndpointUrl=http://www.simple.com/services/test";
@@ -51,7 +51,12 @@ public class CxfConsumerTest extends CamelTestSupport {
     private static final String ECHO_OPERATION = "echo";
     private static final String ECHO_BOOLEAN_OPERATION = "echoBoolean";
     private static final String TEST_MESSAGE = "Hello World!";
-
+    
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
+    
     // START SNIPPET: example
     protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {

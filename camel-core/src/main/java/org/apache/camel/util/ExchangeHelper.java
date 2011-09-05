@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.CamelExchangeException;
 import org.apache.camel.CamelExecutionException;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
@@ -36,7 +37,6 @@ import org.apache.camel.NoSuchHeaderException;
 import org.apache.camel.NoSuchPropertyException;
 import org.apache.camel.NoTypeConversionAvailableException;
 import org.apache.camel.TypeConverter;
-import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.spi.UnitOfWork;
 
 /**
@@ -193,15 +193,10 @@ public final class ExchangeHelper {
      * @return the copy
      */
     public static Exchange createCopy(Exchange exchange, boolean preserveExchangeId) {
-        Exchange copy = new DefaultExchange(exchange);
+        Exchange copy = exchange.copy();
         if (preserveExchangeId) {
             // must preserve exchange id
             copy.setExchangeId(exchange.getExchangeId());
-        }
-        copy.getProperties().putAll(exchange.getProperties());
-        copy.setIn(exchange.getIn().copy());
-        if (exchange.hasOut()) {
-            copy.setOut(exchange.getOut().copy());
         }
         return copy;
     }
@@ -635,33 +630,17 @@ public final class ExchangeHelper {
     }
 
     /**
-     * Creates an exception message with the provided details.
-     * <p/>
-     * All fields is optional so you can pass in only an exception, or just a message etc. or any combination.
-     *
-     * @param message  the message
-     * @param exchange the exchange
-     * @param cause    the caused exception
-     * @return an error message (without stacktrace from exception)
+     * @deprecated use
+     *             org.apache.camel.CamelExchangeException.createExceptionMessage
+     *             instead
+     * @param message
+     * @param exchange
+     * @param cause
+     * @return
      */
+    @Deprecated
     public static String createExceptionMessage(String message, Exchange exchange, Throwable cause) {
-        StringBuilder sb = new StringBuilder();
-        if (message != null) {
-            sb.append(message);
-        }
-        if (exchange != null) {
-            if (sb.length() > 0) {
-                sb.append(". ");
-            }
-            sb.append(exchange);
-        }
-        if (cause != null) {
-            if (sb.length() > 0) {
-                sb.append(". ");
-            }
-            sb.append("Caused by: [" + cause.getClass().getName() + " - " + cause.getMessage() + "]");
-        }
-        return sb.toString().trim();
+        return CamelExchangeException.createExceptionMessage(message, exchange, cause);
     }
 
     /**

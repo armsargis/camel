@@ -36,7 +36,7 @@ public class AsyncEndpointCustomRoutePolicyTest extends ContextTestSupport {
 
     private final MyCustomRoutePolicy policy = new MyCustomRoutePolicy();
 
-    private class MyCustomRoutePolicy extends RoutePolicySupport {
+    private static class MyCustomRoutePolicy extends RoutePolicySupport {
 
         private volatile int invoked;
         private volatile AtomicBoolean stopped = new AtomicBoolean();
@@ -102,7 +102,7 @@ public class AsyncEndpointCustomRoutePolicyTest extends ContextTestSupport {
                                 beforeThreadName = Thread.currentThread().getName();
                             }
                         })
-                        .to("async:Bye Camel")
+                        .to("async:bye:camel")
                         .process(new Processor() {
                             public void process(Exchange exchange) throws Exception {
                                 afterThreadName = Thread.currentThread().getName();

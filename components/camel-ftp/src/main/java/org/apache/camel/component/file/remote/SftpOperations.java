@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Vector;
 
@@ -53,12 +54,12 @@ import static org.apache.camel.util.ObjectHelper.isNotEmpty;
  */
 public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry> {
     private static final transient Logger LOG = LoggerFactory.getLogger(SftpOperations.class);
-    private RemoteFileEndpoint endpoint;
+    private SftpEndpoint endpoint;
     private ChannelSftp channel;
     private Session session;
 
     public void setEndpoint(GenericFileEndpoint endpoint) {
-        this.endpoint = (RemoteFileEndpoint) endpoint;
+        this.endpoint = (SftpEndpoint) endpoint;
     }
 
     public boolean connect(RemoteFileConfiguration configuration) throws GenericFileOperationFailedException {
@@ -137,6 +138,16 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
 
         SftpConfiguration sftpConfig = (SftpConfiguration) configuration;
 
+        if (isNotEmpty(sftpConfig.getCiphers())) {
+            LOG.debug("Using ciphers: " + sftpConfig.getCiphers());
+            Hashtable<String, String> ciphers = new Hashtable<String, String>();
+            
+            ciphers.put("cipher.s2c", sftpConfig.getCiphers());
+            ciphers.put("cipher.c2s", sftpConfig.getCiphers());
+
+            JSch.setConfig(ciphers);
+        }
+        
         if (isNotEmpty(sftpConfig.getPrivateKeyFile())) {
             LOG.debug("Using private keyfile: " + sftpConfig.getPrivateKeyFile());
             if (isNotEmpty(sftpConfig.getPrivateKeyFilePassphrase())) {
@@ -160,7 +171,7 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
         
         session.setServerAliveInterval(sftpConfig.getServerAliveInterval());
         session.setServerAliveCountMax(sftpConfig.getServerAliveCountMax());
-        
+
         // set user information
         session.setUserInfo(new UserInfo() {
             public String getPassphrase() {
@@ -644,7 +655,18 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
                 // override is default
                 channel.put(is, targetName);
             }
+
+            // after storing file, we may set chmod on the file
+            String mode = endpoint.getConfiguration().getChmod();
+            if (ObjectHelper.isNotEmpty(mode)) {
+                // parse to int using 8bit mode
+                int permissions = Integer.parseInt(mode, 8);
+                LOG.trace("Setting chmod: {} on file: ", mode, targetName);
+                channel.chmod(permissions, targetName);
+            }
+
             return true;
+        
         } catch (SftpException e) {
             throw new GenericFileOperationFailedException("Cannot store file: " + name, e);
         } catch (InvalidPayloadException e) {
@@ -656,7 +678,9 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
 
     public boolean existsFile(String name) throws GenericFileOperationFailedException {
         LOG.trace("existsFile({})", name);
-
+        if (endpoint.isFastExistsCheck()) {
+            return fastExistsFile(name);
+        }
         // check whether a file already exists
         String directory = FileUtil.onlyPath(name);
         if (directory == null) {
@@ -689,6 +713,25 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
             // otherwise its a more serious error so rethrow
             throw new GenericFileOperationFailedException(e.getMessage(), e);
         }
+    }
+
+    protected boolean fastExistsFile(String name) throws GenericFileOperationFailedException {
+        LOG.trace("fastExistsFile({})", name);
+        try {
+            Vector files = channel.ls(name);
+            if (files == null) {
+                return false;
+            }
+            return files.size() >= 1;
+        } catch (SftpException e) {
+            // or an exception can be thrown with id 2 which means file does not exists
+            if (ChannelSftp.SSH_FX_NO_SUCH_FILE == e.id) {
+                return false;
+            }
+            // otherwise its a more serious error so rethrow
+            throw new GenericFileOperationFailedException(e.getMessage(), e);
+        }
+
     }
 
     public boolean sendNoop() throws GenericFileOperationFailedException {

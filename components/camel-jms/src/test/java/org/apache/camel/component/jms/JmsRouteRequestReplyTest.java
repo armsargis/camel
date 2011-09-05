@@ -28,7 +28,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.jms.ConnectionFactory;
 
-import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
@@ -37,9 +36,12 @@ import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.test.CamelTestSupport;
+import org.apache.camel.test.junit4.CamelTestSupport;
+import org.junit.Before;
+import org.junit.Test;
 
 import static org.apache.camel.component.jms.JmsComponent.jmsComponentAutoAcknowledge;
+
 
 /**
  * @version 
@@ -310,32 +312,38 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
         }
     }
 
-    @Override
-    protected void setUp() throws Exception {
+    @Before
+    public void setUp() throws Exception {
         init();
         super.setUp();
     }
 
+    @Test
     public void testUseMessageIDAsCorrelationID() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
 
+    @Test
     public void testUseCorrelationID() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
 
+    @Test
     public void testUseMessageIDAsCorrelationIDMultiNode() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
 
+    @Test
     public void testUseCorrelationIDMultiNode() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
 
+    @Test
     public void testUseMessageIDAsCorrelationIDPersistReplyToMultiNode() throws Exception {
         runRequestReplyThreaded(endpointReplyToUriA);
     }
 
+    @Test
     public void testUseCorrelationIDPersistReplyToMultiNode() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
@@ -348,6 +356,7 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
     // for a faster way to do this. Note however that in this case the message copy has to occur
     // between consumer -> producer as the selector value needs to be propagated to the ultimate
     // destination, which in turn will copy this value back into the reply message
+    @Test
     public void testUseMessageIDAsCorrelationIDPersistMultiReplyToMultiNode() throws Exception {
         int oldMaxTasks = maxTasks;
         int oldMaxServerTasks = maxServerTasks;
@@ -367,6 +376,7 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
     }
 
     // see (1)
+    @Test
     public void testUseCorrelationIDPersistMultiReplyToMultiNode() throws Exception {
         int oldMaxTasks = maxTasks;
         int oldMaxServerTasks = maxServerTasks;
@@ -385,14 +395,17 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
         }
     }
 
+    @Test
     public void testUseMessageIDAsCorrelationIDPersistMultiReplyToWithNamedSelectorMultiNode() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
 
+    @Test
     public void testUseCorrelationIDPersistMultiReplyToWithNamedSelectorMultiNode() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
 
+    @Test
     public void testUseCorrelationIDTimeout() throws Exception {
         JmsComponent c = (JmsComponent)context.getComponent(componentName);
         c.getConfiguration().setRequestTimeout(1000);
@@ -407,6 +420,7 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
         assertEquals("", reply);
     }
 
+    @Test
     public void testUseMessageIDAsCorrelationIDTimeout() throws Exception {
         JmsComponent c = (JmsComponent)context.getComponent(componentName);
         c.getConfiguration().setRequestTimeout(1000);
@@ -421,10 +435,12 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
         assertEquals("", reply);
     }
 
+    @Test
     public void testUseCorrelationIDMultiNodeDiffComponents() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
 
+    @Test
     public void testUseMessageIDAsCorrelationIDMultiNodeDiffComponents() throws Exception {
         runRequestReplyThreaded(endpointUriA);
     }
@@ -434,7 +450,7 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
         // start template
         template.start();
 
-        ExecutorService executor = context.getExecutorServiceStrategy().newFixedThreadPool(this, "Task", maxTasks);
+        ExecutorService executor = context.getExecutorServiceManager().newFixedThreadPool(this, "Task", maxTasks);
         CompletionService<Task> completionService = new ExecutorCompletionService<Task>(executor);
 
         final AtomicInteger counter = new AtomicInteger(-1);
@@ -450,15 +466,15 @@ public class JmsRouteRequestReplyTest extends CamelTestSupport {
             task.assertSuccess();
         }
 
-        context.getExecutorServiceStrategy().shutdownNow(executor);
+        context.getExecutorServiceManager().shutdownNow(executor);
     }
 
     protected CamelContext createCamelContext() throws Exception {
         CamelContext camelContext = super.createCamelContext();
-        return contextBuilders.get(getName()).buildContext(camelContext);
+        return contextBuilders.get(testName.getMethodName()).buildContext(camelContext);
     }
 
     protected RouteBuilder createRouteBuilder() throws Exception {
-        return routeBuilders.get(getName());
+        return routeBuilders.get(testName.getMethodName());
     }
 }

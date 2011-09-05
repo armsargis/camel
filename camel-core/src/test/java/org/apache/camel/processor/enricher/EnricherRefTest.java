@@ -29,7 +29,7 @@ import org.apache.camel.processor.aggregate.UseLatestAggregationStrategy;
  */
 public class EnricherRefTest extends ContextTestSupport {
 
-    private MockEndpoint cool = new MockEndpoint();
+    private MockEndpoint cool = new MockEndpoint("mock:cool");
 
     @Override
     protected JndiRegistry createRegistry() throws Exception {
@@ -58,7 +58,6 @@ public class EnricherRefTest extends ContextTestSupport {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
-                cool.setEndpointUriIfNotSpecified("cool");
                 cool.setCamelContext(context);
 
                 from("direct:start").enrichRef("cool", "agg");

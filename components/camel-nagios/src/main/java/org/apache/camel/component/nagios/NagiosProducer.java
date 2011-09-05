@@ -66,8 +66,8 @@ public class NagiosProducer extends DefaultProducer {
         // if non blocking then set a executor service on it
         if (sender instanceof NonBlockingNagiosPassiveCheckSender) {
             NonBlockingNagiosPassiveCheckSender nonBlocking = (NonBlockingNagiosPassiveCheckSender) sender;
-            ExecutorService executor = getEndpoint().getCamelContext().getExecutorServiceStrategy()
-                                            .newSingleThreadExecutor(this, getEndpoint().getEndpointUri());
+            ExecutorService executor = getEndpoint().getCamelContext().getExecutorServiceManager()
+                    .newSingleThreadExecutor(this, getEndpoint().getEndpointUri());
             nonBlocking.setExecutor(executor);
         }
         super.doStart();

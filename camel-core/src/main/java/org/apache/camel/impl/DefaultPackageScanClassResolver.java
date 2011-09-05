@@ -43,6 +43,7 @@ import org.apache.camel.impl.scan.AssignableToPackageScanFilter;
 import org.apache.camel.impl.scan.CompositePackageScanFilter;
 import org.apache.camel.spi.PackageScanClassResolver;
 import org.apache.camel.spi.PackageScanFilter;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.LRUSoftCache;
 import org.apache.camel.util.ObjectHelper;
@@ -261,6 +262,12 @@ public class DefaultPackageScanClassResolver extends ServiceSupport implements P
                 // osgi bundles should be skipped
                 if (url.toString().startsWith("bundle:") || urlPath.startsWith("bundle:")) {
                     log.trace("Skipping OSGi bundle: {}", url);
+                    continue;
+                }
+
+                // bundle resource should be skipped
+                if (url.toString().startsWith("bundleresource:") || urlPath.startsWith("bundleresource:")) {
+                    log.trace("Skipping bundleresource: {}", url);
                     continue;
                 }
 

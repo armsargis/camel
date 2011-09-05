@@ -17,6 +17,7 @@
 package org.apache.camel.model;
 
 import java.util.concurrent.ExecutorService;
+
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -29,9 +30,9 @@ import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.processor.RecipientList;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.processor.aggregate.UseLatestAggregationStrategy;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
-import org.apache.camel.util.concurrent.ExecutorServiceHelper;
 
 /**
  * Represents an XML &lt;recipientList/&gt; element
@@ -88,6 +89,11 @@ public class RecipientListDefinition<Type extends ProcessorDefinition> extends N
     public String getShortName() {
         return "recipientList";
     }
+    
+    @Override
+    public String getLabel() {
+        return "recipientList[" + getExpression() + "]";
+    }
 
     @Override
     public Processor createProcessor(RouteContext routeContext) throws Exception {
@@ -118,10 +124,10 @@ public class RecipientListDefinition<Type extends ProcessorDefinition> extends N
         if (getTimeout() != null) {
             answer.setTimeout(getTimeout());
         }
-        executorService = ExecutorServiceHelper.getConfiguredExecutorService(routeContext, "RecipientList", this);
         if (isParallelProcessing() && executorService == null) {
-            // we are running in parallel so create a cached thread pool which grows/shrinks automatic
-            executorService = routeContext.getCamelContext().getExecutorServiceStrategy().newDefaultThreadPool(this, "RecipientList");
+            String ref = this.executorServiceRef != null ? this.executorServiceRef : "RecipientList";
+            ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
+            executorService = manager.newDefaultThreadPool(this, ref);
         }
         answer.setExecutorService(executorService);
         long timeout = getTimeout() != null ? getTimeout() : 0;

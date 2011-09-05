@@ -41,22 +41,22 @@ import org.apache.camel.Navigate;
 import org.apache.camel.NoSuchEndpointException;
 import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
+import org.apache.camel.TimeoutMap;
 import org.apache.camel.impl.LoggingExceptionHandler;
-import org.apache.camel.impl.ServiceSupport;
 import org.apache.camel.processor.SendProcessor;
 import org.apache.camel.processor.Traceable;
 import org.apache.camel.spi.AggregationRepository;
 import org.apache.camel.spi.ExceptionHandler;
 import org.apache.camel.spi.RecoverableAggregationRepository;
 import org.apache.camel.spi.Synchronization;
-import org.apache.camel.util.DefaultTimeoutMap;
+import org.apache.camel.support.DefaultTimeoutMap;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.LRUCache;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ServiceHelper;
 import org.apache.camel.util.StopWatch;
 import org.apache.camel.util.TimeUtils;
-import org.apache.camel.util.TimeoutMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -157,6 +157,14 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
     }
 
     public void process(Exchange exchange) throws Exception {
+
+        //check for the special header to force completion of all groups (and ignore the exchange otherwise)
+        boolean completeAllGroups = exchange.getIn().getHeader(Exchange.AGGREGATION_COMPLETE_ALL_GROUPS, false, boolean.class);
+        if (completeAllGroups) {
+            forceCompletionOfAllGroups();
+            return;
+        }
+
         // compute correlation expression
         String key = correlationExpression.evaluate(exchange, String.class);
         if (ObjectHelper.isEmpty(key)) {
@@ -804,7 +812,7 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
                 }
 
                 // create a background recover thread to check every interval
-                recoverService = camelContext.getExecutorServiceStrategy().newScheduledThreadPool(this, "AggregateRecoverChecker", 1);
+                recoverService = camelContext.getExecutorServiceManager().newScheduledThreadPool(this, "AggregateRecoverChecker", 1);
                 Runnable recoverTask = new RecoverTask(recoverable);
                 LOG.info("Using RecoverableAggregationRepository by scheduling recover checker to run every " + interval + " millis.");
                 // use fixed delay so there is X interval between each run
@@ -834,7 +842,7 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
         }
         if (getCompletionInterval() > 0) {
             LOG.info("Using CompletionInterval to run every " + getCompletionInterval() + " millis.");
-            ScheduledExecutorService scheduler = camelContext.getExecutorServiceStrategy().newScheduledThreadPool(this, "AggregateTimeoutChecker", 1);
+            ScheduledExecutorService scheduler = camelContext.getExecutorServiceManager().newScheduledThreadPool(this, "AggregateTimeoutChecker", 1);
             // trigger completion based on interval
             scheduler.scheduleAtFixedRate(new AggregationIntervalTask(), 1000L, getCompletionInterval(), TimeUnit.MILLISECONDS);
         }
@@ -842,7 +850,7 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
         // start timeout service if its in use
         if (getCompletionTimeout() > 0 || getCompletionTimeoutExpression() != null) {
             LOG.info("Using CompletionTimeout to trigger after " + getCompletionTimeout() + " millis of inactivity.");
-            ScheduledExecutorService scheduler = camelContext.getExecutorServiceStrategy().newScheduledThreadPool(this, "AggregateTimeoutChecker", 1);
+            ScheduledExecutorService scheduler = camelContext.getExecutorServiceManager().newScheduledThreadPool(this, "AggregateTimeoutChecker", 1);
             // check for timed out aggregated messages once every second
             timeoutMap = new AggregationTimeoutMap(scheduler, 1000L);
             // fill in existing timeout values from the aggregation repository, for example if a restart occurred, then we
@@ -855,7 +863,7 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
     @Override
     protected void doStop() throws Exception {
         if (recoverService != null) {
-            camelContext.getExecutorServiceStrategy().shutdownNow(recoverService);
+            camelContext.getExecutorServiceManager().shutdownNow(recoverService);
         }
         ServiceHelper.stopServices(timeoutMap, processor, deadLetterProcessor);
 
@@ -879,4 +887,37 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
         super.doShutdown();
     }
 
+    public void forceCompletionOfAllGroups() {
+
+        // only run if CamelContext has been fully started
+        if (!camelContext.getStatus().isStarted()) {
+            LOG.warn("cannot start force completion because CamelContext({}) has not been started yet", camelContext.getName());
+            return;
+        }
+
+        LOG.trace("Starting force completion of all groups task");
+
+        // trigger completion for all in the repository
+        Set<String> keys = aggregationRepository.getKeys();
+
+        if (keys != null && !keys.isEmpty()) {
+            // must acquire the shared aggregation lock to be able to trigger force completion
+            lock.lock();
+            try {
+                for (String key : keys) {
+                    Exchange exchange = aggregationRepository.get(camelContext, key);
+                    if (exchange != null) {
+                        LOG.trace("force completion triggered for correlation key: {}", key);
+                        // indicate it was completed by a force completion request
+                        exchange.setProperty(Exchange.AGGREGATED_COMPLETED_BY, "forceCompletion");
+                        onCompletion(key, exchange, false);
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        LOG.trace("Completed force completion of all groups task");
+    }
 }

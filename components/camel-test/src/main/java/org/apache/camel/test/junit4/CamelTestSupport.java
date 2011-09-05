@@ -21,7 +21,6 @@ import java.util.Hashtable;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 
@@ -61,13 +60,25 @@ import org.slf4j.LoggerFactory;
  * @version 
  */
 public abstract class CamelTestSupport extends TestSupport {    
-    
-    protected static volatile CamelContext context;
-    protected static volatile ProducerTemplate template;
-    protected static volatile ConsumerTemplate consumer;
-    protected static volatile Service camelContextService;
     private static final Logger LOG = LoggerFactory.getLogger(TestSupport.class);
-    private static final AtomicBoolean INIT = new AtomicBoolean();
+    private static final ThreadLocal<Boolean> INIT = new ThreadLocal<Boolean>();
+    
+    
+    private static ThreadLocal<CamelContext> threadCamelContext 
+        = new ThreadLocal<CamelContext>();
+    private static ThreadLocal<ProducerTemplate> threadTemplate 
+        = new ThreadLocal<ProducerTemplate>();
+    private static ThreadLocal<ConsumerTemplate> threadConsumer 
+        = new ThreadLocal<ConsumerTemplate>();
+    private static ThreadLocal<Service> threadService 
+        = new ThreadLocal<Service>();
+    
+    protected volatile CamelContext context;
+    protected volatile ProducerTemplate template;
+    protected volatile ConsumerTemplate consumer;
+    protected volatile Service camelContextService;
+
+    
     private boolean useRouteBuilder = true;
     private final DebugBreakpoint breakpoint = new DebugBreakpoint();
     private final StopWatch watch = new StopWatch();
@@ -83,6 +94,21 @@ public abstract class CamelTestSupport extends TestSupport {
 
     public void setUseRouteBuilder(boolean useRouteBuilder) {
         this.useRouteBuilder = useRouteBuilder;
+    }
+
+    /**
+     * Override when using <a href="http://camel.apache.org/advicewith.html">advice with</a> and return <tt>true</tt>.
+     * This helps knowing advice with is to be used, and {@link CamelContext} will not be started before
+     * the advice with takes place. This helps by ensuring the advice with has been property setup before the
+     * {@link CamelContext} is started
+     * <p/>
+     * <b>Important:</b> Its important to start {@link CamelContext} manually from the unit test
+     * after you are done doing all the advice with.
+     *
+     * @return <tt>true</tt> if you use advice with in your unit tests.
+     */
+    public boolean isUseAdviceWith() {
+        return false;
     }
 
     /**
@@ -114,6 +140,15 @@ public abstract class CamelTestSupport extends TestSupport {
         return null;
     }
 
+    /**
+     * Override to enable debugger
+     * <p/>
+     * Is default <tt>false</tt>
+     */
+    public boolean isUseDebugger() {
+        return false;
+    }
+
     public Service getCamelContextService() {
         return camelContextService;
     }
@@ -141,6 +176,7 @@ public abstract class CamelTestSupport extends TestSupport {
      */
     public void setCamelContextService(Service service) {
         camelContextService = service;
+        threadService.set(camelContextService);
     }
 
     @Before
@@ -149,9 +185,9 @@ public abstract class CamelTestSupport extends TestSupport {
         log.info("Testing: " + getTestMethodName() + "(" + getClass().getName() + ")");
         log.info("********************************************************************************");
 
-        boolean first = INIT.compareAndSet(false, true);
         if (isCreateCamelContextPerClass()) {
             // test is per class, so only setup once (the first time)
+            boolean first = INIT.get() == null;
             if (first) {
                 doPreSetup();
                 doSetUp();
@@ -195,20 +231,27 @@ public abstract class CamelTestSupport extends TestSupport {
         }
 
         context = createCamelContext();
+        threadCamelContext.set(context);
+
         assertNotNull("No context found!", context);
 
         // reduce default shutdown timeout to avoid waiting for 300 seconds
         context.getShutdownStrategy().setTimeout(getShutdownTimeout());
 
-        // set debugger
-        context.setDebugger(new DefaultDebugger());
-        context.getDebugger().addBreakpoint(breakpoint);
-        // note: when stopping CamelContext it will automatic remove the breakpoint
+        // set debugger if enabled
+        if (isUseDebugger()) {
+            context.setDebugger(new DefaultDebugger());
+            context.getDebugger().addBreakpoint(breakpoint);
+            // note: when stopping CamelContext it will automatic remove the breakpoint
+        }
 
         template = context.createProducerTemplate();
         template.start();
         consumer = context.createConsumerTemplate();
         consumer.start();
+        
+        threadTemplate.set(template);
+        threadConsumer.set(consumer);
 
         // enable auto mocking if enabled
         String pattern = isMockEndpoints();
@@ -224,10 +267,13 @@ public abstract class CamelTestSupport extends TestSupport {
                 log.debug("Using created route builder: " + builder);
                 context.addRoutes(builder);
             }
-            if (!"true".equalsIgnoreCase(System.getProperty("skipStartingCamelContext"))) {
-                startCamelContext();
-            } else {
+            boolean skip = "true".equalsIgnoreCase(System.getProperty("skipStartingCamelContext"));
+            if (skip) {
                 log.info("Skipping starting CamelContext as system property skipStartingCamelContext is set to be true.");
+            } else if (isUseAdviceWith()) {
+                log.info("Skipping starting CamelContext as isUseAdviceWith is set to true.");
+            } else {
+                startCamelContext();
             }
         } else {
             log.debug("Using route builder from the created context: " + context);
@@ -254,16 +300,16 @@ public abstract class CamelTestSupport extends TestSupport {
         }
 
         LOG.debug("tearDown test");
-        doStopTemplates();
-        stopCamelContext();
+        doStopTemplates(consumer, template);
+        doStopCamelContext(context, camelContextService);
     }
 
     @AfterClass
     public static void tearDownAfterClass() throws Exception {
-        INIT.set(false);
+        INIT.remove();
         LOG.debug("tearDownAfterClass test");
-        doStopTemplates();
-        doStopCamelContext();
+        doStopTemplates(threadConsumer.get(), threadTemplate.get());
+        doStopCamelContext(threadCamelContext.get(), threadService.get());
     }
 
     /**
@@ -302,33 +348,52 @@ public abstract class CamelTestSupport extends TestSupport {
      * Note that using Spring Test or Guice is a more powerful approach.
      */
     protected void postProcessTest() throws Exception {
+        context = threadCamelContext.get();
+        template = threadTemplate.get();
+        consumer = threadConsumer.get();
+        camelContextService = threadService.get();
+
         CamelBeanPostProcessor processor = new CamelBeanPostProcessor();
         processor.setCamelContext(context);
         processor.postProcessBeforeInitialization(this, "this");
     }
 
     protected void stopCamelContext() throws Exception {
-        doStopCamelContext();
+        doStopCamelContext(context, camelContextService);
     }
 
-    private static void doStopCamelContext() throws Exception {
+    private static void doStopCamelContext(CamelContext context,
+                                           Service camelContextService) throws Exception {
         if (camelContextService != null) {
+            if (camelContextService == threadService.get()) {
+                threadService.remove();
+            }
             camelContextService.stop();
             camelContextService = null;
         } else {
             if (context != null) {
+                if (context == threadCamelContext.get()) {
+                    threadCamelContext.remove();
+                }
                 context.stop();
                 context = null;
             }
         }
     }
 
-    private static void doStopTemplates() throws Exception {
+    private static void doStopTemplates(ConsumerTemplate consumer,
+                                        ProducerTemplate template) throws Exception {
         if (consumer != null) {
+            if (consumer == threadConsumer.get()) {
+                threadConsumer.remove();
+            }
             consumer.stop();
             consumer = null;
         }
         if (template != null) {
+            if (template == threadTemplate.get()) {
+                threadTemplate.remove();
+            }
             template.stop();
             template = null;
         }

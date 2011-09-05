@@ -37,15 +37,13 @@
     </camel.osgi.export.pkg>
     <camel.osgi.import>
         !org.apache.camel.*,
+        !com.googlecode.concurrentlinkedhashmap,
         org.apache.xalan.xsltc.trax;resolution:=optional,
         javax.activation;resolution:=optional,
         javax.xml.bind;resolution:=optional,
         javax.xml.bind.annotation;resolution:=optional,
         javax.xml.bind.annotation.adapters;resolution:=optional,
         javax.xml.stream;resolution:=optional,
-        org.springframework.jmx.export.annotation;resolution:=optional;version="[3,4)",
-        org.springframework.jmx.export.assembler;resolution:=optional;version="[3,4)",
-        org.springframework.jmx.export.metadata;resolution:=optional;version="[3,4)",
         *
     </camel.osgi.import>
     <camel.osgi.dynamic>
@@ -60,37 +58,13 @@
 
     <!-- required dependencies by camel-core -->
     <dependency>
+      <groupId>com.googlecode.concurrentlinkedhashmap</groupId>
+      <artifactId>concurrentlinkedhashmap-lru</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
-    </dependency>
-
-    <!-- required dependencies by camel-core -->
-    <dependency>
-      <groupId>org.fusesource.commonman</groupId>
-      <artifactId>commons-management</artifactId>
-    </dependency>
-
-    <!-- to allow Spring annotations to be used for management -->
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-context</artifactId>
-      <optional>true</optional>
-      <scope>compile</scope>
-      <exclusions>
-        <!-- we only need spring-context.jar as optional as we need the JMX export annotations -->
-        <exclusion>
-          <groupId>org.springframework</groupId>
-          <artifactId>spring-core</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.springframework</groupId>
-          <artifactId>spring-beans</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>aopalliance</groupId>
-          <artifactId>aopalliance</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
 
     <!-- osgi support -->
@@ -116,24 +90,32 @@
       <artifactId>slf4j-log4j12</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <scope>test</scope>
-    </dependency>
-
-    <!-- needed for jmx testing -->
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-aop</artifactId>
-      <scope>test</scope>
-    </dependency>
 
   </dependencies>
 
 
   <build>
     <plugins>
+    <!-- Shade the googlecode stuff for OSGi -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <artifactSet>
+                <includes>
+                  <include>com.googlecode.concurrentlinkedhashmap:concurrentlinkedhashmap-lru</include>
+                </includes>
+              </artifactSet>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <!-- generate the attached tests jar -->
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>
@@ -177,7 +159,6 @@
           <links>
             <link>http://download.oracle.com/javase/6/docs/api/</link>
             <link>http://download.oracle.com/javaee/6/api/</link>
-            <link>http://static.springsource.org/spring/docs/3.0.5.RELEASE/api/</link>
           </links>
           <stylesheetfile>${basedir}/../etc/css/stylesheet.css</stylesheetfile>
           <linksource>true</linksource>
@@ -253,7 +234,6 @@
               <links>
                 <link>http://download.oracle.com/javase/6/docs/api/</link>
                 <link>http://download.oracle.com/javaee/6/api/</link>
-                <link>http://static.springsource.org/spring/docs/3.0.5.RELEASE/api/</link>
               </links>
               <stylesheetfile>${basedir}/../etc/css/stylesheet.css</stylesheetfile>
               <linksource>true</linksource>
@@ -290,8 +270,16 @@
                   <packages>org.apache.camel.component.*</packages>
                 </group>
                 <group>
+                  <title>Camel Support having base classes to extend</title>
+                  <packages>org.apache.camel.support</packages>
+                </group>
+                <group>
                   <title>Camel Runtime</title>
                   <packages>org.apache.camel.impl:org.apache.camel.impl.*</packages>
+                </group>
+                <group>
+                  <title>Camel Starters</title>
+                  <packages>org.apache.camel.main</packages>
                 </group>
                 <group>
                   <title>Type conversion helper classes</title>

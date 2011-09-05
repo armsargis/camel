@@ -17,7 +17,6 @@
 package org.apache.camel.component.cxf;
 
 import java.lang.reflect.Proxy;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +89,8 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     private Class<?> serviceClass;
     private QName portName;
     private QName serviceName;
+    private String portNameString;
+    private String serviceNameString;
     private String defaultOperationName;
     private String defaultOperationNamespace;
     // This is for invoking the CXFClient with wrapped parameters of unwrapped parameters
@@ -120,7 +121,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         = new ModCountCopyOnWriteArrayList<AbstractFeature>();
 
     private List<Handler> handlers;
-    private List<String> schemaLocations = new ArrayList<String>();
+    private List<String> schemaLocations;
     private String transportId;
     private String bindingId;
 
@@ -140,6 +141,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         super(remaining);
         setAddress(remaining);
     }
+
     public CxfEndpoint() {
         super();
     }
@@ -182,13 +184,19 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         sfb.setOutFaultInterceptors(outFault);
         sfb.setInFaultInterceptors(inFault); 
         sfb.setFeatures(features);
-        sfb.setSchemaLocations(schemaLocations);
+        if (schemaLocations != null) {
+            sfb.setSchemaLocations(schemaLocations);
+        }
         
         if (sfb instanceof JaxWsServerFactoryBean && handlers != null) {
             ((JaxWsServerFactoryBean)sfb).setHandlers(handlers);
         }
-        sfb.setTransportId(transportId);
-        sfb.setBindingId(bindingId);
+        if (getTransportId() != null) {
+            sfb.setTransportId(getTransportId());
+        }
+        if (getBindingId() != null) {
+            sfb.setBindingId(getBindingId());
+        }
         
         // wsdl url
         if (getWsdlURL() != null) {
@@ -312,9 +320,13 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         
         if (factoryBean instanceof JaxWsProxyFactoryBean && handlers != null) {
             ((JaxWsProxyFactoryBean)factoryBean).setHandlers(handlers);
-        }        
-        factoryBean.setTransportId(transportId);
-        factoryBean.setBindingId(bindingId);
+        }
+        if (getTransportId() != null) {
+            factoryBean.setTransportId(getTransportId());
+        }
+        if (getBindingId() != null) {
+            factoryBean.setBindingId(getBindingId());
+        }
 
         // address
         factoryBean.setAddress(getAddress());
@@ -492,6 +504,18 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         return answer;
     }
 
+    protected String resolvePropertyPlaceholders(String str) {
+        try {
+            if (getCamelContext() != null) {
+                return getCamelContext().resolvePropertyPlaceholders(str);
+            } else {
+                return str;
+            }
+        } catch (Exception ex) {
+            throw ObjectHelper.wrapRuntimeCamelException(ex);
+        }
+    }
+
     // Properties
     // -------------------------------------------------------------------------
 
@@ -504,7 +528,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public String getPublishedEndpointUrl() {
-        return publishedEndpointUrl;
+        return resolvePropertyPlaceholders(publishedEndpointUrl);
     }
 
     public void setPublishedEndpointUrl(String url) {
@@ -512,7 +536,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public String getWsdlURL() {
-        return wsdlURL;
+        return resolvePropertyPlaceholders(wsdlURL);
     }
 
     public void setWsdlURL(String url) {
@@ -532,30 +556,45 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
     
     public void setServiceClass(String type) throws ClassNotFoundException {
-        serviceClass = ClassLoaderUtils.loadClass(type, getClass());
+        serviceClass = ClassLoaderUtils.loadClass(resolvePropertyPlaceholders(type), getClass());
     }
-    
+
+    public void setServiceNameString(String service) {
+        serviceNameString = service;
+    }
+
     public void setServiceName(QName service) {
         serviceName = service;
     }
 
     public QName getServiceName() {
+        if (serviceName == null && serviceNameString != null) {
+            serviceName = QName.valueOf(resolvePropertyPlaceholders(serviceNameString));
+        }
         return serviceName;
     }
 
     public QName getPortName() {
+        if (portName == null && portNameString != null) {
+            portName = QName.valueOf(resolvePropertyPlaceholders(portNameString));
+        }
         return portName;
     }
 
     public void setPortName(QName port) {
         portName = port;
     }
+
+    public void setEndpointNameString(String port) {
+        portNameString = port;
+    }
+
     public void setEndpointName(QName port) {
         portName = port;
     }
 
     public String getDefaultOperationName() {
-        return defaultOperationName;
+        return resolvePropertyPlaceholders(defaultOperationName);
     }
 
     public void setDefaultOperationName(String name) {
@@ -563,7 +602,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public String getDefaultOperationNamespace() {
-        return defaultOperationNamespace;
+        return resolvePropertyPlaceholders(defaultOperationNamespace);
     }
 
     public void setDefaultOperationNamespace(String namespace) {
@@ -669,7 +708,8 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
                                              this,
                                              this.properties);
             } catch (Throwable e) {
-                e.printStackTrace();
+                // TODO: Why dont't we rethrown this exception
+                LOG.warn("Error setting CamelContext. This exception will be ignored.", e);
             }
         }
     }
@@ -689,7 +729,8 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
                                              this,
                                              this.properties);
             } catch (Throwable e) {
-                e.printStackTrace();
+                // TODO: Why dont't we rethrown this exception
+                LOG.warn("Error setting properties. This exception will be ignored.", e);
             }
         }
     }
@@ -718,7 +759,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public String getAddress() {
-        return address;
+        return resolvePropertyPlaceholders(address);
     }
 
     public void setMtomEnabled(boolean mtomEnabled) {
@@ -747,9 +788,9 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         @Override
         protected void setParameters(Object[] params, Message message) {
 
-            Object attachements = message.get(CxfConstants.CAMEL_CXF_ATTACHMENTS);
-            if (attachements != null) {
-                message.setAttachments((Collection<Attachment>) attachements);
+            Object attachments = message.get(CxfConstants.CAMEL_CXF_ATTACHMENTS);
+            if (attachments != null) {
+                message.setAttachments((Collection<Attachment>) attachments);
                 message.remove(CxfConstants.CAMEL_CXF_ATTACHMENTS);
             }
 
@@ -770,7 +811,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
                 }
 
                 if (content.size() < elements.size()) {
-                    LOG.warn("Cannot set right payload paremeters. Please check the BindingOperation and PayLoadMessage.");
+                    LOG.warn("Cannot set right payload parameters. Please check the BindingOperation and PayLoadMessage.");
                     throw new IllegalArgumentException(
                         "The PayLoad elements cannot fit with the message parts of the BindingOperation. Please check the BindingOperation and PayLoadMessage.");
                 }
@@ -821,6 +862,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public void setFeatures(List<AbstractFeature> f) {
         features = f;
     }
+
     public List<AbstractFeature> getFeatures() {
         return features;
     }
@@ -828,6 +870,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public void setHandlers(List<Handler> h) {
         handlers = h;
     }
+
     public List<Handler> getHandlers() {
         return handlers;
     }
@@ -835,12 +878,13 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public void setSchemaLocations(List<String> sc) {
         schemaLocations = sc;
     }
+
     public List<String> getSchemaLocations() {
         return schemaLocations;
     }
 
     public String getTransportId() {
-        return transportId;
+        return resolvePropertyPlaceholders(transportId);
     }
 
     public void setTransportId(String transportId) {
@@ -848,7 +892,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
     
     public String getBindingId() {
-        return bindingId;
+        return resolvePropertyPlaceholders(bindingId);
     }
 
     public void setBindingId(String bindingId) {

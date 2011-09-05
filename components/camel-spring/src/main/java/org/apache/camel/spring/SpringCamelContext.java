@@ -23,9 +23,11 @@ import org.apache.camel.component.event.EventEndpoint;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.ProcessorEndpoint;
 import org.apache.camel.spi.Injector;
+import org.apache.camel.spi.ManagementMBeanAssembler;
 import org.apache.camel.spi.Registry;
 import org.apache.camel.spring.spi.ApplicationContextRegistry;
 import org.apache.camel.spring.spi.SpringInjector;
+import org.apache.camel.spring.spi.SpringManagementMBeanAssembler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -55,17 +57,32 @@ public class SpringCamelContext extends DefaultCamelContext implements Initializ
         ApplicationContextAware {
 
     private static final transient Logger LOG = LoggerFactory.getLogger(SpringCamelContext.class);
+    private static final ThreadLocal<Boolean> NO_START = new ThreadLocal<Boolean>();
     private ApplicationContext applicationContext;
     private EventEndpoint eventEndpoint;
 
     public SpringCamelContext() {
+        super();
     }
 
     public SpringCamelContext(ApplicationContext applicationContext) {
+        this();
         setApplicationContext(applicationContext);
     }
 
+    public static void setNoStart(boolean b) {
+        if (b) {
+            NO_START.set(b);
+        } else {
+            NO_START.remove();
+        }
+    }
+    
     public static SpringCamelContext springCamelContext(ApplicationContext applicationContext) throws Exception {
+        return springCamelContext(applicationContext, true);
+    }
+    
+    public static SpringCamelContext springCamelContext(ApplicationContext applicationContext, boolean maybeStart) throws Exception {
         // lets try and look up a configured camel context in the context
         String[] names = applicationContext.getBeanNamesForType(SpringCamelContext.class);
         if (names.length == 1) {
@@ -73,7 +90,9 @@ public class SpringCamelContext extends DefaultCamelContext implements Initializ
         }
         SpringCamelContext answer = new SpringCamelContext();
         answer.setApplicationContext(applicationContext);
-        answer.afterPropertiesSet();
+        if (maybeStart) {
+            answer.afterPropertiesSet();
+        }
         return answer;
     }
 
@@ -174,6 +193,12 @@ public class SpringCamelContext extends DefaultCamelContext implements Initializ
         }
     }
 
+    @Override
+    protected ManagementMBeanAssembler createManagementMBeanAssembler() {
+        // use a spring mbean assembler
+        return new SpringManagementMBeanAssembler();
+    }
+
     protected EventEndpoint createEventEndpoint() {
         return getEndpoint("spring-event:default", EventEndpoint.class);
     }
@@ -197,9 +222,8 @@ public class SpringCamelContext extends DefaultCamelContext implements Initializ
     private void maybeStart() throws Exception {
         // for example from unit testing we want to start Camel later and not when Spring framework
         // publish a ContextRefreshedEvent
-        String maybeStart = System.getProperty("maybeStartCamelContext", "true");
 
-        if ("true".equals(maybeStart)) {
+        if (NO_START.get() == null) {
             if (!isStarted() && !isStarting()) {
                 start();
             } else {
@@ -207,7 +231,7 @@ public class SpringCamelContext extends DefaultCamelContext implements Initializ
                 LOG.trace("Ignoring maybeStart() as Apache Camel is already started");
             }
         } else {
-            LOG.trace("Ignoring maybeStart() as System property maybeStartCamelContext is false");
+            LOG.trace("Ignoring maybeStart() as NO_START is false");
         }
     }
 

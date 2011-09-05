@@ -39,7 +39,7 @@
 			org.apache.activemq.xbean,org.apache.activemq.broker,org.apache.activemq.pool
     </camel.osgi.import.additional>
 		<!-- to avoid us import bunch of cxf package -->
-                <camel.osgi.dynamic>*</camel.osgi.dynamic>
+    <camel.osgi.dynamic>*</camel.osgi.dynamic>
 	</properties>
 
 	<dependencies>
@@ -109,25 +109,7 @@
 	</dependencies>
 
 	<build>
-		<resources>
-			<resource>
-				<directory>src/main/resources</directory>
-				<filtering>true</filtering>
-			</resource>
-		</resources>
 		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-resources-plugin</artifactId>
-				<executions>
-					<execution>
-						<phase>process-resources</phase>
-						<goals>
-							<goal>resources</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>

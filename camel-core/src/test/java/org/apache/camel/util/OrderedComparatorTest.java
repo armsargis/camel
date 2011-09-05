@@ -22,6 +22,8 @@ import java.util.List;
 
 import junit.framework.TestCase;
 
+import org.apache.camel.Ordered;
+
 /**
  * @version 
  */

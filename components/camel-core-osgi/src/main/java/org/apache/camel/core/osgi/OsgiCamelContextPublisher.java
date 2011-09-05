@@ -23,9 +23,9 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.camel.CamelContext;
-import org.apache.camel.management.EventNotifierSupport;
 import org.apache.camel.management.event.CamelContextStartedEvent;
 import org.apache.camel.management.event.CamelContextStoppingEvent;
+import org.apache.camel.support.EventNotifierSupport;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
@@ -40,6 +40,7 @@ public class OsgiCamelContextPublisher extends EventNotifierSupport {
 
     public static final String CONTEXT_SYMBOLIC_NAME_PROPERTY = "camel.context.symbolicname";
     public static final String CONTEXT_VERSION_PROPERTY = "camel.context.version";
+    public static final String CONTEXT_NAME_PROPERTY = "camel.context.name";
 
     private final BundleContext bundleContext;
     private final Map<CamelContext, ServiceRegistration> registrations = new ConcurrentHashMap<CamelContext, ServiceRegistration>();
@@ -55,10 +56,10 @@ public class OsgiCamelContextPublisher extends EventNotifierSupport {
             Properties props = new Properties();
             props.put(CONTEXT_SYMBOLIC_NAME_PROPERTY, bundleContext.getBundle().getSymbolicName());
             props.put(CONTEXT_VERSION_PROPERTY, getBundleVersion(bundleContext.getBundle()));
+            props.put(CONTEXT_NAME_PROPERTY, context.getName());
 
-            if (log.isDebugEnabled()) {
-                log.debug("Registering CamelContext [{}] in OSGi registry", context.getName());
-            }
+            log.debug("Registering CamelContext [{}] of in OSGi registry", props);
+
             ServiceRegistration reg = bundleContext.registerService(CamelContext.class.getName(), context, props);
             registrations.put(context, reg);
         } else if (event instanceof CamelContextStoppingEvent) {

@@ -22,7 +22,6 @@ import javax.jms.Message;
 import javax.jms.Session;
 import javax.jms.TextMessage;
 
-import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
@@ -73,7 +72,7 @@ public class ProduceMessageConverterTest extends CamelTestSupport {
         };
     }
 
-    private class MyMessageConverter implements MessageConverter {
+    private static class MyMessageConverter implements MessageConverter {
 
         public Message toMessage(Object object, Session session) throws JMSException, MessageConversionException {
             TextMessage txt = session.createTextMessage();

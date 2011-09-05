@@ -18,8 +18,10 @@ package org.apache.camel.component.file;
 
 import java.io.File;
 import java.util.Date;
+import java.util.Map;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.WrappedFile;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
@@ -29,7 +31,7 @@ import org.slf4j.LoggerFactory;
  * Generic File. Specific implementations of a file based endpoint need to
  * provide a File for transfer.
  */
-public class GenericFile<T>  {
+public class GenericFile<T> implements WrappedFile<T>  {
     private static final transient Logger LOG = LoggerFactory.getLogger(GenericFile.class);
 
     private String endpointPath;
@@ -93,10 +95,25 @@ public class GenericFile<T>  {
      * Bind this GenericFile to an Exchange
      */
     public void bindToExchange(Exchange exchange) {
+        Map<String, Object> headers;
+
         exchange.setProperty(FileComponent.FILE_EXCHANGE_FILE, this);
-        GenericFileMessage<T> in = new GenericFileMessage<T>(this);
-        exchange.setIn(in);
-        populateHeaders(in);
+        GenericFileMessage<T> msg = new GenericFileMessage<T>(this);
+        if (exchange.hasOut()) {
+            headers = exchange.getOut().hasHeaders() ? exchange.getOut().getHeaders() : null;
+            exchange.setOut(msg);
+        } else {
+            headers = exchange.getIn().hasHeaders() ? exchange.getIn().getHeaders() : null;
+            exchange.setIn(msg);
+        }
+
+        // preserve any existing (non file) headers, before we re-populate headers
+        if (headers != null) {
+            msg.setHeaders(headers);
+            // remove any file related headers, as we will re-populate file headers
+            msg.removeHeaders("CamelFile*");
+        }
+        populateHeaders(msg);
     }
 
     /**
@@ -234,6 +251,10 @@ public class GenericFile<T>  {
         this.lastModified = lastModified;
     }
 
+    /* (non-Javadoc)
+     * @see org.apache.camel.component.file.WrappedFile#getFile()
+     */
+    @Override
     public T getFile() {
         return file;
     }

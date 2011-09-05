@@ -24,8 +24,12 @@ import org.apache.camel.ContextTestSupport;
 import org.apache.camel.ThreadPoolRejectedPolicy;
 
 /**
+ * Unit test to ensure the {@link org.apache.camel.spi.ExecutorServiceStrategy} still
+ * works to keep backwards compatibility.
+ *
  * @version 
  */
+@SuppressWarnings("deprecation")
 public class DefaultExecutorServiceStrategyTest extends ContextTestSupport {
 
     public void testGetThreadNameDefaultPattern() throws Exception {

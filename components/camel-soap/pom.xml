@@ -33,7 +33,7 @@
 
     <properties>
         <camel.osgi.import.before.defaults>javax.xml.ws;version="[0.0,3)"</camel.osgi.import.before.defaults>
-        <camel.osgi.export.pkg>org.apache.camel.dataformat.soap.*, org.xmlsoap.schemas.soap.envelope.*
+        <camel.osgi.export.pkg>org.apache.camel.dataformat.soap.*;${camel.osgi.version},org.xmlsoap.schemas.soap.envelope.*
         </camel.osgi.export.pkg>
     </properties>
 
@@ -97,13 +97,13 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
+            <groupId>org.apache.camel</groupId>
+            <artifactId>camel-saxon</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -182,12 +182,22 @@
                                         <bindingFile>
                                             ${basedir}/src/test/resources/org/apache/camel/dataformat/soap/binding.xml
                                         </bindingFile>
-                                    </bindingFiles>
+                                    </bindingFiles>                                    
                                 </wsdlOption>
                                 <wsdlOption>
                                     <wsdl>
                                         ${basedir}/src/test/resources/org/apache/camel/dataformat/soap/CustomerService2.wsdl
                                     </wsdl>
+                                </wsdlOption>
+                                <wsdlOption>
+                                    <wsdl>
+                                        ${basedir}/src/test/resources/org/apache/camel/dataformat/soap/MultiPartCustomerService.wsdl
+                                    </wsdl>
+                                    <bindingFiles>
+                                        <bindingFile>
+                                            ${basedir}/src/test/resources/org/apache/camel/dataformat/soap/binding.xml
+                                        </bindingFile>
+                                    </bindingFiles>
                                 </wsdlOption>
                             </wsdlOptions>
                         </configuration>

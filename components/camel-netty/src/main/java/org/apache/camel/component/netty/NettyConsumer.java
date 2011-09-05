@@ -143,9 +143,9 @@ public class NettyConsumer extends DefaultConsumer {
     }
 
     private void initializeTCPServerSocketCommunicationLayer() throws Exception {
-        ExecutorService bossExecutor = context.getExecutorServiceStrategy().newThreadPool(this, "NettyTCPBoss",
+        ExecutorService bossExecutor = context.getExecutorServiceManager().newThreadPool(this, "NettyTCPBoss",
                 configuration.getCorePoolSize(), configuration.getMaxPoolSize());
-        ExecutorService workerExecutor = context.getExecutorServiceStrategy().newThreadPool(this, "NettyTCPWorker",
+        ExecutorService workerExecutor = context.getExecutorServiceManager().newThreadPool(this, "NettyTCPWorker",
                 configuration.getCorePoolSize(), configuration.getMaxPoolSize());
 
         channelFactory = new NioServerSocketChannelFactory(bossExecutor, workerExecutor);
@@ -167,7 +167,7 @@ public class NettyConsumer extends DefaultConsumer {
     }
 
     private void initializeUDPServerSocketCommunicationLayer() throws Exception {
-        ExecutorService workerExecutor = context.getExecutorServiceStrategy().newThreadPool(this, "NettyUDPWorker",
+        ExecutorService workerExecutor = context.getExecutorServiceManager().newThreadPool(this, "NettyUDPWorker",
                 configuration.getCorePoolSize(), configuration.getMaxPoolSize());
 
         datagramChannelFactory = new NioDatagramChannelFactory(workerExecutor);

@@ -55,8 +55,8 @@ public class LRUSoftCache<K, V> extends LRUCache<K, V> {
         super(maximumCacheSize);
     }
 
-    public LRUSoftCache(int initialCapacity, int maximumCacheSize, float loadFactor, boolean accessOrder) {
-        super(initialCapacity, maximumCacheSize, loadFactor, accessOrder);
+    public LRUSoftCache(int initialCapacity, int maximumCacheSize) {
+        super(initialCapacity, maximumCacheSize);
     }
 
     @Override
@@ -104,13 +104,12 @@ public class LRUSoftCache<K, V> extends LRUCache<K, V> {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public int size() {
         // only count as a size if there is a value
         int size = 0;
-        Collection<SoftReference<V>> col = (Collection<SoftReference<V>>) super.values();
-        for (SoftReference<V> ref : col) {
-            if (ref.get() != null) {
+        for (V value : super.values()) {
+            SoftReference<?> ref = (SoftReference<?>) value;
+            if (ref != null && ref.get() != null) {
                 size++;
             }
         }
@@ -127,21 +126,6 @@ public class LRUSoftCache<K, V> extends LRUCache<K, V> {
         // must lookup if the key has a value, as we only regard a key to be contained
         // if the value is still there (the JVM can remove the soft reference if it need memory)
         return get(o) != null;
-    }
-
-    @Override
-    public Set<K> keySet() {
-        // must use a copy of the keys to avoid concurrent modifications
-        Set<K> keys = new LinkedHashSet<K>(super.keySet());
-
-        // filter out un referenced values
-        Set<K> answer = new LinkedHashSet<K>();
-        for (K key : keys) {
-            if (containsKey(key)) {
-                answer.add(key);
-            }
-        }
-        return answer;
     }
 
     @Override

@@ -18,10 +18,11 @@ package org.apache.camel.management.mbean;
 
 import org.apache.camel.Endpoint;
 import org.apache.camel.ServiceStatus;
-import org.apache.camel.impl.ServiceSupport;
+import org.apache.camel.StatefulService;
 import org.apache.camel.spi.ManagementStrategy;
-import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedResource;
+import org.apache.camel.spi.management.ManagedAttribute;
+import org.apache.camel.spi.management.ManagedInstance;
+import org.apache.camel.spi.management.ManagedResource;
 
 @ManagedResource(description = "Managed Endpoint")
 public class ManagedEndpoint implements ManagedInstance {
@@ -57,8 +58,8 @@ public class ManagedEndpoint implements ManagedInstance {
     @ManagedAttribute(description = "Service State")
     public String getState() {
         // must use String type to be sure remote JMX can read the attribute without requiring Camel classes.
-        if (endpoint instanceof ServiceSupport) {
-            ServiceStatus status = ((ServiceSupport) endpoint).getStatus();
+        if (endpoint instanceof StatefulService) {
+            ServiceStatus status = ((StatefulService) endpoint).getStatus();
             // if no status exists then its stopped
             if (status == null) {
                 status = ServiceStatus.Stopped;

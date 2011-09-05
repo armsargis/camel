@@ -47,14 +47,20 @@ public class CXFWsdlOnlyPayloadModeNoSpringTest extends CamelTestSupport {
     protected static final String SERVICE_NAME_PROP =  "serviceName=";
     protected static final String PORT_NAME_PROP = "portName={http://camel.apache.org/wsdl-first}soap";
     protected static final String WSDL_URL_PROP = "wsdlURL=classpath:person.wsdl";
-    protected static Endpoint endpoint;
+    protected Endpoint endpoint;
     
-    protected int port1 = AvailablePortFinder.getNextAvailable(); 
-    protected int port2 = AvailablePortFinder.getNextAvailable(); 
+    protected int port1 = CXFTestSupport.getPort1(); 
+    protected int port2 = CXFTestSupport.getPort2(); 
+
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
 
     @Before
     public void startService() {
-        endpoint = Endpoint.publish("http://localhost:" + port1 + "/PersonService", new PersonImpl());
+        endpoint = Endpoint.publish("http://localhost:" + port1 + "/" + getClass().getSimpleName()
+                                    + "/PersonService", new PersonImpl());
     }
     
     @After
@@ -73,9 +79,11 @@ public class CXFWsdlOnlyPayloadModeNoSpringTest extends CamelTestSupport {
 
     @Override
     protected RouteBuilder createRouteBuilder() {
+        final String cn = getClass().getSimpleName(); 
         return new RouteBuilder() {
             public void configure() {
-                from("cxf://http://localhost:" + port2 + "/PersonService?" + PORT_NAME_PROP + "&" + SERVICE_NAME_PROP + getServiceName() + "&" + WSDL_URL_PROP + "&dataFormat=" + getDataFormat())
+                from("cxf://http://localhost:" + port2 
+                     + "/" + cn + "/PersonService?" + PORT_NAME_PROP + "&" + SERVICE_NAME_PROP + getServiceName() + "&" + WSDL_URL_PROP + "&dataFormat=" + getDataFormat())
                     .process(new Processor() {
 
                         @Override
@@ -84,7 +92,8 @@ public class CXFWsdlOnlyPayloadModeNoSpringTest extends CamelTestSupport {
                         }
                         
                     })
-                    .to("cxf://http://localhost:" + port1 + "/PersonService?" + PORT_NAME_PROP + "&" + SERVICE_NAME_PROP + getServiceName() + "&" + WSDL_URL_PROP + "&dataFormat=" + getDataFormat());
+                    .to("cxf://http://localhost:" + port1 
+                        + "/" + cn + "/PersonService?" + PORT_NAME_PROP + "&" + SERVICE_NAME_PROP + getServiceName() + "&" + WSDL_URL_PROP + "&dataFormat=" + getDataFormat());
             }
         };
     }
@@ -104,7 +113,7 @@ public class CXFWsdlOnlyPayloadModeNoSpringTest extends CamelTestSupport {
         
         ((BindingProvider)client).getRequestContext()
             .put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
-                 "http://localhost:" + port1 + "/PersonService");
+                 "http://localhost:" + port1 + "/" + getClass().getSimpleName() + "/PersonService");
         c.getInInterceptors().add(new LoggingInInterceptor());
         c.getOutInterceptors().add(new LoggingOutInterceptor());
         
@@ -125,7 +134,8 @@ public class CXFWsdlOnlyPayloadModeNoSpringTest extends CamelTestSupport {
         Person client = ss.getSoap();
         ((BindingProvider)client).getRequestContext()
             .put(BindingProvider.ENDPOINT_ADDRESS_PROPERTY,
-                 "http://localhost:" + port1 + "/PersonService");
+                 "http://localhost:" + port1 + "/"
+                 + getClass().getSimpleName() + "/PersonService");
 
         Client c = ClientProxy.getClient(client);
         c.getInInterceptors().add(new LoggingInInterceptor());

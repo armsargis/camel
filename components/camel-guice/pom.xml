@@ -50,7 +50,7 @@
       <version>${guiceyfruit-version}</version>
     </dependency>
 
-    <!-- testing -->
+     <!-- testing -->
     <dependency>
       <groupId>org.guiceyfruit</groupId>
       <artifactId>guiceyfruit-junit4</artifactId>
@@ -60,11 +60,6 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-log4j12</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

@@ -38,7 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Base class for remote file consumers.
+ * Base class for file consumers.
  */
 public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer implements BatchConsumer, ShutdownAware {
     protected final transient Logger log = LoggerFactory.getLogger(getClass());
@@ -49,11 +49,31 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
     protected int maxMessagesPerPoll;
     protected volatile ShutdownRunningTask shutdownRunningTask;
     protected volatile int pendingExchanges;
+    protected Processor customProcessor;
 
     public GenericFileConsumer(GenericFileEndpoint<T> endpoint, Processor processor, GenericFileOperations<T> operations) {
         super(endpoint, processor);
         this.endpoint = endpoint;
         this.operations = operations;
+    }
+
+    public Processor getCustomProcessor() {
+        return customProcessor;
+    }
+
+    /**
+     * Use a custom processor to process the exchange.
+     * <p/>
+     * Only set this if you need to do custom processing, instead of the regular processing.
+     * <p/>
+     * This is for example used to browse file endpoints by leveraging the file consumer to poll
+     * the directory to gather the list of exchanges. But to avoid processing the files regularly
+     * we can use a custom processor.
+     *
+     * @param processor a custom processor
+     */
+    public void setCustomProcessor(Processor processor) {
+        this.customProcessor = processor;
     }
 
     /**
@@ -148,7 +168,13 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
             pendingExchanges = total - index - 1;
 
             // process the current exchange
-            processExchange(exchange);
+            if (customProcessor != null) {
+                // use a custom processor
+                customProcessExchange(exchange, customProcessor);
+            } else {
+                // process the exchange regular
+                processExchange(exchange);
+            }
         }
 
         // remove the file from the in progress list in case the batch was limited by max messages per poll
@@ -204,7 +230,7 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
      * @param fileList  the current list of gathered files
      * @return <tt>true</tt> to continue, <tt>false</tt> to stop due hitting maxMessagesPerPoll limit
      */
-    public boolean canPollMoreFiles(List fileList) {
+    public boolean canPollMoreFiles(List<?> fileList) {
         if (maxMessagesPerPoll <= 0) {
             // no limitation
             return true;
@@ -332,6 +358,35 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
     }
 
     /**
+     * Processes the exchange using a custom processor.
+     *
+     * @param exchange the exchange
+     * @param processor the custom processor
+     */
+    protected void customProcessExchange(final Exchange exchange, final Processor processor) {
+        GenericFile<T> file = getExchangeFileProperty(exchange);
+        log.trace("Custom processing file: {}", file);
+
+        // must extract the absolute name before the begin strategy as the file could potentially be pre moved
+        // and then the file name would be changed
+        String absoluteFileName = file.getAbsoluteFilePath();
+
+        try {
+            // process using the custom processor
+            processor.process(exchange);
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) {
+                log.debug(endpoint + " error custom processing: " + file + " due to: " + e.getMessage() + ". This exception will be ignored.", e);
+            }
+        } finally {
+            // always remove file from the in progress list as its no longer in progress
+            // use the original file name that was used to add it to the repository
+            // as the name can be different when using preMove option
+            endpoint.getInProgressRepository().remove(absoluteFileName);
+        }
+    }
+
+    /**
      * Strategy for validating if the given remote file should be included or not
      *
      * @param file        the file
@@ -363,7 +418,7 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
      *
      * @param file        the file
      * @param isDirectory whether the file is a directory or a file
-     * @return <tt>true</tt> if the remote file is matched, <tt>false</tt> if not
+     * @return <tt>true</tt> if the file is matched, <tt>false</tt> if not
      */
     protected boolean isMatched(GenericFile<T> file, boolean isDirectory) {
         String name = file.getFileNameOnly();
@@ -423,13 +478,29 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
                 return false;
             }
 
-            // the file is only valid if the done file exist
-            if (!operations.existsFile(doneFileName)) {
-                log.trace("Done file: {} does not exist", doneFileName);
+            if (!isMatched(file, doneFileName)) {
                 return false;
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Strategy to perform file matching based on endpoint configuration in terms of done file name.
+     *
+     * @param file         the file
+     * @param doneFileName the done file name
+     * @return <tt>true</tt> if the file is matched, <tt>false</tt> if not
+     */
+    protected boolean isMatched(GenericFile<T> file, String doneFileName) {
+        // the file is only valid if the done file exist
+        if (!operations.existsFile(doneFileName)) {
+            log.trace("Done file: {} does not exist", doneFileName);
+            return false;
+        }
+
+        // assume matched
         return true;
     }
 

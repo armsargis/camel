@@ -72,6 +72,7 @@ import org.apache.camel.spi.ManagementObjectStrategy;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.spi.UnitOfWork;
+import org.apache.camel.spi.management.PerformanceCounter;
 import org.apache.camel.util.KeyValueHolder;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
@@ -723,7 +724,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
      *
      * @see org.apache.camel.management.DefaultManagementLifecycleStrategy#enlistPreRegisteredServices()
      */
-    private final class PreRegisterService {
+    private static final class PreRegisterService {
 
         private String name;
         private Component component;

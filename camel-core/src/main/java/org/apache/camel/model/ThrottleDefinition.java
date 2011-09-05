@@ -18,7 +18,6 @@ package org.apache.camel.model;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
-
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -32,7 +31,6 @@ import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.processor.Throttler;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.util.concurrent.ExecutorServiceHelper;
 
 /**
  * Represents an XML &lt;throttle/&gt; element
@@ -64,8 +62,11 @@ public class ThrottleDefinition extends ExpressionNode implements ExecutorServic
 
     @Override
     public String toString() {
-        return "Throttle[" + getExpression() + " request per " + getTimePeriodMillis()
-               + " millis -> " + getOutputs() + "]";
+        return "Throttle[" + description() + " -> " + getOutputs() + "]";
+    }
+    
+    protected String description() {
+        return getExpression() + " request per " + getTimePeriodMillis() + " millis";
     }
 
     @Override
@@ -75,7 +76,7 @@ public class ThrottleDefinition extends ExpressionNode implements ExecutorServic
 
     @Override
     public String getLabel() {
-        return "" + getExpression() + " per " + getTimePeriodMillis() + " (ms)";
+        return "throttle[" + description() + "]";
     }
 
     @Override
@@ -84,9 +85,9 @@ public class ThrottleDefinition extends ExpressionNode implements ExecutorServic
 
         ScheduledExecutorService scheduled = null;
         if (getAsyncDelayed() != null && getAsyncDelayed()) {
-            scheduled = ExecutorServiceHelper.getConfiguredScheduledExecutorService(routeContext, "Throttle", this);
+            scheduled = ProcessorDefinitionHelper.getConfiguredScheduledExecutorService(routeContext, "Throttle", this);
             if (scheduled == null) {
-                scheduled = routeContext.getCamelContext().getExecutorServiceStrategy().newScheduledThreadPool(this, "Throttle");
+                scheduled = routeContext.getCamelContext().getExecutorServiceManager().newSingleThreadScheduledExecutor(this, "Throttle");
             }
         }
 

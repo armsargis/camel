@@ -34,10 +34,6 @@ import org.apache.camel.management.mbean.ManagedThreadPool;
 import org.apache.camel.management.mbean.ManagedTracer;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.spi.ManagementAgent;
-
-import org.fusesource.commons.management.Statistic;
-import org.fusesource.commons.management.basic.StatisticImpl;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,8 +66,8 @@ public class ManagedManagementStrategy extends DefaultManagementStrategy {
         manageNamedObject(managedObject, null);
     }
 
-    public void manageNamedObject(Object managedObject, Object preferedName) throws Exception {
-        ObjectName objectName = getObjectName(managedObject, preferedName);
+    public void manageNamedObject(Object managedObject, Object preferredName) throws Exception {
+        ObjectName objectName = getObjectName(managedObject, preferredName);
 
         if (objectName != null) {
             getManagementAgent().register(managedObject, objectName);
@@ -145,9 +141,9 @@ public class ManagedManagementStrategy extends DefaultManagementStrategy {
         }
     }
 
-    public boolean isManaged(Object managableObject, Object name) {
+    public boolean isManaged(Object managedObject, Object name) {
         try {
-            ObjectName objectName = getObjectName(managableObject, name);
+            ObjectName objectName = getObjectName(managedObject, name);
             if (objectName != null) {
                 return getManagementAgent().isRegistered(objectName);
             }
@@ -160,11 +156,6 @@ public class ManagedManagementStrategy extends DefaultManagementStrategy {
     @Override
     public boolean manageProcessor(ProcessorDefinition<?> definition) {
         return true;
-    }
-
-    @Override
-    public Statistic createStatistic(String name, Object owner, Statistic.UpdateMode updateMode) {
-        return new StatisticImpl(updateMode);
     }
 
     private ObjectName getObjectName(Object managedObject, Object preferedName) throws Exception {

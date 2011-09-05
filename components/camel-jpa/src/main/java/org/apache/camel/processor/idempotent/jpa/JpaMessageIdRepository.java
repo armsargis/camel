@@ -18,14 +18,15 @@ package org.apache.camel.processor.idempotent.jpa;
 
 import java.util.Date;
 import java.util.List;
+
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
-import org.apache.camel.impl.ServiceSupport;
 import org.apache.camel.spi.IdempotentRepository;
-import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedOperation;
-import org.springframework.jmx.export.annotation.ManagedResource;
+import org.apache.camel.spi.management.ManagedAttribute;
+import org.apache.camel.spi.management.ManagedOperation;
+import org.apache.camel.spi.management.ManagedResource;
+import org.apache.camel.support.ServiceSupport;
 import org.springframework.orm.jpa.JpaTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -36,7 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * @version 
  */
-@ManagedResource("JpaMessageIdRepository")
+@ManagedResource(description = "JPA based message id repository")
 public class JpaMessageIdRepository extends ServiceSupport implements IdempotentRepository<String> {
     protected static final String QUERY_STRING = "select x from " + MessageProcessed.class.getName() + " x where x.processorName = ?1 and x.messageId = ?2";
     private final JpaTemplate jpaTemplate;

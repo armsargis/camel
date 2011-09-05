@@ -29,8 +29,6 @@ import org.apache.camel.Processor;
 import org.apache.camel.ShutdownRunningTask;
 import org.apache.camel.impl.DefaultConsumer;
 import org.apache.camel.spi.ShutdownAware;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A Camel consumer that polls a kestrel queue.
@@ -65,7 +63,7 @@ public class KestrelConsumer extends DefaultConsumer implements ShutdownAware {
             shutdownLatch = new CountDownLatch(poolSize + 1);
 
             // Fire up the handler thread pool
-            handlerExecutor = endpoint.getCamelContext().getExecutorServiceStrategy().newFixedThreadPool(this, "Handlers-" + endpoint.getEndpointUri(), poolSize);
+            handlerExecutor = endpoint.getCamelContext().getExecutorServiceManager().newFixedThreadPool(this, "Handlers-" + endpoint.getEndpointUri(), poolSize);
             for (int k = 0; k < poolSize; ++k) {
                 handlerExecutor.execute(new Handler());
             }
@@ -77,7 +75,7 @@ public class KestrelConsumer extends DefaultConsumer implements ShutdownAware {
         }
 
         // Fire up the single poller thread
-        pollerExecutor = endpoint.getCamelContext().getExecutorServiceStrategy().newSingleThreadExecutor(this, "Poller-" + endpoint.getEndpointUri());
+        pollerExecutor = endpoint.getCamelContext().getExecutorServiceManager().newSingleThreadExecutor(this, "Poller-" + endpoint.getEndpointUri());
         pollerExecutor.submit(new Poller(poolSize > 1));
 
         super.doStart();
@@ -88,10 +86,10 @@ public class KestrelConsumer extends DefaultConsumer implements ShutdownAware {
         log.info("Stopping consumer for " + endpoint.getEndpointUri());
 
         if (pollerExecutor != null) {
-            endpoint.getCamelContext().getExecutorServiceStrategy().shutdownNow(pollerExecutor);
+            endpoint.getCamelContext().getExecutorServiceManager().shutdownNow(pollerExecutor);
         }
         if (handlerExecutor != null) {
-            endpoint.getCamelContext().getExecutorServiceStrategy().shutdownNow(handlerExecutor);
+            endpoint.getCamelContext().getExecutorServiceManager().shutdownNow(handlerExecutor);
         }
 
         super.doStop();

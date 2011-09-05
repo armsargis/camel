@@ -23,7 +23,7 @@ import org.apache.camel.ContextTestSupport;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.impl.SynchronizationAdapter;
+import org.apache.camel.support.SynchronizationAdapter;
 
 /**
  * @version 
@@ -73,7 +73,7 @@ public class AsyncEndpointUoWFailedTest extends ContextTestSupport {
                         })
                         .to("mock:before")
                         .to("log:before")
-                        .to("async:Bye Camel")
+                        .to("async:bye:camel")
                         .process(new Processor() {
                             public void process(Exchange exchange) throws Exception {
                                 afterThreadName = Thread.currentThread().getName();
@@ -87,7 +87,7 @@ public class AsyncEndpointUoWFailedTest extends ContextTestSupport {
         };
     }
 
-    private class MySynchronization extends SynchronizationAdapter {
+    private static class MySynchronization extends SynchronizationAdapter {
 
         private AtomicInteger onComplete = new AtomicInteger();
         private AtomicInteger onFailure = new AtomicInteger();

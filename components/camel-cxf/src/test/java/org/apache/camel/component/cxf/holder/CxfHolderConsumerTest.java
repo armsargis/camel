@@ -24,6 +24,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.cxf.CXFTestSupport;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.apache.cxf.frontend.ClientFactoryBean;
 import org.apache.cxf.jaxws.JaxWsProxyFactoryBean;
@@ -31,7 +32,8 @@ import org.apache.cxf.version.Version;
 import org.junit.Test;
 
 public class CxfHolderConsumerTest extends CamelTestSupport {
-    protected static final String ADDRESS = "http://localhost:28080/test";
+    protected static final String ADDRESS = "http://localhost:"
+        + CXFTestSupport.getPort1() + "/CxfHolderConsumerTest/test";
     protected static final String CXF_ENDPOINT_URI = "cxf://" + ADDRESS
         + "?serviceClass=org.apache.camel.component.cxf.holder.MyOrderEndpoint";
        
@@ -61,11 +63,6 @@ public class CxfHolderConsumerTest extends CamelTestSupport {
 
     @Test
     public void testInvokingServiceFromCXFClient() throws Exception {
-        if (Version.getCurrentVersion().equals("2.4.1")) {
-            // This test will be failed with CXF 2.4.1, as 
-            // the inObjects and outObjects of HolderOutInterceptor are equals
-            return;   
-        }
         JaxWsProxyFactoryBean proxyFactory = new JaxWsProxyFactoryBean();
         ClientFactoryBean clientBean = proxyFactory.getClientFactoryBean();
         clientBean.setAddress(ADDRESS);

@@ -20,7 +20,6 @@ import org.apache.camel.ContextTestSupport;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.impl.ThreadPoolProfileSupport;
 import org.apache.camel.spi.ThreadPoolProfile;
 
 /**
@@ -39,9 +38,9 @@ public class AsyncDeadLetterChannelExecutorServiceRefTest extends ContextTestSup
         context.addRoutes(new RouteBuilder() {
             @Override
             public void configure() throws Exception {
-                ThreadPoolProfile profile = new ThreadPoolProfileSupport("myAsyncPool");
+                ThreadPoolProfile profile = new ThreadPoolProfile("myAsyncPool");
                 profile.setPoolSize(5);
-                context.getExecutorServiceStrategy().registerThreadPoolProfile(profile);
+                context.getExecutorServiceManager().registerThreadPoolProfile(profile);
 
                 errorHandler(deadLetterChannel("mock:dead")
                         .maximumRedeliveries(2)

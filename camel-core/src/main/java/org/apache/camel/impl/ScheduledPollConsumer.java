@@ -43,6 +43,7 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
     private ScheduledFuture<?> future;
 
     // if adding more options then align with ScheduledPollEndpoint#configureScheduledPollConsumerProperties
+    private boolean startScheduler = true;
     private long initialDelay = 1000;
     private long delay = 500;
     private TimeUnit timeUnit = TimeUnit.MILLISECONDS;
@@ -54,7 +55,7 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
         super(endpoint, processor);
 
         // we only need one thread in the pool to schedule this task
-        this.executor = endpoint.getCamelContext().getExecutorServiceStrategy()
+        this.executor = endpoint.getCamelContext().getExecutorServiceManager()
                             .newScheduledThreadPool(this, endpoint.getEndpointUri(), 1);
         ObjectHelper.notNull(executor, "executor");
     }
@@ -227,6 +228,21 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
         this.pollStrategy = pollStrategy;
     }
 
+    public boolean isStartScheduler() {
+        return startScheduler;
+    }
+
+    /**
+     * Sets whether the scheduler should be started when this consumer starts.
+     * <p/>
+     * This option is default true.
+     *
+     * @param startScheduler whether to start scheduler
+     */
+    public void setStartScheduler(boolean startScheduler) {
+        this.startScheduler = startScheduler;
+    }
+
     // Implementation methods
     // -------------------------------------------------------------------------
 
@@ -244,6 +260,12 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
         ObjectHelper.notNull(executor, "executor", this);
         ObjectHelper.notNull(pollStrategy, "pollStrategy", this);
 
+        if (isStartScheduler()) {
+            startScheduler();
+        }
+    }
+
+    protected void startScheduler() {
         if (isUseFixedDelay()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Scheduling poll (fixed delay) with initialDelay: {}, delay: {} ({}) for: {}",
@@ -275,20 +297,28 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
 
     @Override
     public void onInit() throws Exception {
-        // start our self
-        ServiceHelper.startService(this);
+        // noop
     }
 
     @Override
-    public void beforePoll() throws Exception {
-        // resume our self
-        ServiceHelper.resumeService(this);
+    public long beforePoll(long timeout) throws Exception {
+        LOG.trace("Before poll {}", getEndpoint());
+        // resume or start our self
+        if (!ServiceHelper.resumeService(this)) {
+            ServiceHelper.startService(this);
+        }
+
+        // ensure at least timeout is as long as one poll delay
+        return Math.max(timeout, getDelay());
     }
 
     @Override
     public void afterPoll() throws Exception {
-        // suspend our self
-        ServiceHelper.suspendService(this);
+        LOG.trace("After poll {}", getEndpoint());
+        // suspend or stop our self
+        if (!ServiceHelper.suspendService(this)) {
+            ServiceHelper.stopService(this);
+        }
     }
 
 }

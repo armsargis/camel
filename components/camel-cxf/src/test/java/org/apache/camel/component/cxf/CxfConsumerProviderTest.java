@@ -44,11 +44,15 @@ public class CxfConsumerProviderTest extends CamelTestSupport {
 
     
     protected final String simpleEndpointAddress = "http://localhost:"
-        + AvailablePortFinder.getNextAvailable() + "/test";
+        + CXFTestSupport.getPort1() + "/" + getClass().getSimpleName() + "/test";
     protected final String simpleEndpointURI = "cxf://" + simpleEndpointAddress
         + "?serviceClass=org.apache.camel.component.cxf.ServiceProvider";
     
     
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
     protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {

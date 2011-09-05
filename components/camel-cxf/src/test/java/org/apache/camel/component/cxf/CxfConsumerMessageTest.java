@@ -43,10 +43,14 @@ public class CxfConsumerMessageTest extends CamelTestSupport {
             + "</ns1:echoBooleanResponse></soap:Body></soap:Envelope>";
 
     protected final String simpleEndpointAddress = "http://localhost:"
-        + AvailablePortFinder.getNextAvailable() + "/test";
+        + CXFTestSupport.getPort1() + "/" + getClass().getSimpleName() + "/test";
     protected final String simpleEndpointURI = "cxf://" + simpleEndpointAddress
         + "?serviceClass=org.apache.camel.component.cxf.HelloService";
     
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
     protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             public void configure() {
@@ -72,7 +76,7 @@ public class CxfConsumerMessageTest extends CamelTestSupport {
     }
     
     @Test
-    public void testInvokingServiceFromCXFClient() throws Exception {
+    public void testInvokingServiceFromClient() throws Exception {
         ClientProxyFactoryBean proxyFactory = new ClientProxyFactoryBean();
         ClientFactoryBean clientBean = proxyFactory.getClientFactoryBean();
         clientBean.setAddress(simpleEndpointAddress);

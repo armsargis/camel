@@ -23,8 +23,8 @@ import javax.management.ObjectName;
 
 import org.apache.camel.Headers;
 import org.apache.camel.builder.RouteBuilder;
-import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedResource;
+import org.apache.camel.spi.management.ManagedAttribute;
+import org.apache.camel.spi.management.ManagedResource;
 
 /**
  * @version 
@@ -67,7 +67,7 @@ public class ManagedCustomBeanTest extends ManagementTestSupport {
     }
 
     // START SNIPPET: e1
-    @ManagedResource("My Managed Bean")
+    @ManagedResource(description = "My Managed Bean")
     public static class MyCustomBean {
         private String foo = "hey";
 

@@ -17,17 +17,16 @@
 package org.apache.camel.management.mbean;
 
 import org.apache.camel.spi.ManagementStrategy;
-import org.fusesource.commons.management.Statistic;
-import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedOperation;
-import org.springframework.jmx.export.annotation.ManagedResource;
+import org.apache.camel.spi.management.ManagedAttribute;
+import org.apache.camel.spi.management.ManagedOperation;
+import org.apache.camel.spi.management.ManagedResource;
 
 @ManagedResource(description = "Managed Counter")
 public abstract class ManagedCounter {
     protected Statistic exchangesTotal;
 
     public void init(ManagementStrategy strategy) {
-        this.exchangesTotal = strategy.createStatistic("org.apache.camel.exchangesTotal", this, Statistic.UpdateMode.COUNTER);
+        this.exchangesTotal = new Statistic("org.apache.camel.exchangesTotal", this, Statistic.UpdateMode.COUNTER);
     }
 
     @ManagedOperation(description = "Reset counters")

@@ -25,17 +25,17 @@ import java.util.Map;
 import java.util.TreeMap;
 import javax.xml.transform.stream.StreamSource;
 
+import org.apache.camel.BytesSource;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.StreamCache;
-import org.apache.camel.component.file.GenericFile;
-import org.apache.camel.converter.jaxp.BytesSource;
-import org.apache.camel.converter.jaxp.StringSource;
+import org.apache.camel.StringSource;
+import org.apache.camel.WrappedFile;
 
 /**
  * Some helper methods when working with {@link org.apache.camel.Message}.
- *
- * @version 
+ * 
+ * @version
  */
 public final class MessageHelper {
 
@@ -46,12 +46,12 @@ public final class MessageHelper {
     }
 
     /**
-     * Extracts the given body and returns it as a String, that
-     * can be used for logging etc.
+     * Extracts the given body and returns it as a String, that can be used for
+     * logging etc.
      * <p/>
      * Will handle stream based bodies wrapped in StreamCache.
-     *
-     * @param message  the message with the body
+     * 
+     * @param message the message with the body
      * @return the body as String, can return <tt>null</null> if no body
      */
     public static String extractBodyAsString(Message message) {
@@ -81,9 +81,10 @@ public final class MessageHelper {
      * Gets the given body class type name as a String.
      * <p/>
      * Will skip java.lang. for the build in Java types.
-     *
-     * @param message  the message with the body
-     * @return the body typename as String, can return <tt>null</null> if no body
+     * 
+     * @param message the message with the body
+     * @return the body typename as String, can return
+     *         <tt>null</null> if no body
      */
     public static String getBodyTypeName(Message message) {
         if (message == null) {
@@ -95,10 +96,10 @@ public final class MessageHelper {
         }
         return answer;
     }
-    
+
     /**
-     * If the message body contains a {@link StreamCache} instance, reset the cache to 
-     * enable reading from it again.
+     * If the message body contains a {@link StreamCache} instance, reset the
+     * cache to enable reading from it again.
      * 
      * @param message the message for which to reset the body
      */
@@ -107,19 +108,21 @@ public final class MessageHelper {
             return;
         }
         if (message.getBody() instanceof StreamCache) {
-            ((StreamCache) message.getBody()).reset();
+            ((StreamCache)message.getBody()).reset();
         }
     }
-    
+
     /**
-     * Returns the MIME content type on the message or <tt>null</tt> if none defined
+     * Returns the MIME content type on the message or <tt>null</tt> if none
+     * defined
      */
-    public static String getContentType(Message message) {        
+    public static String getContentType(Message message) {
         return message.getHeader(Exchange.CONTENT_TYPE, String.class);
     }
 
     /**
-     * Returns the MIME content encoding on the message or <tt>null</tt> if none defined
+     * Returns the MIME content encoding on the message or <tt>null</tt> if none
+     * defined
      */
     public static String getContentEncoding(Message message) {
         return message.getHeader(Exchange.CONTENT_ENCODING, String.class);
@@ -128,9 +131,9 @@ public final class MessageHelper {
     /**
      * Extracts the body for logging purpose.
      * <p/>
-     * Will clip the body if its too big for logging.
-     * Will prepend the message with <tt>Message: </tt>
-     *
+     * Will clip the body if its too big for logging. Will prepend the message
+     * with <tt>Message: </tt>
+     * 
      * @see org.apache.camel.Exchange#LOG_DEBUG_BODY_STREAMS
      * @see org.apache.camel.Exchange#LOG_DEBUG_BODY_MAX_CHARS
      * @param message the message
@@ -144,7 +147,7 @@ public final class MessageHelper {
      * Extracts the body for logging purpose.
      * <p/>
      * Will clip the body if its too big for logging.
-     *
+     * 
      * @see org.apache.camel.Exchange#LOG_DEBUG_BODY_STREAMS
      * @see org.apache.camel.Exchange#LOG_DEBUG_BODY_MAX_CHARS
      * @param message the message
@@ -169,58 +172,70 @@ public final class MessageHelper {
                 maxChars = message.getExchange().getContext().getTypeConverter().convertTo(Integer.class, property);
             }
         }
-        return extractBodyForLogging(message, prepend, streams, maxChars);
+
+        return extractBodyForLogging(message, prepend, streams, false, maxChars);
     }
 
     /**
      * Extracts the body for logging purpose.
      * <p/>
      * Will clip the body if its too big for logging.
-     *
+     * 
      * @see org.apache.camel.Exchange#LOG_DEBUG_BODY_MAX_CHARS
      * @param message the message
      * @param prepend a message to prepend
      * @param allowStreams whether or not streams is allowed
-     * @param maxChars limit to maximum number of chars. Use 0 or negative value to not limit at all.
+     * @param allowFiles whether or not files is allowed
+     * @param maxChars limit to maximum number of chars. Use 0 or negative value
+     *            to not limit at all.
      * @return the logging message
      */
-    public static String extractBodyForLogging(Message message, String prepend, boolean allowStreams, int maxChars) {
+    public static String extractBodyForLogging(Message message, String prepend, boolean allowStreams, boolean allowFiles, int maxChars) {
         Object obj = message.getBody();
         if (obj == null) {
             return prepend + "[Body is null]";
         }
 
-        if (obj instanceof StringSource || obj instanceof BytesSource) {
-            // these two are okay
-        } else if (!allowStreams && obj instanceof StreamCache) {
-            return prepend + "[Body is instance of org.apache.camel.StreamCache]";
-        } else if (!allowStreams && obj instanceof StreamSource) {
-            return prepend + "[Body is instance of java.xml.transform.StreamSource]";
-        } else if (!allowStreams && obj instanceof InputStream) {
-            return prepend + "[Body is instance of java.io.InputStream]";
-        } else if (!allowStreams && obj instanceof OutputStream) {
-            return prepend + "[Body is instance of java.io.OutputStream]";
-        } else if (!allowStreams && obj instanceof Reader) {
-            return prepend + "[Body is instance of java.io.Reader]";
-        } else if (!allowStreams && obj instanceof Writer) {
-            return prepend + "[Body is instance of java.io.Writer]";
-        } else if (obj instanceof GenericFile || obj instanceof File) {
-            return prepend + "[Body is file based: " + obj + "]";
+        if (!allowStreams) {
+            if (obj instanceof StreamSource && !(obj instanceof StringSource || obj instanceof BytesSource)) {
+                /*
+                 * Generally do not log StreamSources but as StringSource and
+                 * ByteSoure are memory based they are ok
+                 */
+                return prepend + "[Body is instance of java.xml.transform.StreamSource]";
+            } else if (obj instanceof StreamCache) {
+                return prepend + "[Body is instance of org.apache.camel.StreamCache]";
+            } else if (obj instanceof InputStream) {
+                return prepend + "[Body is instance of java.io.InputStream]";
+            } else if (obj instanceof OutputStream) {
+                return prepend + "[Body is instance of java.io.OutputStream]";
+            } else if (obj instanceof Reader) {
+                return prepend + "[Body is instance of java.io.Reader]";
+            } else if (obj instanceof Writer) {
+                return prepend + "[Body is instance of java.io.Writer]";
+            } else if (obj instanceof WrappedFile || obj instanceof File) {
+                return prepend + "[Body is file based: " + obj + "]";
+            }
         }
 
         // is the body a stream cache
         StreamCache cache;
         if (obj instanceof StreamCache) {
-            cache = (StreamCache) obj;
+            cache = (StreamCache)obj;
         } else {
             cache = null;
         }
 
         // grab the message body as a string
-        String body;
+        String body = null;
         if (message.getExchange() != null) {
-            body = message.getExchange().getContext().getTypeConverter().convertTo(String.class, obj);
-        } else {
+            try {
+                body = message.getExchange().getContext().getTypeConverter().convertTo(String.class, obj);
+            } catch (Exception e) {
+                // ignore as the body is for logging purpose
+            }
+        }
+        if (body == null) {
             body = obj.toString();
         }
 
@@ -243,13 +258,25 @@ public final class MessageHelper {
 
     /**
      * Dumps the message as a generic XML structure.
-     *
-     * @param message  the message
+     * 
+     * @param message the message
      * @return the XML
      */
     public static String dumpAsXml(Message message) {
+        return dumpAsXml(message, true);
+    }
+
+    /**
+     * Dumps the message as a generic XML structure.
+     * 
+     * @param message the message
+     * @param includeBody whether or not to include the message body
+     * @return the XML
+     */
+    public static String dumpAsXml(Message message, boolean includeBody) {
         StringBuilder sb = new StringBuilder();
-        sb.append("<message>\n");
+        // include exchangeId as attribute on the <message> tag
+        sb.append("<message exchangeId=\"").append(message.getExchange().getExchangeId()).append("\">\n");
 
         // headers
         if (message.hasHeaders()) {
@@ -265,17 +292,17 @@ public final class MessageHelper {
                 }
                 sb.append(">");
 
-                // dump header value as XML, use Camel type converter to convert to String
+                // dump header value as XML, use Camel type converter to convert
+                // to String
                 if (value != null) {
-                    String xml = message.getExchange().getContext().getTypeConverter().convertTo(String.class, value);
-                    if (xml != null) {
-                        // is the header value already XML
-                        if (xml.startsWith("<") && xml.endsWith(">")) {
-                            sb.append(xml);
-                        } else {
-                            // no its not xml so xml encode it
+                    try {
+                        String xml = message.getExchange().getContext().getTypeConverter().convertTo(String.class, value);
+                        if (xml != null) {
+                            // must always xml encode
                             sb.append(StringHelper.xmlEncode(xml));
                         }
+                    } catch (Exception e) {
+                        // ignore as the body is for logging purpose
                     }
                 }
 
@@ -284,26 +311,26 @@ public final class MessageHelper {
             sb.append("</headers>\n");
         }
 
-        sb.append("<body");
-        String type = ObjectHelper.classCanonicalName(message.getBody());
-        if (type != null) {
-            sb.append(" type=\"" + type + "\"");
-        }
-        sb.append(">");
+        if (includeBody) {
+            sb.append("<body");
+            String type = ObjectHelper.classCanonicalName(message.getBody());
+            if (type != null) {
+                sb.append(" type=\"" + type + "\"");
+            }
+            sb.append(">");
 
-        // dump body value as XML, use Camel type converter to convert to String
-        String xml = message.getBody(String.class);
-        if (xml != null) {
-            // is the body already XML
-            if (xml.startsWith("<") && xml.endsWith(">")) {
-                sb.append(xml);
-            } else {
-                // no its not xml so xml encode it
+            // dump body value as XML, use Camel type converter to convert to
+            // String
+            // do not allow streams, but allow files, and clip very big message
+            // bodies (128kb)
+            String xml = extractBodyForLogging(message, "", false, true, 128 * 1024);
+            if (xml != null) {
+                // must always xml encode
                 sb.append(StringHelper.xmlEncode(xml));
             }
-        }
 
-        sb.append("</body>\n");
+            sb.append("</body>\n");
+        }
 
         sb.append("</message>");
         return sb.toString();
@@ -311,7 +338,7 @@ public final class MessageHelper {
 
     /**
      * Copies the headers from the source to the target message.
-     *
+     * 
      * @param source the source message
      * @param target the target message
      * @param override whether to override existing headers

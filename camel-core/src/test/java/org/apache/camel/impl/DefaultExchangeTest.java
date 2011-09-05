@@ -19,8 +19,10 @@ package org.apache.camel.impl;
 import java.io.IOException;
 import java.net.ConnectException;
 
+import org.apache.camel.Exchange;
 import org.apache.camel.ExchangeTestSupport;
 import org.apache.camel.InvalidPayloadException;
+import org.apache.camel.Message;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.util.ObjectHelper;
 
@@ -127,8 +129,22 @@ public class DefaultExchangeTest extends ExchangeTestSupport {
         assertNotNull(my);
     }
 
-    private class MyMessage extends DefaultMessage {
+    public void testCopy() {
+        DefaultExchange sourceExchange = new DefaultExchange(context);
+        MyMessage sourceIn = new MyMessage();
+        sourceExchange.setIn(sourceIn);
+        Exchange destExchange = sourceExchange.copy();
+        Message destIn = destExchange.getIn();
 
+        assertEquals("Dest message should be of the same type as source message",
+                     sourceIn.getClass(), destIn.getClass());
+    }
+
+    public static class MyMessage extends DefaultMessage {
+        @Override
+        public MyMessage newInstance() {
+            return new MyMessage();
+        }
     }
 
 }

@@ -89,7 +89,7 @@ public class ThreadPoolBuilderTest extends ContextTestSupport {
 
     public void testThreadPoolBuilderKeepAliveTimeUnit() throws Exception {
         ThreadPoolBuilder builder = new ThreadPoolBuilder(context);
-        ExecutorService executor = builder.keepAliveTime(20000).timeUnit(TimeUnit.MILLISECONDS).build(this, "myPool");
+        ExecutorService executor = builder.keepAliveTime(20000, TimeUnit.MILLISECONDS).build(this, "myPool");
         assertNotNull(executor);
 
         assertEquals(false, executor.isShutdown());
@@ -100,7 +100,7 @@ public class ThreadPoolBuilderTest extends ContextTestSupport {
     public void testThreadPoolBuilderAll() throws Exception {
         ThreadPoolBuilder builder = new ThreadPoolBuilder(context);
         ExecutorService executor = builder.poolSize(50).maxPoolSize(100).maxQueueSize(2000)
-                .keepAliveTime(20000).timeUnit(TimeUnit.MILLISECONDS)
+                .keepAliveTime(20000, TimeUnit.MILLISECONDS)
                 .rejectedPolicy(ThreadPoolRejectedPolicy.DiscardOldest)
                 .build(this, "myPool");
         assertNotNull(executor);
@@ -124,6 +124,5 @@ public class ThreadPoolBuilderTest extends ContextTestSupport {
         assertEquals(true, executor.isShutdown());
         assertEquals(true, executor2.isShutdown());
     }
-
 
 }

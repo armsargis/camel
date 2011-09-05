@@ -19,7 +19,7 @@ package org.apache.camel.itest.osgi.cxf.blueprint;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.itest.osgi.blueprint.OSGiBlueprintTestSupport;
-import org.apache.camel.itest.osgi.cxf.blueprint.jaxrs.testbean.CustomerService;
+import org.apache.camel.itest.osgi.cxf.jaxrs.testbean.CustomerService;
 import org.apache.cxf.endpoint.Server;
 import org.apache.cxf.jaxrs.JAXRSServerFactoryBean;
 import org.apache.http.HttpResponse;
@@ -32,7 +32,6 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.Option;
@@ -42,11 +41,9 @@ import org.osgi.framework.Constants;
 
 import static org.ops4j.pax.exam.OptionUtils.combine;
 import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.scanFeatures;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.vmOption;
 import static org.ops4j.pax.swissbox.tinybundles.core.TinyBundles.newBundle;
 
 @RunWith(JUnit4TestRunner.class)
-@Ignore("This test will be failed with CXF 2.4.1, we need to use CXF 2.4.2")
 public class CxfRsBlueprintRouterTest extends OSGiBlueprintTestSupport {
     private static final String PUT_REQUEST = "<Customer><name>Mary</name><id>123</id></Customer>";
     private static final String POST_REQUEST = "<Customer><name>Jack</name></Customer>";
@@ -192,15 +189,14 @@ public class CxfRsBlueprintRouterTest extends OSGiBlueprintTestSupport {
                                         
             bundle(newBundle()
                 .add("OSGI-INF/blueprint/test.xml", CxfRsBlueprintRouterTest.class.getResource("CxfRsBlueprintRouter.xml"))
-                .add(org.apache.camel.itest.osgi.cxf.blueprint.jaxrs.testbean.Customer.class)
-                .add(org.apache.camel.itest.osgi.cxf.blueprint.jaxrs.testbean.CustomerService.class)
-                .add(org.apache.camel.itest.osgi.cxf.blueprint.jaxrs.testbean.CustomerServiceResource.class)
-                .add(org.apache.camel.itest.osgi.cxf.blueprint.jaxrs.testbean.Order.class)
-                .add(org.apache.camel.itest.osgi.cxf.blueprint.jaxrs.testbean.Product.class)
+                .add(org.apache.camel.itest.osgi.cxf.jaxrs.testbean.Customer.class)
+                .add(org.apache.camel.itest.osgi.cxf.jaxrs.testbean.CustomerService.class)
+                .add(org.apache.camel.itest.osgi.cxf.jaxrs.testbean.CustomerServiceResource.class)
+                .add(org.apache.camel.itest.osgi.cxf.jaxrs.testbean.Order.class)
+                .add(org.apache.camel.itest.osgi.cxf.jaxrs.testbean.Product.class)
                 .set(Constants.BUNDLE_SYMBOLICNAME, "CxfRsBlueprintRouterTest")
                 .set(Constants.DYNAMICIMPORT_PACKAGE, "*")
-                .build()).noStart(),
-            vmOption("-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5006")
+                .build()).noStart()
 
         );
           

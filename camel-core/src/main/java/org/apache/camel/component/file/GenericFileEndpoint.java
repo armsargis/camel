@@ -19,8 +19,10 @@ package org.apache.camel.component.file;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.camel.CamelContext;
@@ -33,6 +35,7 @@ import org.apache.camel.Processor;
 import org.apache.camel.converter.IOConverter;
 import org.apache.camel.impl.ScheduledPollEndpoint;
 import org.apache.camel.processor.idempotent.MemoryIdempotentRepository;
+import org.apache.camel.spi.BrowsableEndpoint;
 import org.apache.camel.spi.FactoryFinder;
 import org.apache.camel.spi.IdempotentRepository;
 import org.apache.camel.spi.Language;
@@ -44,9 +47,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Generic FileEndpoint
+ * Base class for file endpoints
  */
-public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint {
+public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint implements BrowsableEndpoint {
 
     protected static final transient String DEFAULT_STRATEGYFACTORY_CLASS = "org.apache.camel.component.file.strategy.GenericFileProcessStrategyFactory";
     protected static final transient int DEFAULT_IDEMPOTENT_CACHE_SIZE = 1000;
@@ -132,6 +135,44 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint {
     }
 
     /**
+     * This implementation will <b>not</b> load the file content.
+     * Any file locking is neither in use by this implementation..
+     */
+    @Override
+    public List<Exchange> getExchanges() {
+        final List<Exchange> answer = new ArrayList<Exchange>();
+
+        GenericFileConsumer<?> consumer = null;
+        try {
+            // create a new consumer which can poll the exchanges we want to browse
+            // do not provide a processor as we do some custom processing
+            consumer = createConsumer(null);
+            consumer.setCustomProcessor(new Processor() {
+                @Override
+                public void process(Exchange exchange) throws Exception {
+                    answer.add(exchange);
+                }
+            });
+            // do not start scheduler, as we invoke the poll manually
+            consumer.setStartScheduler(false);
+            // start consumer
+            ServiceHelper.startService(consumer);
+            // invoke poll which performs the custom processing, so we can browse the exchanges
+            consumer.poll();
+        } catch (Exception e) {
+            throw ObjectHelper.wrapRuntimeCamelException(e);
+        } finally {
+            try {
+                ServiceHelper.stopService(consumer);
+            } catch (Exception e) {
+                log.debug("Error stopping consumer used for browsing exchanges. This exception will be ignored", e);
+            }
+        }
+
+        return answer;
+    }
+
+    /**
      * A strategy method to lazily create the file strategy
      */
     @SuppressWarnings("unchecked")
@@ -140,7 +181,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint {
         try {
             FactoryFinder finder = getCamelContext().getFactoryFinder("META-INF/services/org/apache/camel/component/");
             log.trace("Using FactoryFinder: {}", finder);
-            factory = finder.findClass(getScheme(), "strategy.factory.");
+            factory = finder.findClass(getScheme(), "strategy.factory.", CamelContext.class);
         } catch (ClassNotFoundException e) {
             log.trace("'strategy.factory.class' not found", e);
         } catch (IOException e) {

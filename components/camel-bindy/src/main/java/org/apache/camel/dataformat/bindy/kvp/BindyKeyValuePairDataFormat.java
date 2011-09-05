@@ -21,6 +21,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -79,6 +80,9 @@ public class BindyKeyValuePairDataFormat extends BindyAbstractDataFormat {
 
         // Pojos of the model
         Map<String, Object> model;
+        
+        // Map to hold the model @OneToMany classes while binding
+        Map<String, List<Object>> lists = new HashMap<String, List<Object>>();
 
         InputStreamReader in = new InputStreamReader(inputStream);
 
@@ -111,13 +115,13 @@ public class BindyKeyValuePairDataFormat extends BindyAbstractDataFormat {
                 List<String> result = Arrays.asList(line.split(separator));
 
                 if (result.size() == 0 || result.isEmpty()) {
-                    throw new java.lang.IllegalArgumentException("No records have been defined in the KVP !");
+                    throw new java.lang.IllegalArgumentException("No records have been defined in the KVP");
                 }
 
                 if (result.size() > 0) {
                     // Bind data from message with model classes
                     // Counter is used to detect line where error occurs
-                    factory.bind(result, model, count);
+                    factory.bind(result, model, count, lists);
 
                     // Link objects together
                     factory.link(model);
@@ -125,14 +129,14 @@ public class BindyKeyValuePairDataFormat extends BindyAbstractDataFormat {
                     // Add objects graph to the list
                     models.add(model);
 
-                    LOG.debug("Graph of objects created : {}", model);
+                    LOG.debug("Graph of objects created: {}", model);
                 }
             }
 
             // Test if models list is empty or not
             // If this is the case (correspond to an empty stream, ...)
             if (models.size() == 0) {
-                throw new java.lang.IllegalArgumentException("No records have been defined in the KVP !");
+                throw new java.lang.IllegalArgumentException("No records have been defined in the KVP");
             } else {
                 return models;
             }

@@ -984,12 +984,13 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         if (executorService == null || executorService.isShutdown()) {
             // camel context will shutdown the executor when it shutdown so no need to shut it down when stopping
             if (executorServiceRef != null) {
-                executorService = camelContext.getExecutorServiceStrategy().lookupScheduled(this, "ErrorHandlerRedeliveryTask", executorServiceRef);
+                executorService = camelContext.getRegistry().lookup(executorServiceRef, ScheduledExecutorService.class);
                 if (executorService == null) {
                     throw new IllegalArgumentException("ExecutorServiceRef " + executorServiceRef + " not found in registry.");
                 }
             } else {
-                executorService = camelContext.getExecutorServiceStrategy().newScheduledThreadPool(this, "ErrorHandlerRedeliveryTask");
+                // create a default scheduled thread pool
+                executorService = camelContext.getExecutorServiceManager().newDefaultScheduledThreadPool(this, "ErrorHandlerRedeliveryTask");
             }
         }
 

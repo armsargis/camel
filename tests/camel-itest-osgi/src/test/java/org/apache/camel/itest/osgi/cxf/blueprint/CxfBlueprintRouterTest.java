@@ -27,7 +27,6 @@ import org.apache.cxf.jaxws.JaxWsProxyFactoryBean;
 import org.apache.cxf.jaxws.JaxWsServerFactoryBean;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.Option;
@@ -42,9 +41,9 @@ import static org.ops4j.pax.swissbox.tinybundles.core.TinyBundles.newBundle;
 import static org.ops4j.pax.swissbox.tinybundles.core.TinyBundles.withBnd;
 
 @RunWith(JUnit4TestRunner.class)
-@Ignore("This test will be failed with CXF 2.4.1, we need to use CXF 2.4.2")
 public class CxfBlueprintRouterTest extends OSGiBlueprintTestSupport {
-     private static Server server;
+    private static Server server;
+
     @BeforeClass
     public static void startServer() {
         JaxWsServerFactoryBean sf = new JaxWsServerFactoryBean();
@@ -107,6 +106,7 @@ public class CxfBlueprintRouterTest extends OSGiBlueprintTestSupport {
 
                 bundle(newBundle()
                         .add("OSGI-INF/blueprint/test.xml", CxfBlueprintRouterTest.class.getResource("CxfBlueprintRouter.xml"))
+                        .add("WSDL/report_incident.wsdl", CxfBlueprintRouterTest.class.getResource("/report_incident.wsdl"))
                         .add(org.apache.camel.example.reportincident.InputReportIncident.class)
                         .add(org.apache.camel.example.reportincident.OutputReportIncident.class)
                         .add(org.apache.camel.example.reportincident.ReportIncidentEndpoint.class)
@@ -114,8 +114,7 @@ public class CxfBlueprintRouterTest extends OSGiBlueprintTestSupport {
                         .add(org.apache.camel.example.reportincident.ObjectFactory.class)
                         .set(Constants.BUNDLE_SYMBOLICNAME, "CxfBlueprintRouterTest")
                         .set(Constants.DYNAMICIMPORT_PACKAGE, "*")
-                        .build(withBnd())).noStart(),
-                vmOption("-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=5006")
+                        .build(withBnd())).noStart()
 
         );
 

@@ -40,7 +40,7 @@ public class SimpleLanguageRouteTest extends ContextTestSupport {
         return new RouteBuilder() {
             public void configure() throws Exception {
                 from("seda:foo")
-                    .filter().simple("in.header.foo").to("mock:foo");
+                    .filter().simple("${header.foo}").to("mock:foo");
             }
         };
     }

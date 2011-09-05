@@ -183,6 +183,10 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
     /**
      * Advices this route with the route builder.
      * <p/>
+     * <b>Important:</b> It is recommended to only advice a given route once (you can of course advice multiple routes).
+     * If you do it multiple times, then it may not work as expected, especially when any kind of error handling is involved.
+     * The Camel team plan for Camel 3.0 to support this as internal refactorings in the routing engine is needed to support this properly.
+     * <p/>
      * You can use a regular {@link RouteBuilder} but the specialized {@link org.apache.camel.builder.AdviceWithRouteBuilder}
      * has additional features when using the <a href="http://camel.apache.org/advicewith.html">advice with</a> feature.
      * We therefore suggest you to use the {@link org.apache.camel.builder.AdviceWithRouteBuilder}.
@@ -434,6 +438,28 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
      */
     public RouteDefinition noAutoStartup() {
         setAutoStartup("false");
+        return this;
+    }
+
+    /**
+     * Sets the auto startup property on this route.
+     *
+     * @param autoStartup - String indicator ("true" or "false")
+     * @return the builder
+     */
+    public RouteDefinition autoStartup(String autoStartup) {
+        setAutoStartup(autoStartup);
+        return this;
+    }
+
+    /**
+     * Sets the auto startup property on this route.
+     *
+     * @param autoStartup - boolean indicator
+     * @return the builder
+     */
+    public RouteDefinition autoStartup(boolean autoStartup) {
+        setAutoStartup(Boolean.toString(autoStartup));
         return this;
     }
 
@@ -798,5 +824,4 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
         routeContext.commit();
         return routeContext;
     }
-
 }

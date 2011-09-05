@@ -67,14 +67,14 @@ public class AsyncTraceHandlerTest extends ContextTestSupport {
                 from("direct:start")
                         .tracing()
                         .to("log:before")
-                        .to("async:Bye Camel").id("async")
+                        .to("async:bye:camel").id("async")
                         .to("log:after")
                         .to("mock:result");
             }
         };
     }
 
-    private class MyTraceHandler implements TraceEventHandler {
+    private static class MyTraceHandler implements TraceEventHandler {
 
         @Override
         public void traceExchange(ProcessorDefinition node, Processor target, TraceInterceptor traceInterceptor, Exchange exchange) throws Exception {

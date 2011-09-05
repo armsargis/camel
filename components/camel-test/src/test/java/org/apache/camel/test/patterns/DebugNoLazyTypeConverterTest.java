@@ -20,7 +20,9 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.ProcessorDefinition;
-import org.apache.camel.test.CamelTestSupport;
+import org.apache.camel.test.junit4.CamelTestSupport;
+
+import org.junit.Test;
 
 /**
  * @version 
@@ -34,6 +36,12 @@ public class DebugNoLazyTypeConverterTest extends CamelTestSupport {
 
     // START SNIPPET: e1
     @Override
+    public boolean isUseDebugger() {
+        // must enable debugger
+        return true;
+    }
+
+    @Override
     protected void debugBefore(Exchange exchange, Processor processor,
                                ProcessorDefinition definition, String id, String shortName) {
         // this method is invoked before we are about to enter the given processor
@@ -42,6 +50,7 @@ public class DebugNoLazyTypeConverterTest extends CamelTestSupport {
     }
     // END SNIPPET: e1
 
+    @Test
     public void testDebugger() throws Exception {
         // set mock expectations
         getMockEndpoint("mock:a").expectedMessageCount(1);
@@ -54,6 +63,7 @@ public class DebugNoLazyTypeConverterTest extends CamelTestSupport {
         assertMockEndpointsSatisfied();
     }
 
+    @Test
     public void testTwo() throws Exception {
         // set mock expectations
         getMockEndpoint("mock:a").expectedMessageCount(2);

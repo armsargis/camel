@@ -16,67 +16,10 @@
  */
 package org.apache.camel;
 
-import java.util.HashMap;
-import java.util.Map;
-import javax.xml.bind.JAXBException;
-
-import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.camel.impl.MainSupport;
-import org.apache.camel.view.ModelFileGenerator;
-
 /**
- * A command line tool for booting up a CamelContext
- *
- * @version 
+ * @deprecated use org.apache.camel.main.Main instead
  */
-public class Main extends MainSupport {
-    protected static Main instance;
+@Deprecated
+public class Main extends org.apache.camel.main.Main {
 
-    public Main() {
-    }
-
-    public static void main(String... args) throws Exception {
-        Main main = new Main();
-        instance = main;
-        main.enableHangupSupport();
-        main.run(args);
-    }
-
-    /**
-     * Returns the currently executing main
-     *
-     * @return the current running instance
-     */
-    public static Main getInstance() {
-        return instance;
-    }
-    
-    // Implementation methods
-    // -------------------------------------------------------------------------
-
-    @Override
-    protected void doStart() throws Exception {
-        super.doStart();
-        postProcessContext();
-        getCamelContexts().get(0).start();
-    }
-
-    protected void doStop() throws Exception {
-        super.doStop();
-        getCamelContexts().get(0).stop();
-    }
-
-    protected ProducerTemplate findOrCreateCamelTemplate() {
-        return getCamelContexts().get(0).createProducerTemplate();
-    }
-
-    protected Map<String, CamelContext> getCamelContextMap() {
-        Map<String, CamelContext> answer = new HashMap<String, CamelContext>();
-        answer.put("camel-1", new DefaultCamelContext());
-        return answer;
-    }
-
-    protected ModelFileGenerator createModelFileGenerator() throws JAXBException {
-        return null;
-    }
 }

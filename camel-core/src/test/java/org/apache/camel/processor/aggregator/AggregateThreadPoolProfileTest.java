@@ -19,7 +19,6 @@ package org.apache.camel.processor.aggregator;
 import org.apache.camel.ContextTestSupport;
 import org.apache.camel.ThreadPoolRejectedPolicy;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.impl.ThreadPoolProfileSupport;
 import org.apache.camel.processor.BodyInAggregatingStrategy;
 import org.apache.camel.spi.ThreadPoolProfile;
 
@@ -44,11 +43,11 @@ public class AggregateThreadPoolProfileTest extends ContextTestSupport {
             @Override
             public void configure() throws Exception {
                 // create and register thread pool profile
-                ThreadPoolProfile profile = new ThreadPoolProfileSupport("myProfile");
+                ThreadPoolProfile profile = new ThreadPoolProfile("myProfile");
                 profile.setPoolSize(2);
                 profile.setMaxPoolSize(8);
                 profile.setRejectedPolicy(ThreadPoolRejectedPolicy.Abort);
-                context.getExecutorServiceStrategy().registerThreadPoolProfile(profile);
+                context.getExecutorServiceManager().registerThreadPoolProfile(profile);
 
                 from("direct:start")
                     .aggregate(header("id"), new BodyInAggregatingStrategy())

@@ -52,9 +52,7 @@ public class DataSetConsumer extends DefaultConsumer {
         final long preloadSize = endpoint.getPreloadSize();
 
         sendMessages(0, preloadSize);
-
-        executorService = camelContext.getExecutorServiceStrategy()
-                .newSingleThreadExecutor(this, endpoint.getEndpointUri());
+        executorService = camelContext.getExecutorServiceManager().newSingleThreadExecutor(this, endpoint.getEndpointUri());
 
         executorService.execute(new Runnable() {
             public void run() {
@@ -77,7 +75,7 @@ public class DataSetConsumer extends DefaultConsumer {
         super.doStop();
 
         if (executorService != null) {
-            camelContext.getExecutorServiceStrategy().shutdownNow(executorService);
+            camelContext.getExecutorServiceManager().shutdownNow(executorService);
             executorService = null;
         }
     }

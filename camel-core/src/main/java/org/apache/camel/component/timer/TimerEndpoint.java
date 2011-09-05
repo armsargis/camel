@@ -19,14 +19,15 @@ package org.apache.camel.component.timer;
 import java.util.Date;
 import java.util.Timer;
 
+import org.apache.camel.Component;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.Service;
 import org.apache.camel.impl.DefaultEndpoint;
-import org.springframework.jmx.export.annotation.ManagedAttribute;
-import org.springframework.jmx.export.annotation.ManagedResource;
+import org.apache.camel.spi.management.ManagedAttribute;
+import org.apache.camel.spi.management.ManagedResource;
 
 /**
  * Represents a timer endpoint that can generate periodic inbound exchanges triggered by a timer.
@@ -47,18 +48,9 @@ public class TimerEndpoint extends DefaultEndpoint implements Service {
     public TimerEndpoint() {
     }
 
-    public TimerEndpoint(String fullURI, TimerComponent component, String timerName) {
-        super(fullURI, component);
+    public TimerEndpoint(String uri, Component component, String timerName) {
+        super(uri, component);
         this.timerName = timerName;
-    }
-
-    public TimerEndpoint(String endpointUri, Timer timer) {
-        this(endpointUri);
-        this.timer = timer;
-    }
-
-    public TimerEndpoint(String endpointUri) {
-        super(endpointUri);
     }
 
     public Producer createProducer() throws Exception {

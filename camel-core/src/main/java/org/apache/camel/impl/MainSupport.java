@@ -34,6 +34,7 @@ import org.apache.camel.CamelException;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.RouteDefinition;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.view.ModelFileGenerator;
 import org.apache.camel.view.RouteDotGenerator;
@@ -61,7 +62,7 @@ public abstract class MainSupport extends ServiceSupport {
     /**
      * A class for intercepting the hang up signal and do a graceful shutdown of the Camel.
      */
-    private final class HangupInterceptor extends Thread {
+    private static final class HangupInterceptor extends Thread {
         Logger log = LoggerFactory.getLogger(this.getClass());
         MainSupport mainInstance;
 

@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.Map;
 import javax.jms.ConnectionFactory;
 
-import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
@@ -75,7 +74,7 @@ public class JmsCustomHeaderFilterStrategyTest extends CamelTestSupport {
         };
     }
 
-    private class MyHeaderFilterStrategy implements HeaderFilterStrategy {
+    private static class MyHeaderFilterStrategy implements HeaderFilterStrategy {
 
         public boolean applyFilterToCamelHeaders(String s, Object o, Exchange exchange) {
             return false;

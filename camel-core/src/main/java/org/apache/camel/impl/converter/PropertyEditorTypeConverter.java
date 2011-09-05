@@ -26,7 +26,6 @@ import org.apache.camel.Service;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.util.LRUSoftCache;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.util.ServiceHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,9 +40,9 @@ public class PropertyEditorTypeConverter implements TypeConverter, Service {
     private static final Logger LOG = LoggerFactory.getLogger(PropertyEditorTypeConverter.class);
     // use a soft bound cache to avoid using too much memory in case a lot of different classes
     // is being converted to string
-    private final Map<Class, Class> misses = new LRUSoftCache<Class, Class>(1000);
+    private final Map<Class<?>, Class<?>> misses = new LRUSoftCache<Class<?>, Class<?>>(1000);
     // we don't anticipate so many property editors so we have unbounded map
-    private final Map<Class, PropertyEditor> cache = new HashMap<Class, PropertyEditor>();
+    private final Map<Class<?>, PropertyEditor> cache = new HashMap<Class<?>, PropertyEditor>();
 
     public <T> T convertTo(Class<T> type, Object value) {
         // We can't convert null values since we can't figure out a property
@@ -58,14 +57,14 @@ public class PropertyEditorTypeConverter implements TypeConverter, Service {
                 return ObjectHelper.cast(type, value);
             }
 
-            Class key = type;
+            Class<?> key = type;
             PropertyEditor editor = lookupEditor(key);
             if (editor != null) {
                 editor.setAsText(value.toString());
                 return ObjectHelper.cast(type, editor.getValue());
             }
         } else if (type == String.class) {
-            Class key = value.getClass();
+            Class<?> key = value.getClass();
             PropertyEditor editor = lookupEditor(key);
             if (editor != null) {
                 editor.setValue(value);
@@ -76,7 +75,7 @@ public class PropertyEditorTypeConverter implements TypeConverter, Service {
         return null;
     }
 
-    private PropertyEditor lookupEditor(Class type) {
+    private PropertyEditor lookupEditor(Class<?> type) {
         // check misses first
         if (misses.containsKey(type)) {
             LOG.trace("No previously found property editor for type: {}", type);
@@ -117,12 +116,13 @@ public class PropertyEditorTypeConverter implements TypeConverter, Service {
     }
 
     public void start() throws Exception {
-        ServiceHelper.startService(misses);
+        // noop
     }
 
     public void stop() throws Exception {
+        // clear caches so we dont leak
         cache.clear();
-        ServiceHelper.stopService(misses);
+        misses.clear();
     }
 
 }

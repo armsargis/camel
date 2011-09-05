@@ -47,12 +47,16 @@ public class CxfConsumerResponseTest extends CamelTestSupport {
 
     
     protected final String simpleEndpointAddress = "http://localhost:"
-        + AvailablePortFinder.getNextAvailable() + "/test";
+        + CXFTestSupport.getPort1() + "/" + getClass().getSimpleName() + "/test";
     protected final String simpleEndpointURI = "cxf://" + simpleEndpointAddress
         + "?serviceClass=org.apache.camel.component.cxf.HelloService"
         + "&publishedEndpointUrl=http://www.simple.com/services/test";
     
     
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
     // START SNIPPET: example
     protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {

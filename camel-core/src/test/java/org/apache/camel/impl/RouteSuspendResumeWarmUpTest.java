@@ -20,6 +20,7 @@ import org.apache.camel.ContextTestSupport;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.support.ServiceSupport;
 
 /**
  * @version 
@@ -55,7 +56,7 @@ public class RouteSuspendResumeWarmUpTest extends ContextTestSupport {
         };
     }
 
-    private class MyService extends ServiceSupport implements Processor {
+    private static class MyService extends ServiceSupport implements Processor {
 
         private volatile String state;
 

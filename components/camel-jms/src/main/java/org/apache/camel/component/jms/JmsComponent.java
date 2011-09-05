@@ -27,8 +27,6 @@ import org.apache.camel.impl.DefaultComponent;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.spi.HeaderFilterStrategyAware;
 import org.apache.camel.util.CastUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -39,6 +37,7 @@ import org.springframework.jms.core.JmsOperations;
 import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.destination.DestinationResolver;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.util.ErrorHandler;
 
 import static org.apache.camel.util.ObjectHelper.removeStartingCharacters;
 
@@ -49,7 +48,6 @@ import static org.apache.camel.util.ObjectHelper.removeStartingCharacters;
  */
 public class JmsComponent extends DefaultComponent implements ApplicationContextAware, HeaderFilterStrategyAware {
 
-    private static final transient Logger LOG = LoggerFactory.getLogger(JmsComponent.class);
     private static final String KEY_FORMAT_STRATEGY_PARAM = "jmsKeyFormatStrategy";
     private JmsConfiguration configuration;
     private ApplicationContext applicationContext;
@@ -112,6 +110,7 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
         return jmsComponentTransacted(connectionFactory, transactionManager);
     }
 
+    @SuppressWarnings("deprecation")
     public static JmsComponent jmsComponentTransacted(ConnectionFactory connectionFactory,
                                                       PlatformTransactionManager transactionManager) {
         JmsConfiguration template = new JmsConfiguration(connectionFactory);
@@ -208,6 +207,10 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
         getConfiguration().setExceptionListener(exceptionListener);
     }
 
+    public void setErrorHandler(ErrorHandler errorHandler) {
+        getConfiguration().setErrorHandler(errorHandler);
+    }    
+    
     public void setExplicitQosEnabled(boolean explicitQosEnabled) {
         getConfiguration().setExplicitQosEnabled(explicitQosEnabled);
     }
@@ -218,6 +221,10 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
 
     public void setIdleTaskExecutionLimit(int idleTaskExecutionLimit) {
         getConfiguration().setIdleTaskExecutionLimit(idleTaskExecutionLimit);
+    }
+    
+    public void setIdleConsumerLimit(int idleConsumerLimit) {
+        getConfiguration().setIdleConsumerLimit(idleConsumerLimit);
     }
 
     public void setMaxConcurrentConsumers(int maxConcurrentConsumers) {
@@ -325,6 +332,14 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
         getConfiguration().setDestinationResolver(destinationResolver);
     }
 
+    public ReplyToType getReplyToType() {
+        return configuration.getReplyToType();
+    }
+
+    public void setReplyToType(ReplyToType replyToType) {
+        configuration.setReplyToType(replyToType);
+    }
+
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
     }
@@ -399,14 +414,16 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
             }
         }
 
-        String selector = getAndRemoveParameter(parameters, "selector", String.class);
-        if (selector != null) {
-            endpoint.setSelector(selector);
+        // resolve any custom connection factory first
+        ConnectionFactory cf = resolveAndRemoveReferenceParameter(parameters, "connectionFactory", ConnectionFactory.class);
+        if (cf != null) {
+            endpoint.getConfiguration().setConnectionFactory(cf);
         }
+
         String username = getAndRemoveParameter(parameters, "username", String.class);
         String password = getAndRemoveParameter(parameters, "password", String.class);
         if (username != null && password != null) {
-            ConnectionFactory cf = endpoint.getConfiguration().getConnectionFactory();
+            cf = endpoint.getConfiguration().getConnectionFactory();
             UserCredentialsConnectionFactoryAdapter ucfa = new UserCredentialsConnectionFactoryAdapter();
             ucfa.setTargetConnectionFactory(cf);
             ucfa.setPassword(password);

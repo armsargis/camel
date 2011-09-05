@@ -29,8 +29,8 @@ import javax.sql.DataSource;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
-import org.apache.camel.impl.ServiceSupport;
 import org.apache.camel.spi.RecoverableAggregationRepository;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,9 +109,8 @@ public class JdbcAggregationRepository extends ServiceSupport implements Recover
         jdbcTemplate = new JdbcTemplate(dataSource);
     }
 
-    @SuppressWarnings("unchecked")
     public Exchange add(final CamelContext camelContext, final String correlationId, final Exchange exchange) {
-        return (Exchange) transactionTemplate.execute(new TransactionCallback() {
+        return transactionTemplate.execute(new TransactionCallback<Exchange>() {
 
             public Exchange doInTransaction(TransactionStatus status) {
                 String sql;
@@ -163,9 +162,8 @@ public class JdbcAggregationRepository extends ServiceSupport implements Recover
         return result;
     }
 
-    @SuppressWarnings("unchecked")
     private Exchange get(final String key, final String repositoryName, final CamelContext camelContext) {
-        return (Exchange) transactionTemplateReadOnly.execute(new TransactionCallback() {
+        return transactionTemplateReadOnly.execute(new TransactionCallback<Exchange>() {
             public Exchange doInTransaction(TransactionStatus status) {
                 try {
                     final byte[] data = jdbcTemplate.queryForObject(
@@ -226,9 +224,8 @@ public class JdbcAggregationRepository extends ServiceSupport implements Recover
         });
     }
 
-    @SuppressWarnings("unchecked")
     public Set<String> getKeys() {
-        return (LinkedHashSet<String>) transactionTemplateReadOnly.execute(new TransactionCallback() {
+        return transactionTemplateReadOnly.execute(new TransactionCallback<LinkedHashSet<String>>() {
             public LinkedHashSet<String> doInTransaction(TransactionStatus status) {
                 List<String> keys = jdbcTemplate.query("SELECT " + ID + " FROM " + getRepositoryName(),
                         new RowMapper<String>() {
@@ -243,9 +240,8 @@ public class JdbcAggregationRepository extends ServiceSupport implements Recover
         });
     }
 
-    @SuppressWarnings("unchecked")
     public Set<String> scan(CamelContext camelContext) {
-        return (LinkedHashSet<String>) transactionTemplateReadOnly.execute(new TransactionCallback() {
+        return transactionTemplateReadOnly.execute(new TransactionCallback<LinkedHashSet<String>>() {
             public LinkedHashSet<String> doInTransaction(TransactionStatus status) {
                 List<String> keys = jdbcTemplate.query("SELECT " + ID + " FROM " + getRepositoryNameCompleted(),
                         new RowMapper<String>() {

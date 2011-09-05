@@ -36,6 +36,7 @@ import org.apache.camel.SuspendableService;
 import org.apache.camel.spi.RouteStartupOrder;
 import org.apache.camel.spi.ShutdownAware;
 import org.apache.camel.spi.ShutdownStrategy;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.EventHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ServiceHelper;
@@ -275,7 +276,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
 
     private ExecutorService getExecutorService() {
         if (executor == null) {
-            executor = camelContext.getExecutorServiceStrategy().newSingleThreadExecutor(this, "ShutdownTask");
+            executor = camelContext.getExecutorServiceManager().newSingleThreadExecutor(this, "ShutdownTask");
         }
         return executor;
     }
@@ -293,7 +294,7 @@ public class DefaultShutdownStrategy extends ServiceSupport implements ShutdownS
     @Override
     protected void doShutdown() throws Exception {
         if (executor != null) {
-            camelContext.getExecutorServiceStrategy().shutdownNow(executor);
+            camelContext.getExecutorServiceManager().shutdownNow(executor);
             // should clear executor so we can restart by creating a new thread pool
             executor = null;
         }

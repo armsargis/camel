@@ -17,7 +17,6 @@
 package org.apache.camel
 package scala.dsl
 
-import org.apache.camel.builder.PredicateBuilder
 import org.apache.camel.model.ChoiceDefinition
 import org.apache.camel.scala.dsl.builder.RouteBuilder
 
@@ -29,8 +28,8 @@ case class SChoiceDefinition(override val target: ChoiceDefinition)(implicit val
   }
   
   override def when(filter: Exchange => Any) = {
-    // should be evaluated as a predicate
-    val predicate = PredicateBuilder.toPredicate(filter)
+    // uses implicit conversion
+    val predicate = filter
     target.when(predicate)
     this
   }

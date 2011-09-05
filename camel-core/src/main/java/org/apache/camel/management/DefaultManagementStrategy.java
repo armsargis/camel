@@ -23,6 +23,8 @@ import java.util.List;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelContextAware;
 import org.apache.camel.ManagementStatisticsLevel;
+import org.apache.camel.management.event.DefaultEventFactory;
+import org.apache.camel.management.mbean.Statistic;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.spi.EventFactory;
 import org.apache.camel.spi.EventNotifier;
@@ -31,7 +33,6 @@ import org.apache.camel.spi.ManagementNamingStrategy;
 import org.apache.camel.spi.ManagementObjectStrategy;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.util.ServiceHelper;
-import org.fusesource.commons.management.Statistic;
 
 /**
  * A default management strategy that does <b>not</b> manage.
@@ -127,7 +128,7 @@ public class DefaultManagementStrategy implements ManagementStrategy, CamelConte
         // noop
     }
 
-    public void manageNamedObject(Object managedObject, Object preferedName) throws Exception {
+    public void manageNamedObject(Object managedObject, Object preferredName) throws Exception {
         // noop
     }
 

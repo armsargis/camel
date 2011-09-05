@@ -33,6 +33,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.xml.sax.InputSource;
 
+import org.apache.camel.BytesSource;
 import org.apache.camel.CamelContext;
 import org.apache.camel.ContextTestSupport;
 import org.apache.camel.Exchange;
@@ -161,6 +162,18 @@ public class XmlConverterTest extends ContextTestSupport {
 
         assertNotNull(out);
         assertEquals("<foo>bar</foo>", conv.toString(out, null));
+    }
+
+    public void testToSaxSourceFromFile() throws Exception {
+        XmlConverter conv = new XmlConverter();
+
+        deleteDirectory("target/xml");
+        template.sendBodyAndHeader("file:target/xml", "<foo>bar</foo>", Exchange.FILE_NAME, "myxml.xml");
+        File file = new File("target/xml/myxml.xml");
+
+        SAXSource out = conv.toSAXSource(file, null);
+        assertNotNull(out);
+        assertEquals("<foo>bar</foo>", context.getTypeConverter().convertTo(String.class, out));
     }
 
     public void testToSaxSourceByDomSource() throws Exception {
@@ -327,6 +340,18 @@ public class XmlConverterTest extends ContextTestSupport {
 
         InputStream is = context.getTypeConverter().convertTo(InputStream.class, "<foo>bar</foo>");
         DOMSource out = conv.toDOMSource(is);
+        assertNotNull(out);
+        assertEquals("<foo>bar</foo>", context.getTypeConverter().convertTo(String.class, out));
+    }
+
+    public void testToDomSourceFromFile() throws Exception {
+        XmlConverter conv = new XmlConverter();
+
+        deleteDirectory("target/xml");
+        template.sendBodyAndHeader("file:target/xml", "<foo>bar</foo>", Exchange.FILE_NAME, "myxml.xml");
+        File file = new File("target/xml/myxml.xml");
+
+        DOMSource out = conv.toDOMSource(file);
         assertNotNull(out);
         assertEquals("<foo>bar</foo>", context.getTypeConverter().convertTo(String.class, out));
     }

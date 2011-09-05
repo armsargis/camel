@@ -35,12 +35,15 @@ import org.springframework.jms.core.JmsOperations;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.core.MessageCreator;
 import org.springframework.jms.core.SessionCallback;
+import org.springframework.jms.listener.AbstractMessageListenerContainer;
 import org.springframework.jms.listener.DefaultMessageListenerContainer;
+import org.springframework.jms.listener.SimpleMessageListenerContainer;
 import org.springframework.jms.support.JmsUtils;
 import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.destination.DestinationResolver;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.util.Assert;
+import org.springframework.util.ErrorHandler;
 
 import static org.apache.camel.component.jms.JmsMessageHelper.normalizeDestinationName;
 
@@ -64,6 +67,8 @@ public class JmsConfiguration implements Cloneable {
     private String acknowledgementModeName;
     // Used to configure the spring Container
     private ExceptionListener exceptionListener;
+    private ConsumerType consumerType = ConsumerType.Default;
+    private ErrorHandler errorHandler;    
     private boolean autoStartup = true;
     private boolean acceptMessagesWhileStopping;
     private String clientId;
@@ -80,6 +85,7 @@ public class JmsConfiguration implements Cloneable {
     private long receiveTimeout = -1;
     private long requestTimeout = 20000L;
     private int idleTaskExecutionLimit = 1;
+    private int idleConsumerLimit = 1;
     private int maxConcurrentConsumers;
     // JmsTemplate only
     private Boolean explicitQosEnabled;
@@ -118,6 +124,7 @@ public class JmsConfiguration implements Cloneable {
     private boolean forceSendOriginalMessage;
     // to force disabling time to live (works in both in-only or in-out mode)
     private boolean disableTimeToLive;
+    private ReplyToType replyToType;
 
     public JmsConfiguration() {
     }
@@ -149,7 +156,7 @@ public class JmsConfiguration implements Cloneable {
         public void send(final String destinationName,
                          final MessageCreator messageCreator,
                          final MessageSentCallback callback) throws JmsException {
-            execute(new SessionCallback() {
+            execute(new SessionCallback<Object>() {
                 public Object doInJms(Session session) throws JMSException {
                     Destination destination = resolveDestinationName(session, destinationName);
                     return doSendToDestination(destination, messageCreator, callback, session);
@@ -160,7 +167,7 @@ public class JmsConfiguration implements Cloneable {
         public void send(final Destination destination,
                          final MessageCreator messageCreator,
                          final MessageSentCallback callback) throws JmsException {
-            execute(new SessionCallback() {
+            execute(new SessionCallback<Object>() {
                 public Object doInJms(Session session) throws JMSException {
                     return doSendToDestination(destination, messageCreator, callback, session);
                 }
@@ -169,7 +176,7 @@ public class JmsConfiguration implements Cloneable {
 
         public void send(final String destinationName,
                          final MessageCreator messageCreator) throws JmsException {
-            execute(new SessionCallback() {
+            execute(new SessionCallback<Object>() {
                 public Object doInJms(Session session) throws JMSException {
                     Destination destination = resolveDestinationName(session, destinationName);
                     return doSendToDestination(destination, messageCreator, null, session);
@@ -179,7 +186,7 @@ public class JmsConfiguration implements Cloneable {
 
         public void send(final Destination destination,
                          final MessageCreator messageCreator) throws JmsException {
-            execute(new SessionCallback() {
+            execute(new SessionCallback<Object>() {
                 public Object doInJms(Session session) throws JMSException {
                     return doSendToDestination(destination, messageCreator, null, session);
                 }
@@ -356,15 +363,33 @@ public class JmsConfiguration implements Cloneable {
         return template;
     }
 
-    public DefaultMessageListenerContainer createMessageListenerContainer(JmsEndpoint endpoint) throws Exception {
-        DefaultMessageListenerContainer container = new JmsMessageListenerContainer(endpoint);
+    public AbstractMessageListenerContainer createMessageListenerContainer(JmsEndpoint endpoint) throws Exception {
+        AbstractMessageListenerContainer container = chooseMessageListenerContainerImplementation(endpoint);
         configureMessageListenerContainer(container, endpoint);
         return container;
     }
 
+    public AbstractMessageListenerContainer chooseMessageListenerContainerImplementation(JmsEndpoint endpoint) {
+        switch (consumerType) {
+        case Simple:
+            return new SimpleJmsMessageListenerContainer(endpoint);
+        case Default:
+            return new DefaultJmsMessageListenerContainer(endpoint);
+        default:
+            throw new IllegalArgumentException("Unknown consumer type: " + consumerType);
+        }
+    }
 
     // Properties
     // -------------------------------------------------------------------------
+
+    public ConsumerType getConsumerType() {
+        return consumerType;
+    }
+
+    public void setConsumerType(ConsumerType consumerType) {
+        this.consumerType = consumerType;
+    }
 
     public ConnectionFactory getConnectionFactory() {
         if (connectionFactory == null) {
@@ -459,6 +484,14 @@ public class JmsConfiguration implements Cloneable {
         this.exceptionListener = exceptionListener;
     }
 
+    public void setErrorHandler(ErrorHandler errorHandler) {
+        this.errorHandler = errorHandler;
+    }
+
+    public ErrorHandler getErrorHandler() {
+        return errorHandler;
+    }
+    
     @Deprecated
     public boolean isSubscriptionDurable() {
         return subscriptionDurable;
@@ -585,6 +618,14 @@ public class JmsConfiguration implements Cloneable {
         this.idleTaskExecutionLimit = idleTaskExecutionLimit;
     }
 
+    public int getIdleConsumerLimit() {
+        return idleConsumerLimit;
+    }
+
+    public void setIdleConsumerLimit(int idleConsumerLimit) {
+        this.idleConsumerLimit = idleConsumerLimit;
+    }
+    
     public int getMaxConcurrentConsumers() {
         return maxConcurrentConsumers;
     }
@@ -808,7 +849,7 @@ public class JmsConfiguration implements Cloneable {
     }
 
 
-    protected void configureMessageListenerContainer(DefaultMessageListenerContainer container,
+    protected void configureMessageListenerContainer(AbstractMessageListenerContainer container,
                                                      JmsEndpoint endpoint) throws Exception {
         container.setConnectionFactory(getListenerConnectionFactory());
         if (endpoint instanceof DestinationEndpoint) {
@@ -830,6 +871,10 @@ public class JmsConfiguration implements Cloneable {
             container.setExceptionListener(exceptionListener);
         }
 
+        if (errorHandler != null) {
+            container.setErrorHandler(errorHandler);
+        }
+
         container.setAcceptMessagesWhileStopping(acceptMessagesWhileStopping);
         container.setExposeListenerSession(exposeListenerSession);
         container.setSessionTransacted(transacted);
@@ -847,6 +892,33 @@ public class JmsConfiguration implements Cloneable {
             container.setMessageSelector(endpoint.getSelector());
         }
 
+        if (container instanceof DefaultMessageListenerContainer) {
+            DefaultMessageListenerContainer listenerContainer = (DefaultMessageListenerContainer) container;
+            configureDefaultMessageListenerContainer(endpoint, listenerContainer);
+        } else if (container instanceof SimpleMessageListenerContainer) {
+            SimpleMessageListenerContainer listenerContainer = (SimpleMessageListenerContainer) container;
+            configureSimpleMessageListenerContainer(listenerContainer);
+        }
+    }
+
+    private void configureSimpleMessageListenerContainer(SimpleMessageListenerContainer listenerContainer) {
+        if (maxConcurrentConsumers > 0) {
+            if (maxConcurrentConsumers < concurrentConsumers) {
+                throw new IllegalArgumentException("Property maxConcurrentConsumers: " + maxConcurrentConsumers + " must be higher than concurrentConsumers: "
+                        + concurrentConsumers);
+            }
+            listenerContainer.setConcurrency(concurrentConsumers + "-" + maxConcurrentConsumers);
+        } else if (concurrentConsumers >= 0) {
+            listenerContainer.setConcurrentConsumers(concurrentConsumers);
+        }
+
+        listenerContainer.setPubSubNoLocal(pubSubNoLocal);
+        if (taskExecutor != null) {
+            listenerContainer.setTaskExecutor(taskExecutor);
+        }
+    }
+
+    private void configureDefaultMessageListenerContainer(JmsEndpoint endpoint, DefaultMessageListenerContainer container) {
         if (concurrentConsumers >= 0) {
             container.setConcurrentConsumers(concurrentConsumers);
         }
@@ -862,6 +934,9 @@ public class JmsConfiguration implements Cloneable {
         if (idleTaskExecutionLimit >= 0) {
             container.setIdleTaskExecutionLimit(idleTaskExecutionLimit);
         }
+        if (idleConsumerLimit >= 0) {
+            container.setIdleConsumerLimit(idleConsumerLimit);
+        }        
         if (maxConcurrentConsumers > 0) {
             if (maxConcurrentConsumers < concurrentConsumers) {
                 throw new IllegalArgumentException("Property maxConcurrentConsumers: " + maxConcurrentConsumers
@@ -1101,5 +1176,20 @@ public class JmsConfiguration implements Cloneable {
 
     public void setDisableTimeToLive(boolean disableTimeToLive) {
         this.disableTimeToLive = disableTimeToLive;
+    }
+
+    /**
+     * Gets the reply to type.
+     * <p/>
+     * Will only return a value if this option has been explicit configured.
+     *
+     * @return the reply type if configured, otherwise <tt>null</tt>
+     */
+    public ReplyToType getReplyToType() {
+        return replyToType;
+    }
+
+    public void setReplyToType(ReplyToType replyToType) {
+        this.replyToType = replyToType;
     }
 }

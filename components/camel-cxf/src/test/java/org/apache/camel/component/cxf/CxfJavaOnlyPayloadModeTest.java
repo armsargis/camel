@@ -31,14 +31,18 @@ import org.junit.Test;
  * @version 
  */
 public class CxfJavaOnlyPayloadModeTest extends CamelTestSupport {
-    private static int port1 = AvailablePortFinder.getNextAvailable(); 
+    private static int port1 = CXFTestSupport.getPort1(); 
 
-    private String url = "cxf://http://localhost:" + port1 + "/helloworld"
+    private String url = "cxf://http://localhost:" + port1 + "/CxfJavaOnlyPayloadModeTest/helloworld"
         + "?wsdlURL=classpath:person.wsdl"
         + "&serviceName={http://camel.apache.org/wsdl-first}PersonService"
         + "&portName={http://camel.apache.org/wsdl-first}soap"
         + "&dataFormat=PAYLOAD"
         + "&properties.exceptionMessageCauseEnabled=true&properties.faultStackTraceEnabled=true";
+    @Override
+    public boolean isCreateCamelContextPerClass() {
+        return true;
+    }
 
     @Test
     public void testCxfJavaOnly() throws Exception {

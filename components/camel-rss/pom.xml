@@ -32,16 +32,8 @@
   <description>Camel RSS support</description>
   
   <properties>
-    <camel.osgi.export.pkg>org.apache.camel.component.rss.*;org.apache.camel.dataformat.rss.*</camel.osgi.export.pkg>
+    <camel.osgi.export.pkg>org.apache.camel.component.rss.*;${camel.osgi.version},org.apache.camel.dataformat.rss.*</camel.osgi.export.pkg>
   </properties>
- 
-  <repositories>
-    <repository>
-      <id>java.net.m2</id>
-      <name>java.net Maven 2 Repo</name>
-      <url>http://download.java.net/maven/2</url>
-    </repository>
-  </repositories>
  
   <dependencies>
     <!-- runtime -->
@@ -77,26 +69,8 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>    
-    <!-- to allow Spring annotations (jmx) to be tested -->
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-context</artifactId>
-      <optional>true</optional>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-aop</artifactId>
-      <optional>true</optional>
       <scope>test</scope>
     </dependency>    
   </dependencies>

@@ -39,7 +39,8 @@ import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.RuntimeTransformException;
 import org.apache.camel.converter.jaxp.XmlConverter;
-import org.apache.camel.impl.SynchronizationAdapter;
+import org.apache.camel.converter.jaxp.XmlErrorListener;
+import org.apache.camel.support.SynchronizationAdapter;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.FileUtil;
 
@@ -337,6 +338,7 @@ public class XsltBuilder implements Processor {
             uriResolver = new XsltUriResolver(exchange.getContext().getClassResolver(), null);
         }
         transformer.setURIResolver(uriResolver);
+        transformer.setErrorListener(new XmlErrorListener());
 
         transformer.clearParameters();
 
@@ -360,7 +362,7 @@ public class XsltBuilder implements Processor {
         }
     }
 
-    private final class XsltBuilderOnCompletion extends SynchronizationAdapter {
+    private static final class XsltBuilderOnCompletion extends SynchronizationAdapter {
         private final String fileName;
 
         private XsltBuilderOnCompletion(String fileName) {

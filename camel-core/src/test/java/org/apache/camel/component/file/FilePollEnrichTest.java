@@ -56,9 +56,11 @@ public class FilePollEnrichTest extends ContextTestSupport {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
-                from("timer:foo?period=2000").routeId("foo")
+                from("timer:foo?period=1000").routeId("foo")
+                    .log("Trigger timer foo")
                     .pollEnrich("file:target/pollenrich?move=done", 5000)
                     .convertBodyTo(String.class)
+                    .log("Polled filed ${file:name}")
                     .to("mock:result")
                     .process(new Processor() {
                         public void process(Exchange exchange) throws Exception {

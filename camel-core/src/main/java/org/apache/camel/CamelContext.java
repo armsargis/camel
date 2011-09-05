@@ -32,7 +32,7 @@ import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.DataFormatResolver;
 import org.apache.camel.spi.Debugger;
 import org.apache.camel.spi.EndpointStrategy;
-import org.apache.camel.spi.ExecutorServiceStrategy;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.FactoryFinder;
 import org.apache.camel.spi.FactoryFinderResolver;
 import org.apache.camel.spi.InflightRepository;
@@ -40,6 +40,7 @@ import org.apache.camel.spi.Injector;
 import org.apache.camel.spi.InterceptStrategy;
 import org.apache.camel.spi.Language;
 import org.apache.camel.spi.LifecycleStrategy;
+import org.apache.camel.spi.ManagementMBeanAssembler;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.NodeIdFactory;
 import org.apache.camel.spi.PackageScanClassResolver;
@@ -573,6 +574,13 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
     Injector getInjector();
 
     /**
+     * Returns the management mbean assembler
+     *
+     * @return the mbean assembler
+     */
+    ManagementMBeanAssembler getManagementMBeanAssembler();
+
+    /**
      * Returns the lifecycle strategies used to handle lifecycle notifications
      *
      * @return the lifecycle strategies
@@ -910,18 +918,27 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
     void setShutdownStrategy(ShutdownStrategy shutdownStrategy);
 
     /**
-     * Gets the current {@link org.apache.camel.spi.ExecutorServiceStrategy}
+     * Gets the current {@link org.apache.camel.spi.ExecutorServiceManager}
      *
-     * @return the strategy
+     * @return the manager
      */
-    ExecutorServiceStrategy getExecutorServiceStrategy();
+    ExecutorServiceManager getExecutorServiceManager();
 
     /**
-     * Sets a custom {@link org.apache.camel.spi.ExecutorServiceStrategy}
+     * Gets the current {@link org.apache.camel.spi.ExecutorServiceStrategy}
      *
-     * @param executorServiceStrategy the custom strategy
+     * @return the manager
+     * @deprecated use {@link #getExecutorServiceManager()}
      */
-    void setExecutorServiceStrategy(ExecutorServiceStrategy executorServiceStrategy);
+    @Deprecated
+    org.apache.camel.spi.ExecutorServiceStrategy getExecutorServiceStrategy();
+
+    /**
+     * Sets a custom {@link org.apache.camel.spi.ExecutorServiceManager}
+     *
+     * @param executorServiceManager the custom manager
+     */
+    void setExecutorServiceManager(ExecutorServiceManager executorServiceManager);
 
     /**
      * Gets the current {@link org.apache.camel.spi.ProcessorFactory}
@@ -1006,7 +1023,5 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param useBreadcrumb <tt>true</tt> to enable breadcrumb, <tt>false</tt> to disable
      */
     void setUseBreadcrumb(Boolean useBreadcrumb);
-
-
 
 }

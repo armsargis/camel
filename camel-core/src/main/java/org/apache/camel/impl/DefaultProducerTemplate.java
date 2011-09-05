@@ -33,6 +33,7 @@ import org.apache.camel.NoSuchEndpointException;
 import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.spi.Synchronization;
+import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.ObjectHelper;
@@ -690,7 +691,7 @@ public class DefaultProducerTemplate extends ServiceSupport implements ProducerT
             if (executor != null) {
                 return executor;
             }
-            executor = context.getExecutorServiceStrategy().newDefaultThreadPool(this, "ProducerTemplate");
+            executor = context.getExecutorServiceManager().newDefaultThreadPool(this, "ProducerTemplate");
         }
 
         ObjectHelper.notNull(executor, "ExecutorService");
@@ -713,7 +714,7 @@ public class DefaultProducerTemplate extends ServiceSupport implements ProducerT
         producerCache = null;
 
         if (executor != null) {
-            context.getExecutorServiceStrategy().shutdownNow(executor);
+            context.getExecutorServiceManager().shutdownNow(executor);
             executor = null;
         }
     }

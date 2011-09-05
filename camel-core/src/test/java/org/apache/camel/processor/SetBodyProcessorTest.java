@@ -24,8 +24,6 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.impl.DefaultMessage;
 
-import static org.apache.camel.language.simple.SimpleLanguage.simple;
-
 /**
  * @version 
  */
@@ -77,7 +75,7 @@ public class SetBodyProcessorTest extends ContextTestSupport {
         };
     }
 
-    private class MyMessage extends DefaultMessage {
+    private static class MyMessage extends DefaultMessage {
 
         @Override
         public MyMessage newInstance() {

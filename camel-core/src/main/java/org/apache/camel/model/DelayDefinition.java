@@ -31,7 +31,6 @@ import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.processor.Delayer;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.util.concurrent.ExecutorServiceHelper;
 
 /**
  * Represents an XML &lt;delay/&gt; element
@@ -62,7 +61,7 @@ public class DelayDefinition extends ExpressionNode implements ExecutorServiceAw
 
     @Override
     public String getLabel() {
-        return "delay";
+        return "delay[" + getExpression() + "]";
     }
 
     @Override
@@ -82,9 +81,9 @@ public class DelayDefinition extends ExpressionNode implements ExecutorServiceAw
 
         ScheduledExecutorService scheduled = null;
         if (getAsyncDelayed() != null && getAsyncDelayed()) {
-            scheduled = ExecutorServiceHelper.getConfiguredScheduledExecutorService(routeContext, "Delay", this);
+            scheduled = ProcessorDefinitionHelper.getConfiguredScheduledExecutorService(routeContext, "Delay", this);
             if (scheduled == null) {
-                scheduled = routeContext.getCamelContext().getExecutorServiceStrategy().newScheduledThreadPool(this, "Delay");
+                scheduled = routeContext.getCamelContext().getExecutorServiceManager().newSingleThreadScheduledExecutor(this, "Delay");
             }
         }
 

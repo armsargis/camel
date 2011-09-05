@@ -22,13 +22,12 @@ import java.util.List;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Processor;
 import org.apache.camel.model.ProcessorDefinition;
-import org.apache.camel.processor.DelegateAsyncProcessor;
 import org.apache.camel.processor.DelegateProcessor;
 import org.apache.camel.processor.WrapProcessor;
 
 public class TraceInterceptorFactoryCreatesHandlerTest extends TracingTestBase {
 
-    private class TraceInterceptorFactoryCreatesHandlerTestFactory implements TraceInterceptorFactory {
+    private static class TraceInterceptorFactoryCreatesHandlerTestFactory implements TraceInterceptorFactory {
         private List<StringBuilder> eventMessages;
         private boolean traceAllNodes;
 

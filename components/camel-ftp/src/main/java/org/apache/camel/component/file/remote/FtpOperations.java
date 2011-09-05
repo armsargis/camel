@@ -507,7 +507,9 @@ public class FtpOperations implements RemoteFileOperations<FTPFile> {
 
     public boolean existsFile(String name) throws GenericFileOperationFailedException {
         log.trace("existsFile({})", name);
-
+        if (endpoint.isFastExistsCheck()) {
+            return fastExistsFile(name);
+        }
         // check whether a file already exists
         String directory = FileUtil.onlyPath(name);
         String onlyName = FileUtil.stripPath(name);
@@ -530,6 +532,19 @@ public class FtpOperations implements RemoteFileOperations<FTPFile> {
                 }
             }
             return false;
+        } catch (IOException e) {
+            throw new GenericFileOperationFailedException(client.getReplyCode(), client.getReplyString(), e.getMessage(), e);
+        }
+    }
+
+    protected boolean fastExistsFile(String name) throws GenericFileOperationFailedException {
+        log.trace("fastexistsFile({})", name);
+        try {
+            String[] names = client.listNames(name);
+            if (names == null) {
+                return false;
+            }
+            return names.length >= 1;
         } catch (IOException e) {
             throw new GenericFileOperationFailedException(client.getReplyCode(), client.getReplyString(), e.getMessage(), e);
         }

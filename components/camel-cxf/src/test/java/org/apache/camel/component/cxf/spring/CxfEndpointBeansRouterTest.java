@@ -19,24 +19,31 @@ package org.apache.camel.component.cxf.spring;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.xml.namespace.QName;
+
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
+import org.apache.camel.component.cxf.CXFTestSupport;
 import org.apache.camel.component.cxf.CxfEndpoint;
 import org.apache.camel.component.cxf.common.message.CxfConstants;
+import org.apache.cxf.transport.http.HTTPException;
+
 import org.junit.Test;
 
 public class CxfEndpointBeansRouterTest extends AbstractSpringBeanTestSupport {
 
     protected String[] getApplicationContextFiles() {
+        CXFTestSupport.getPort1();
         return new String[]{"org/apache/camel/component/cxf/spring/CxfEndpointBeansRouter.xml"};
     }
 
     @Test
     public void testCxfEndpointBeanDefinitionParser() {
         CxfEndpoint routerEndpoint = (CxfEndpoint)ctx.getBean("routerEndpoint");
-        assertEquals("Got the wrong endpoint address", routerEndpoint.getAddress(), "http://localhost:9000/router");
+        assertEquals("Got the wrong endpoint address", routerEndpoint.getAddress(),
+                     "http://localhost:" + CXFTestSupport.getPort1() + "/CxfEndpointBeansRouterTest/router");
         assertEquals("Got the wrong endpont service class", 
                      "org.apache.camel.component.cxf.HelloService", 
                      routerEndpoint.getServiceClass().getName());
@@ -58,7 +65,25 @@ public class CxfEndpointBeansRouterTest extends AbstractSpringBeanTestSupport {
         });
 
         Exception ex = reply.getException();
-        assertTrue("Should get the fault here", ex instanceof org.apache.cxf.interceptor.Fault);
+        assertTrue("Should get the fault here", 
+                   ex instanceof org.apache.cxf.interceptor.Fault
+                   || ex instanceof HTTPException);
+    }
+
+    @Test
+    public void testCxfBeanWithCamelPropertiesHolder() throws Exception {
+        // get the camelContext from application context
+        CamelContext camelContext = (CamelContext) ctx.getBean("camel");
+        CxfEndpoint testEndpoint = (CxfEndpoint)camelContext.getEndpoint("cxf:bean:testEndpoint");
+        QName endpointName = QName.valueOf("{http://org.apache.camel.component.cxf}myEndpoint");
+        QName serviceName = QName.valueOf("{http://org.apache.camel.component.cxf}myService");
+
+        assertEquals("Got a wrong address", "http://localhost:9000/testEndpoint", testEndpoint.getAddress());
+        assertEquals("Got a wrong bindingId", "http://schemas.xmlsoap.org/wsdl/soap12/", testEndpoint.getBindingId());
+        assertEquals("Got a wrong transportId", "http://cxf.apache.org/transports/http", testEndpoint.getTransportId());
+        assertEquals("Got a wrong endpointName", endpointName, testEndpoint.getPortName());
+        assertEquals("Got a wrong WsdlURL", "wsdl/test.wsdl", testEndpoint.getWsdlURL());
+        assertEquals("Got a wrong serviceName", serviceName, testEndpoint.getServiceName());
     }
    
 }

@@ -26,8 +26,8 @@ import org.apache.camel.builder.RouteBuilder;
  */
 public class AsyncEndpointRecipientList4Test extends ContextTestSupport {
 
-    private static String beforeThreadName;
-    private static String afterThreadName;
+    private static long beforeThreadId;
+    private static long afterThreadId;
 
     public void testAsyncEndpoint() throws Exception {
         getMockEndpoint("mock:before").expectedBodiesReceived("Hello Camel");
@@ -39,7 +39,7 @@ public class AsyncEndpointRecipientList4Test extends ContextTestSupport {
 
         assertMockEndpointsSatisfied();
 
-        assertFalse("Should use different threads", beforeThreadName.equalsIgnoreCase(afterThreadName));
+        assertTrue("Should use different threads " + beforeThreadId + ":" + afterThreadId, beforeThreadId != afterThreadId);
     }
 
     @Override
@@ -50,25 +50,25 @@ public class AsyncEndpointRecipientList4Test extends ContextTestSupport {
                 context.addComponent("async", new MyAsyncComponent());
 
                 from("direct:start")
-                        .to("mock:before")
-                        .to("log:before")
-                        .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
-                                beforeThreadName = Thread.currentThread().getName();
-                            }
-                        })
-                        .recipientList(constant("async:Hi Camel,async:Hi World,direct:foo"));
+                    .to("mock:before")
+                    .to("log:before")
+                    .process(new Processor() {
+                        public void process(Exchange exchange) throws Exception {
+                            beforeThreadId = Thread.currentThread().getId();
+                        }
+                    })
+                    .recipientList(constant("async:hi:camel,async:hi:world,direct:foo"));
 
                 from("direct:foo")
-                        .process(new Processor() {
-                            public void process(Exchange exchange) throws Exception {
-                                afterThreadName = Thread.currentThread().getName();
-                                exchange.getOut().setBody("Bye Camel");
-                            }
-                        })
-                        .to("log:after")
-                        .to("mock:after")
-                        .to("mock:result");
+                    .process(new Processor() {
+                        public void process(Exchange exchange) throws Exception {
+                            afterThreadId = Thread.currentThread().getId();
+                            exchange.getOut().setBody("Bye Camel");
+                        }
+                    })
+                    .to("log:after")
+                    .to("mock:after")
+                    .to("mock:result");
             }
         };
     }

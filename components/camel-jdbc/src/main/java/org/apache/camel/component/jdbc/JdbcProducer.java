@@ -22,7 +22,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -58,23 +58,34 @@ public class JdbcProducer extends DefaultProducer {
      * Execute sql of exchange and set results on output
      */
     public void process(Exchange exchange) throws Exception {
+        if (getEndpoint().isResetAutoCommit()) {
+            processingSqlBySettingAutoCommit(exchange);
+        } else {
+            processingSqlWithoutSettingAutoCommit(exchange);
+        }
+        // populate headers
+        exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
+    }
+
+    private void processingSqlBySettingAutoCommit(Exchange exchange) throws Exception {
         String sql = exchange.getIn().getBody(String.class);
         Connection conn = null;
         Statement stmt = null;
         ResultSet rs = null;
         Boolean autoCommit = null;
-        
         try {
             conn = dataSource.getConnection();
             autoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false);
-            
+            if (autoCommit) {
+                conn.setAutoCommit(false);
+            }
+
             stmt = conn.createStatement();
-            
+
             if (parameters != null && !parameters.isEmpty()) {
                 IntrospectionSupport.setProperties(stmt, parameters);
             }
-            
+
             LOG.debug("Executing JDBC statement: {}", sql);
 
             if (stmt.execute(sql)) {
@@ -98,9 +109,36 @@ public class JdbcProducer extends DefaultProducer {
             resetAutoCommit(conn, autoCommit);
             closeQuietly(conn);
         }
+    }
 
-        // populate headers
-        exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
+    private void processingSqlWithoutSettingAutoCommit(Exchange exchange) throws Exception {
+        String sql = exchange.getIn().getBody(String.class);
+        Connection conn = null;
+        Statement stmt = null;
+        ResultSet rs = null;
+        try {
+            conn = dataSource.getConnection();
+
+            stmt = conn.createStatement();
+
+            if (parameters != null && !parameters.isEmpty()) {
+                IntrospectionSupport.setProperties(stmt, parameters);
+            }
+
+            LOG.debug("Executing JDBC statement: {}", sql);
+
+            if (stmt.execute(sql)) {
+                rs = stmt.getResultSet();
+                setResultSet(exchange, rs);
+            } else {
+                int updateCount = stmt.getUpdateCount();
+                exchange.getOut().setHeader(JdbcConstants.JDBC_UPDATE_COUNT, updateCount);
+            }
+        } finally {
+            closeQuietly(rs);
+            closeQuietly(stmt);
+            closeQuietly(conn);
+        }
     }
 
     private void closeQuietly(ResultSet rs) {
@@ -156,7 +194,7 @@ public class JdbcProducer extends DefaultProducer {
         List<Map<String, Object>> data = new ArrayList<Map<String, Object>>();
         int rowNumber = 0;
         while (rs.next() && (readSize == 0 || rowNumber < readSize)) {
-            Map<String, Object> row = new HashMap<String, Object>();
+            Map<String, Object> row = new LinkedHashMap<String, Object>();
             for (int i = 0; i < count; i++) {
                 int columnNumber = i + 1;
                 // use column label to get the name as it also handled SQL SELECT aliases

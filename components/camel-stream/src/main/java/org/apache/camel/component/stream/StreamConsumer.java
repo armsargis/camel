@@ -69,7 +69,7 @@ public class StreamConsumer extends DefaultConsumer implements Runnable {
 
         initializeStream();
 
-        executor = endpoint.getCamelContext().getExecutorServiceStrategy().newSingleThreadExecutor(this, endpoint.getEndpointUri());
+        executor = endpoint.getCamelContext().getExecutorServiceManager().newSingleThreadExecutor(this, endpoint.getEndpointUri());
         executor.execute(this);
 
         if (endpoint.getGroupLines() < 0) {
@@ -82,7 +82,7 @@ public class StreamConsumer extends DefaultConsumer implements Runnable {
         // important: do not close the stream as it will close the standard
         // system.in etc.
         if (executor != null) {
-            executor.shutdownNow();
+            endpoint.getCamelContext().getExecutorServiceManager().shutdownNow(executor);
             executor = null;
         }
         lines.clear();

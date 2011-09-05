@@ -45,9 +45,10 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.CamelExecutionException;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
+import org.apache.camel.Ordered;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.TypeConverter;
-import org.apache.camel.component.file.GenericFile;
+import org.apache.camel.WrappedFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1019,6 +1020,17 @@ public final class ObjectHelper {
     }
 
     /**
+     * Gets the annotation from the given instance.
+     *
+     * @param instance the instance
+     * @param type  the annotation
+     * @return the annotation, or <tt>null</tt> if the instance does not have the given annotation
+     */
+    public static <A extends java.lang.annotation.Annotation> A getAnnotation(Object instance, Class<A> type) {
+        return instance.getClass().getAnnotation(type);
+    }
+
+    /**
      * Closes the given resource if it is available, logging any closing
      * exceptions to the given log
      *
@@ -1238,9 +1250,9 @@ public final class ObjectHelper {
      * @return the scanner, is newer <tt>null</tt>
      */
     public static Scanner getScanner(Exchange exchange, Object value) {
-        if (value instanceof GenericFile) {
+        if (value instanceof WrappedFile) {
             // generic file is just a wrapper for the real file so call again with the real file
-            GenericFile<?> gf = (GenericFile<?>) value;
+            WrappedFile<?> gf = (WrappedFile<?>) value;
             return getScanner(exchange, gf.getFile());
         }
 

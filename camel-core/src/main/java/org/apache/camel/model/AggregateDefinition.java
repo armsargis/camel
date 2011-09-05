@@ -37,8 +37,9 @@ import org.apache.camel.processor.aggregate.AggregateProcessor;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.processor.aggregate.GroupedExchangeAggregationStrategy;
 import org.apache.camel.spi.AggregationRepository;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
-import org.apache.camel.util.concurrent.ExecutorServiceHelper;
+import org.apache.camel.util.concurrent.SynchronousExecutorService;
 
 /**
  * Represents an XML &lt;aggregate/&gt; element
@@ -97,18 +98,21 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     }
 
     public AggregateDefinition(Predicate predicate) {
+        this();
         if (predicate != null) {
             setExpression(new ExpressionDefinition(predicate));
         }
     }    
     
     public AggregateDefinition(Expression correlationExpression) {
+        this();
         if (correlationExpression != null) {
             setExpression(new ExpressionDefinition(correlationExpression));
         }
     }
 
     public AggregateDefinition(ExpressionDefinition correlationExpression) {
+        this();
         this.expression = correlationExpression;
     }
 
@@ -119,8 +123,11 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
 
     @Override
     public String toString() {
-        String expressionString = (getExpression() != null) ? getExpression().getLabel() : "";     
-        return "Aggregate[" + expressionString + " -> " + getOutputs() + "]";
+        return "Aggregate[" + description() + " -> " + getOutputs() + "]";
+    }
+    
+    protected String description() {
+        return getExpression() != null ? getExpression().getLabel() : "";
     }
 
     @Override
@@ -130,7 +137,7 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
 
     @Override
     public String getLabel() {
-        return "aggregate";
+        return "aggregate[" + description() + "]";
     }
 
     @Override
@@ -146,15 +153,15 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         Expression correlation = getExpression().createExpression(routeContext);
         AggregationStrategy strategy = createAggregationStrategy(routeContext);
 
-        // executor service is mandatory for the Aggregator
-        executorService = ExecutorServiceHelper.getConfiguredExecutorService(routeContext, "Aggregator", this);
+        executorService = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "Aggregator", this);
         if (executorService == null) {
+            // executor service is mandatory for the Aggregator
+            ExecutorServiceManager executorServiceManager = routeContext.getCamelContext().getExecutorServiceManager();
             if (isParallelProcessing()) {
-                // we are running in parallel so create a cached thread pool which grows/shrinks automatic
-                executorService = routeContext.getCamelContext().getExecutorServiceStrategy().newDefaultThreadPool(this, "Aggregator");
+                executorService = executorServiceManager.newDefaultThreadPool(this, "Aggregator");
             } else {
-                // use a synchronous thread pool if we are not running in parallel (will always use caller thread)
-                executorService = routeContext.getCamelContext().getExecutorServiceStrategy().newSynchronousThreadPool(this, "Aggregator");
+                // we do not run in parallel mode, but use a synchronous executor, so we run in current thread
+                executorService = new SynchronousExecutorService();
             }
         }
         AggregateProcessor answer = new AggregateProcessor(routeContext.getCamelContext(), processor, correlation, strategy, executorService);
