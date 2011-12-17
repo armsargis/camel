@@ -18,18 +18,17 @@ package org.apache.camel.management.mbean;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Expression;
+import org.apache.camel.api.management.ManagedResource;
+import org.apache.camel.api.management.mbean.ManagedDelayerMBean;
 import org.apache.camel.builder.ExpressionBuilder;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.processor.Delayer;
-import org.apache.camel.spi.management.ManagedAttribute;
-import org.apache.camel.spi.management.ManagedOperation;
-import org.apache.camel.spi.management.ManagedResource;
 
 /**
  * @version 
  */
 @ManagedResource(description = "Managed Delayer")
-public class ManagedDelayer extends ManagedProcessor {
+public class ManagedDelayer extends ManagedProcessor implements ManagedDelayerMBean {
     private final Delayer delayer;
 
     public ManagedDelayer(CamelContext context, Delayer delayer, ProcessorDefinition<?> definition) {
@@ -41,12 +40,10 @@ public class ManagedDelayer extends ManagedProcessor {
         return delayer;
     }
 
-    @ManagedAttribute(description = "Delay")
     public Long getDelay() {
         return getDelayer().getDelayValue();
     }
 
-    @ManagedOperation(description = "Set a constant delay in millis")
     public void constantDelay(Integer millis) {
         Expression delay = ExpressionBuilder.constantExpression(millis);
         getDelayer().setDelay(delay);

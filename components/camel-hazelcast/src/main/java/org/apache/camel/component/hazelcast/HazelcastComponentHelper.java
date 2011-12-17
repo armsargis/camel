@@ -43,19 +43,21 @@ public class HazelcastComponentHelper {
             headers.remove(HazelcastConstants.OPERATION);
         }
 
-        // set out headers
-        ex.getOut().setHeaders(headers);
+        // propagate headers if OUT message created
+        if (ex.hasOut()) {
+            ex.getOut().setHeaders(headers);
+        }
     }
 
     public static void setListenerHeaders(Exchange ex, String listenerType, String listenerAction, String cacheName) {
-        ex.getOut().setHeader(HazelcastConstants.CACHE_NAME, cacheName);
+        ex.getIn().setHeader(HazelcastConstants.CACHE_NAME, cacheName);
         HazelcastComponentHelper.setListenerHeaders(ex, listenerType, listenerAction);
     }
 
     public static void setListenerHeaders(Exchange ex, String listenerType, String listenerAction) {
-        ex.getOut().setHeader(HazelcastConstants.LISTENER_ACTION, listenerAction);
-        ex.getOut().setHeader(HazelcastConstants.LISTENER_TYPE, listenerType);
-        ex.getOut().setHeader(HazelcastConstants.LISTENER_TIME, new Date().getTime());
+        ex.getIn().setHeader(HazelcastConstants.LISTENER_ACTION, listenerAction);
+        ex.getIn().setHeader(HazelcastConstants.LISTENER_TYPE, listenerType);
+        ex.getIn().setHeader(HazelcastConstants.LISTENER_TIME, new Date().getTime());
     }
 
     /**

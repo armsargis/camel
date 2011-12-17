@@ -40,18 +40,19 @@ import org.apache.camel.AsyncProcessor;
 import org.apache.camel.CamelContext;
 import org.apache.camel.CamelExchangeException;
 import org.apache.camel.Endpoint;
+import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.Exchange;
 import org.apache.camel.Navigate;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
-import org.apache.camel.builder.ErrorHandlerBuilder;
-import org.apache.camel.impl.converter.AsyncProcessorTypeConverter;
+import org.apache.camel.Traceable;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.processor.aggregate.TimeoutAwareAggregationStrategy;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.spi.TracedRouteNodes;
 import org.apache.camel.spi.UnitOfWork;
 import org.apache.camel.support.ServiceSupport;
+import org.apache.camel.util.AsyncProcessorConverterHelper;
 import org.apache.camel.util.AsyncProcessorHelper;
 import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.EventHelper;
@@ -569,7 +570,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
             }
 
             // let the prepared process it, remember to begin the exchange pair
-            AsyncProcessor async = AsyncProcessorTypeConverter.convert(processor);
+            AsyncProcessor async = AsyncProcessorConverterHelper.convert(processor);
             pair.begin();
             sync = AsyncProcessorHelper.process(async, exchange, new AsyncCallback() {
                 public void done(boolean doneSync) {
@@ -701,7 +702,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
 
             // let the prepared process it, remember to begin the exchange pair
             // we invoke it synchronously as parallel async routing is too hard
-            AsyncProcessor async = AsyncProcessorTypeConverter.convert(processor);
+            AsyncProcessor async = AsyncProcessorConverterHelper.convert(processor);
             pair.begin();
             AsyncProcessorHelper.process(async, exchange);
         } finally {
@@ -796,6 +797,12 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
             result.add(createProcessorExchangePair(index++, processor, copy, routeContext));
         }
 
+        if (exchange.getException() != null) {
+            // force any exceptions occurred during creation of exchange paris to be thrown
+            // before returning the answer;
+            throw exchange.getException();
+        }
+
         return result;
     }
 
@@ -852,7 +859,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
             }
 
             LOG.trace("Creating error handler for: {}", processor);
-            ErrorHandlerBuilder builder = routeContext.getRoute().getErrorHandlerBuilder();
+            ErrorHandlerFactory builder = routeContext.getRoute().getErrorHandlerBuilder();
             // create error handler (create error handler directly to keep it light weight,
             // instead of using ProcessorDefinition.wrapInErrorHandler)
             try {
@@ -864,13 +871,13 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
             }
 
             // and wrap in unit of work processor so the copy exchange also can run under UoW
-            answer = createUnitOfWorkProcessor(processor, exchange);
+            answer = createUnitOfWorkProcessor(routeContext, processor, exchange);
 
             // add to cache
             errorHandlers.putIfAbsent(key, answer);
         } else {
             // and wrap in unit of work processor so the copy exchange also can run under UoW
-            answer = createUnitOfWorkProcessor(processor, exchange);
+            answer = createUnitOfWorkProcessor(routeContext, processor, exchange);
         }
 
         return answer;
@@ -879,16 +886,17 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
     /**
      * Strategy to create the {@link UnitOfWorkProcessor} to be used for the sub route
      *
-     * @param processor the processor wrapped in this unit of work processor
-     * @param exchange  the exchange
+     * @param routeContext the route context
+     * @param processor    the processor wrapped in this unit of work processor
+     * @param exchange     the exchange
      * @return the unit of work processor
      */
-    protected UnitOfWorkProcessor createUnitOfWorkProcessor(Processor processor, Exchange exchange) {
+    protected UnitOfWorkProcessor createUnitOfWorkProcessor(RouteContext routeContext, Processor processor, Exchange exchange) {
         UnitOfWork parent = exchange.getProperty(Exchange.PARENT_UNIT_OF_WORK, UnitOfWork.class);
         if (parent != null) {
-            return new ChildUnitOfWorkProcessor(parent, processor);
+            return new ChildUnitOfWorkProcessor(parent, routeContext, processor);
         } else {
-            return new UnitOfWorkProcessor(processor);
+            return new UnitOfWorkProcessor(routeContext, processor);
         }
     }
 

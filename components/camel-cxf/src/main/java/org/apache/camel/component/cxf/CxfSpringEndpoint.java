@@ -16,31 +16,22 @@
  */
 package org.apache.camel.component.cxf;
 
-import java.lang.reflect.Proxy;
-
 import javax.xml.namespace.QName;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.component.cxf.common.message.CxfConstants;
-import org.apache.camel.spring.SpringCamelContext;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.cxf.Bus;
 import org.apache.cxf.BusFactory;
 import org.apache.cxf.bus.spring.BusWiringBeanFactoryPostProcessor;
 import org.apache.cxf.bus.spring.SpringBusFactory;
-import org.apache.cxf.common.classloader.ClassLoaderUtils;
-import org.apache.cxf.configuration.spring.ConfigurerImpl;
 import org.apache.cxf.endpoint.Client;
 import org.apache.cxf.frontend.ClientFactoryBean;
-import org.apache.cxf.frontend.ClientProxy;
-import org.apache.cxf.frontend.ClientProxyFactoryBean;
 import org.apache.cxf.frontend.ServerFactoryBean;
 import org.apache.cxf.jaxws.JaxWsServerFactoryBean;
 import org.apache.cxf.version.Version;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.context.ConfigurableApplicationContext;
 
 /**
  * Defines the <a href="http://camel.apache.org/cxf.html">CXF Endpoint</a>
@@ -51,10 +42,6 @@ public class CxfSpringEndpoint extends CxfEndpoint implements ApplicationContext
 
     private String beanId;
     private ApplicationContext applicationContext;
-
-    public CxfSpringEndpoint(CamelContext context, String address) throws Exception {
-        super(address, context);
-    }
     
     public CxfSpringEndpoint(CxfComponent component, String address) throws Exception {
         super(address, component);
@@ -110,7 +97,7 @@ public class CxfSpringEndpoint extends CxfEndpoint implements ApplicationContext
         
         if (cls != null) {
             // create client factory bean
-            ClientProxyFactoryBean factoryBean = createClientFactoryBean(cls);
+            ClientFactoryBean factoryBean = createClientFactoryBean(cls);
 
             // setup client factory bean
             setupClientFactoryBean(factoryBean, cls);
@@ -130,13 +117,16 @@ public class CxfSpringEndpoint extends CxfEndpoint implements ApplicationContext
                 factoryBean.setEndpointName(new QName(getEndpointNamespace(), getEndpointLocalName()));
             }
 
-            return ((ClientProxy)Proxy.getInvocationHandler(factoryBean.create())).getClient();
+            Client client = factoryBean.create();
+            // setup the handlers
+            setupHandlers(factoryBean, client);
+            return client;
         } else {
             
             ClientFactoryBean factoryBean = createClientFactoryBean();
 
             // setup client factory bean
-            setupClientFactoryBean(factoryBean);
+            setupClientFactoryBean(factoryBean, null);
             
             // fill in values that have not been filled.
             QName serviceQName = null;

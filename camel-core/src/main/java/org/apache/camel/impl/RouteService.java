@@ -33,6 +33,7 @@ import org.apache.camel.Service;
 import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.spi.LifecycleStrategy;
 import org.apache.camel.spi.RouteContext;
+import org.apache.camel.spi.RoutePolicy;
 import org.apache.camel.support.ChildServiceSupport;
 import org.apache.camel.util.EventHelper;
 import org.apache.camel.util.ServiceHelper;
@@ -161,6 +162,13 @@ public class RouteService extends ChildServiceSupport {
             // start the route itself
             ServiceHelper.startService(route);
 
+            // invoke callbacks on route policy
+            if (routeDefinition.getRoutePolicies() != null) {
+                for (RoutePolicy routePolicy : routeDefinition.getRoutePolicies()) {
+                    routePolicy.onStart(route);
+                }
+            }
+
             // fire event
             EventHelper.notifyRouteStarted(camelContext, route);
         }
@@ -197,11 +205,18 @@ public class RouteService extends ChildServiceSupport {
                 ServiceHelper.stopServices(route);
             }
 
+            // invoke callbacks on route policy
+            if (routeDefinition.getRoutePolicies() != null) {
+                for (RoutePolicy routePolicy : routeDefinition.getRoutePolicies()) {
+                    routePolicy.onStop(route);
+                }
+            }
             // fire event
             EventHelper.notifyRouteStopped(camelContext, route);
         }
-
-        camelContext.removeRouteCollection(routes);
+        if (isRemovingRoutes()) {
+            camelContext.removeRouteCollection(routes);
+        }
         // need to warm up again
         warmUpDone.set(false);
     }
@@ -212,13 +227,21 @@ public class RouteService extends ChildServiceSupport {
             // endpoints should only be stopped when Camel is shutting down
             // see more details in the warmUp method
             ServiceHelper.stopAndShutdownServices(route.getEndpoint());
+            // invoke callbacks on route policy
+            if (routeDefinition.getRoutePolicies() != null) {
+                for (RoutePolicy routePolicy : routeDefinition.getRoutePolicies()) {
+                    routePolicy.onRemove(route);
+                }
+            }
         }
 
         // need to call onRoutesRemove when the CamelContext is shutting down or Route is shutdown
         for (LifecycleStrategy strategy : camelContext.getLifecycleStrategies()) {
             strategy.onRoutesRemove(routes);
         }
-
+        
+        camelContext.removeRouteCollection(routes);
+        
         // clear inputs on shutdown
         inputs.clear();
         warmUpDone.set(false);
@@ -229,12 +252,27 @@ public class RouteService extends ChildServiceSupport {
     protected void doSuspend() throws Exception {
         // suspend and resume logic is provided by DefaultCamelContext which leverages ShutdownStrategy
         // to safely suspend and resume
+        for (Route route : routes) {
+            if (routeDefinition.getRoutePolicies() != null) {
+                for (RoutePolicy routePolicy : routeDefinition.getRoutePolicies()) {
+                    routePolicy.onSuspend(route);
+                }
+            }
+        }
     }
 
     @Override
     protected void doResume() throws Exception {
+
         // suspend and resume logic is provided by DefaultCamelContext which leverages ShutdownStrategy
         // to safely suspend and resume
+        for (Route route : routes) {
+            if (routeDefinition.getRoutePolicies() != null) {
+                for (RoutePolicy routePolicy : routeDefinition.getRoutePolicies()) {
+                    routePolicy.onResume(route);
+                }
+            }
+        }
     }
 
     protected void startChildService(Route route, List<Service> services) throws Exception {

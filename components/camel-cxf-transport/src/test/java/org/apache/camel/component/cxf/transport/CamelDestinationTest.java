@@ -47,7 +47,7 @@ import org.apache.cxf.transport.Conduit;
 import org.apache.cxf.transport.ConduitInitiator;
 import org.apache.cxf.transport.ConduitInitiatorManager;
 import org.apache.cxf.transport.MessageObserver;
-import org.easymock.classextension.EasyMock;
+import org.easymock.EasyMock;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -182,7 +182,7 @@ public class CamelDestinationTest extends CamelTransportTestSupport {
                 }
             }
         };
-        MockEndpoint error = (MockEndpoint)context.getEndpoint("mock:error");
+        MockEndpoint error = context.getEndpoint("mock:error", MockEndpoint.class);
         error.expectedMessageCount(0);
         //this call will active the camelDestination
         destination.setMessageObserver(observer);
@@ -233,7 +233,7 @@ public class CamelDestinationTest extends CamelTransportTestSupport {
             }
         };
         
-        MockEndpoint error = (MockEndpoint)context.getEndpoint("mock:error");
+        MockEndpoint error = context.getEndpoint("mock:error", MockEndpoint.class);
         error.expectedMessageCount(1);
         
         //this call will active the camelDestination

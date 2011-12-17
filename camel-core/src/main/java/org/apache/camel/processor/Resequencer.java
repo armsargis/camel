@@ -25,6 +25,7 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Processor;
+import org.apache.camel.Traceable;
 import org.apache.camel.util.ExpressionComparator;
 import org.apache.camel.util.ExpressionListComparator;
 
@@ -40,16 +41,16 @@ public class Resequencer extends BatchProcessor implements Traceable {
     // TODO: Rework to avoid using BatchProcessor
 
     public Resequencer(CamelContext camelContext, Processor processor, Expression expression) {
-        this(camelContext, processor, createSet(expression, false, false));
+        this(camelContext, processor, createSet(expression, false, false), expression);
     }
 
     public Resequencer(CamelContext camelContext, Processor processor, Expression expression,
                        boolean allowDuplicates, boolean reverse) {
-        this(camelContext, processor, createSet(expression, allowDuplicates, reverse));
+        this(camelContext, processor, createSet(expression, allowDuplicates, reverse), expression);
     }
 
-    public Resequencer(CamelContext camelContext, Processor processor, Set<Exchange> collection) {
-        super(camelContext, processor, collection);
+    public Resequencer(CamelContext camelContext, Processor processor, Set<Exchange> collection, Expression expression) {
+        super(camelContext, processor, collection, expression);
     }
 
     @Override
@@ -66,13 +67,6 @@ public class Resequencer extends BatchProcessor implements Traceable {
 
     protected static Set<Exchange> createSet(Expression expression, boolean allowDuplicates, boolean reverse) {
         return createSet(new ExpressionComparator(expression), allowDuplicates, reverse);
-    }
-
-    protected static Set<Exchange> createSet(List<Expression> expressions, boolean allowDuplicates, boolean reverse) {
-        if (expressions.size() == 1) {
-            return createSet(expressions.get(0), allowDuplicates, reverse);
-        }
-        return createSet(new ExpressionListComparator(expressions), allowDuplicates, reverse);
     }
 
     protected static Set<Exchange> createSet(final Comparator<? super Exchange> comparator, boolean allowDuplicates, boolean reverse) {

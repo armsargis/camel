@@ -18,9 +18,9 @@ package org.apache.camel.builder;
 
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.Processor;
-import org.apache.camel.processor.CamelLogger;
 import org.apache.camel.processor.LoggingErrorHandler;
 import org.apache.camel.spi.RouteContext;
+import org.apache.camel.util.CamelLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +53,7 @@ public class LoggingErrorHandlerBuilder extends ErrorHandlerBuilderSupport {
         CamelLogger logger = new CamelLogger(log, level);
 
         LoggingErrorHandler handler = new LoggingErrorHandler(routeContext.getCamelContext(), processor, logger, getExceptionPolicyStrategy());
-        configure(handler);
+        configure(routeContext, handler);
         return handler;
     }
 

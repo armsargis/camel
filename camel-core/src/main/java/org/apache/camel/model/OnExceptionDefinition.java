@@ -18,7 +18,9 @@ package org.apache.camel.model;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -42,9 +44,8 @@ import org.apache.camel.spi.ClassResolver;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.CastUtils;
+import org.apache.camel.util.ExpressionToPredicateAdapter;
 import org.apache.camel.util.ObjectHelper;
-
-import static org.apache.camel.builder.PredicateBuilder.toPredicate;
 
 /**
  * Represents an XML &lt;onException/&gt; element
@@ -77,8 +78,6 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
     @XmlTransient
     private List<Class> exceptionClasses;
     @XmlTransient
-    private Processor errorHandler;
-    @XmlTransient
     private Predicate handledPolicy;
     @XmlTransient
     private Predicate continuedPolicy;
@@ -88,6 +87,9 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
     private Processor onRedelivery;
     @XmlTransient
     private Boolean routeScoped;
+    // TODO: in Camel 3.0 the OnExceptionDefinition should not contain state and ErrorHandler processors
+    @XmlTransient
+    private final Map<String, Processor> errorHandlers = new HashMap<String, Processor>();
 
     public OnExceptionDefinition() {
     }
@@ -134,24 +136,25 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
      * Allows an exception handler to create a new redelivery policy for this exception type
      *
      * @param context      the camel context
-     * @param parentPolicy the current redelivery policy
+     * @param parentPolicy the current redelivery policy, is newer <tt>null</tt>
      * @return a newly created redelivery policy, or return the original policy if no customization is required
      *         for this exception handler.
      */
     public RedeliveryPolicy createRedeliveryPolicy(CamelContext context, RedeliveryPolicy parentPolicy) {
         if (redeliveryPolicyRef != null) {
-            parentPolicy = CamelContextHelper.mandatoryLookup(context, redeliveryPolicyRef, RedeliveryPolicy.class);
-        }
-
-        if (redeliveryPolicy != null) {
+            return CamelContextHelper.mandatoryLookup(context, redeliveryPolicyRef, RedeliveryPolicy.class);
+        } else if (redeliveryPolicy != null) {
             return redeliveryPolicy.createRedeliveryPolicy(context, parentPolicy);
-        } else if (errorHandler != null) {
-            // lets create a new error handler that has no retries
+        } else if (!outputs.isEmpty() && parentPolicy.getMaximumRedeliveries() > 0) {
+            // if we have outputs, then do not inherit parent maximumRedeliveries
+            // as you would have to explicit configure maximumRedeliveries on this onException to use it
+            // this is the behavior Camel has always had
             RedeliveryPolicy answer = parentPolicy.copy();
             answer.setMaximumRedeliveries(0);
             return answer;
+        } else {
+            return parentPolicy;
         }
-        return parentPolicy;
     }
 
     public void addRoutes(RouteContext routeContext, Collection<Route> routes) throws Exception {
@@ -178,16 +181,15 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
         validateConfiguration();
 
         // lets attach this on exception to the route error handler
-        Processor child = routeContext.createProcessor(this);
+        Processor child = createOutputsProcessor(routeContext);
         if (child != null) {
             // wrap in our special safe fallback error handler if OnException have child output
-            errorHandler = new FatalFallbackErrorHandler(child);
-        } else {
-            // do not wrap as there is no child output
-            errorHandler = null;
+            Processor errorHandler = new FatalFallbackErrorHandler(child);
+            String id = routeContext.getRoute().getId();
+            errorHandlers.put(id, errorHandler);
         }
         // lookup the error handler builder
-        ErrorHandlerBuilder builder = routeContext.getRoute().getErrorHandlerBuilder();
+        ErrorHandlerBuilder builder = (ErrorHandlerBuilder)routeContext.getRoute().getErrorHandlerBuilder();
         // and add this as error handlers
         builder.addErrorHandlers(this);
     }
@@ -280,7 +282,7 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
      * @return the builder
      */
     public OnExceptionDefinition handled(Expression handled) {
-        setHandledPolicy(toPredicate(handled));
+        setHandledPolicy(ExpressionToPredicateAdapter.toPredicate(handled));
         return this;
     }
 
@@ -319,7 +321,7 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
      * @return the builder
      */
     public OnExceptionDefinition continued(Expression continued) {
-        setContinuedPolicy(toPredicate(continued));
+        setContinuedPolicy(ExpressionToPredicateAdapter.toPredicate(continued));
         return this;
     }
 
@@ -359,7 +361,7 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
      * @return the builder
      */
     public OnExceptionDefinition retryWhile(Expression retryWhile) {
-        setRetryWhilePolicy(toPredicate(retryWhile));
+        setRetryWhilePolicy(ExpressionToPredicateAdapter.toPredicate(retryWhile));
         return this;
     }
 
@@ -749,8 +751,12 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
         this.exceptions = exceptions;
     }
 
-    public Processor getErrorHandler() {
-        return errorHandler;
+    public Processor getErrorHandler(String routeId) {
+        return errorHandlers.get(routeId);
+    }
+    
+    public Collection<Processor> getErrorHandlers() {
+        return errorHandlers.values();
     }
 
     public RedeliveryPolicyDefinition getRedeliveryPolicy() {

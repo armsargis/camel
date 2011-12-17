@@ -18,16 +18,24 @@ package org.apache.camel.processor.resequencer;
 
 public class TestComparator implements SequenceElementComparator<TestObject> {
 
+    @Override
     public boolean predecessor(TestObject o1, TestObject o2) {
         return (o2.getValue() - 1) == o1.getValue();
     }
 
+    @Override
     public boolean successor(TestObject o1, TestObject o2) {
         return (o1.getValue() - 1) == o2.getValue();
     }
 
+    @Override
     public int compare(TestObject o1, TestObject o2) {
         return Integer.valueOf(o1.getValue()).compareTo(o2.getValue());
+    }
+
+    @Override
+    public boolean isValid(TestObject o1) {
+        return o1 != null;
     }
 
 }

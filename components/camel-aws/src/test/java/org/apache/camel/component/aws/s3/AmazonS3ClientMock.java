@@ -23,12 +23,13 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import junit.framework.Assert;
+
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.AmazonWebServiceRequest;
 import com.amazonaws.HttpMethod;
-import com.amazonaws.Request;
-import com.amazonaws.http.HttpMethodName;
+import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.S3ResponseMetadata;
 import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
@@ -76,10 +77,13 @@ import com.amazonaws.services.s3.model.VersionListing;
 
 public class AmazonS3ClientMock extends AmazonS3Client {
     
-    List<S3Object> objects = new ArrayList<S3Object>();    
+    List<S3Object> objects = new ArrayList<S3Object>();
+    List<PutObjectRequest> putObjectRequests = new ArrayList<PutObjectRequest>();
+    
+    private boolean nonExistingBucketCreated;
     
     public AmazonS3ClientMock() {
-        super(null);
+        super(new BasicAWSCredentials("myAccessKey", "mySecretKey"));
     }
 
     @Override
@@ -115,6 +119,12 @@ public class AmazonS3ClientMock extends AmazonS3Client {
 
     @Override
     public ObjectListing listObjects(ListObjectsRequest listObjectsRequest) throws AmazonClientException, AmazonServiceException {
+        if ("nonExistingBucket".equals(listObjectsRequest.getBucketName()) && !nonExistingBucketCreated) {
+            AmazonServiceException ex = new AmazonServiceException("Unknow bucket");
+            ex.setStatusCode(404);
+            throw ex; 
+        }
+        
         ObjectListing objectListing = new ObjectListing();
         int capacity = listObjectsRequest.getMaxKeys();
         
@@ -171,6 +181,10 @@ public class AmazonS3ClientMock extends AmazonS3Client {
 
     @Override
     public Bucket createBucket(CreateBucketRequest createBucketRequest) throws AmazonClientException, AmazonServiceException {
+        if ("nonExistingBucket".equals(createBucketRequest.getBucketName())) {
+            nonExistingBucketCreated = true; 
+        }
+        
         Bucket bucket = new Bucket();
         bucket.setName(createBucketRequest.getBucketName());
         bucket.setCreationDate(new Date());
@@ -286,6 +300,8 @@ public class AmazonS3ClientMock extends AmazonS3Client {
 
     @Override
     public PutObjectResult putObject(PutObjectRequest putObjectRequest) throws AmazonClientException, AmazonServiceException {
+        putObjectRequests.add(putObjectRequest);
+        
         S3Object s3Object = new S3Object();
         s3Object.setBucketName(putObjectRequest.getBucketName());
         s3Object.setKey(putObjectRequest.getKey());
@@ -364,7 +380,8 @@ public class AmazonS3ClientMock extends AmazonS3Client {
 
     @Override
     public void setBucketPolicy(String bucketName, String policyText) throws AmazonClientException, AmazonServiceException {
-        throw new UnsupportedOperationException();
+        Assert.assertEquals("nonExistingBucket", bucketName);
+        Assert.assertEquals("xxx", policyText);
     }
 
     @Override
@@ -419,16 +436,6 @@ public class AmazonS3ClientMock extends AmazonS3Client {
 
     @Override
     public S3ResponseMetadata getCachedResponseMetadata(AmazonWebServiceRequest request) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected Request<Void> createRequest(String bucketName, String key, AmazonWebServiceRequest originalRequest) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    protected <T> void signRequest(Request<T> request, HttpMethodName methodName, String bucketName, String key) {
         throw new UnsupportedOperationException();
     }
 }

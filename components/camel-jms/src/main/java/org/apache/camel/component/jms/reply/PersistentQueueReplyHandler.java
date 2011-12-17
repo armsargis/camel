@@ -16,8 +16,6 @@
  */
 package org.apache.camel.component.jms.reply;
 
-import javax.jms.Message;
-
 import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
 
@@ -36,21 +34,4 @@ public class PersistentQueueReplyHandler extends TemporaryQueueReplyHandler {
         this.dynamicMessageSelector = dynamicMessageSelector;
     }
 
-    @Override
-    public void onReply(String correlationId, Message reply) {
-        if (dynamicMessageSelector != null) {
-            // remove correlation id from message selector
-            dynamicMessageSelector.removeCorrelationID(correlationId);
-        }
-        super.onReply(correlationId, reply);
-    }
-
-    @Override
-    public void onTimeout(String correlationId) {
-        if (dynamicMessageSelector != null) {
-            // remove correlation id from message selector
-            dynamicMessageSelector.removeCorrelationID(correlationId);
-        }
-        super.onTimeout(correlationId);
-    }
 }

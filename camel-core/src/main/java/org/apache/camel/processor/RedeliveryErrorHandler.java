@@ -29,11 +29,15 @@ import org.apache.camel.LoggingLevel;
 import org.apache.camel.Message;
 import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
-import org.apache.camel.impl.converter.AsyncProcessorTypeConverter;
 import org.apache.camel.model.OnExceptionDefinition;
+import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.SubUnitOfWorkCallback;
+import org.apache.camel.spi.ThreadPoolProfile;
+import org.apache.camel.spi.UnitOfWork;
+import org.apache.camel.util.AsyncProcessorConverterHelper;
 import org.apache.camel.util.AsyncProcessorHelper;
 import org.apache.camel.util.CamelContextHelper;
+import org.apache.camel.util.CamelLogger;
 import org.apache.camel.util.EventHelper;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.MessageHelper;
@@ -184,7 +188,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         this.redeliveryProcessor = redeliveryProcessor;
         this.deadLetter = deadLetter;
         this.output = output;
-        this.outputAsync = AsyncProcessorTypeConverter.convert(output);
+        this.outputAsync = AsyncProcessorConverterHelper.convert(output);
         this.redeliveryPolicy = redeliveryPolicy;
         this.logger = logger;
         this.deadLetterUri = deadLetterUri;
@@ -265,7 +269,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
 
             if (data.redeliveryCounter > 0) {
                 // calculate delay
-                data.redeliveryDelay = data.currentRedeliveryPolicy.calculateRedeliveryDelay(data.redeliveryDelay, data.redeliveryCounter);
+                data.redeliveryDelay = determineRedeliveryDelay(exchange, data.currentRedeliveryPolicy, data.redeliveryDelay, data.redeliveryCounter);
 
                 if (data.redeliveryDelay > 0) {
                     // okay there is a delay so create a scheduled task to have it executed in the future
@@ -352,6 +356,31 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
 
             // error occurred so loop back around.....
         }
+    }
+
+    /**
+     * <p>Determines the redelivery delay time by first inspecting the Message header {@link Exchange#REDELIVERY_DELAY}
+     * and if not present, defaulting to {@link RedeliveryPolicy#calculateRedeliveryDelay(long, int)}</p>
+     *
+     * <p>In order to prevent manipulation of the RedeliveryData state, the values of {@link RedeliveryData#redeliveryDelay}
+     * and {@link RedeliveryData#redeliveryCounter} are copied in.</p>
+     *
+     * @param exchange The current exchange in question.
+     * @param redeliveryPolicy The RedeliveryPolicy to use in the calculation.
+     * @param redeliveryDelay The default redelivery delay from RedeliveryData
+     * @param redeliveryCounter The redeliveryCounter
+     * @return The time to wait before the next redelivery.
+     */
+    protected long determineRedeliveryDelay(Exchange exchange, RedeliveryPolicy redeliveryPolicy, long redeliveryDelay, int redeliveryCounter) {
+        Message message = exchange.getIn();
+        Long delay = message.getHeader(Exchange.REDELIVERY_DELAY, Long.class);
+        if (delay == null) {
+            delay = redeliveryPolicy.calculateRedeliveryDelay(redeliveryDelay, redeliveryCounter);
+            log.debug("Redelivery delay calculated as {}", delay);
+        } else {
+            log.debug("Redelivery delay is {} from Message Header [{}]", delay, Exchange.REDELIVERY_DELAY);
+        }
+        return delay;
     }
 
     /**
@@ -548,6 +577,9 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
     }
 
     protected void prepareExchangeForRedelivery(Exchange exchange, RedeliveryData data) {
+        if (!redeliveryEnabled) {
+            throw new IllegalStateException("Redelivery is not enabled on " + this + ". Make sure you have configured the error handler properly.");
+        }
         // there must be a defensive copy of the exchange
         ObjectHelper.notNull(data.original, "Defensive copy of Exchange is null", this);
 
@@ -600,10 +632,21 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
             data.asyncDelayedRedelivery = exceptionPolicy.isAsyncDelayedRedelivery(exchange.getContext());
 
             // route specific failure handler?
-            Processor processor = exceptionPolicy.getErrorHandler();
+            Processor processor = null;
+            UnitOfWork uow = exchange.getUnitOfWork();
+            if (uow != null && uow.getRouteContext() != null) {
+                String routeId = uow.getRouteContext().getRoute().getId();
+                processor = exceptionPolicy.getErrorHandler(routeId);
+            } else if (!exceptionPolicy.getErrorHandlers().isEmpty()) {
+                // note this should really not happen, but we have this code as a fail safe
+                // to be backwards compatible with the old behavior
+                log.warn("Cannot determine current route from Exchange with id: {}, will fallback and use first error handler.", exchange.getExchangeId());
+                processor = exceptionPolicy.getErrorHandlers().iterator().next();
+            }
             if (processor != null) {
                 data.failureProcessor = processor;
             }
+
             // route specific on redelivery?
             processor = exceptionPolicy.getOnRedelivery();
             if (processor != null) {
@@ -694,7 +737,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
             exchange.setProperty(Exchange.FAILURE_ENDPOINT, exchange.getProperty(Exchange.TO_ENDPOINT));
 
             // the failure processor could also be asynchronous
-            AsyncProcessor afp = AsyncProcessorTypeConverter.convert(processor);
+            AsyncProcessor afp = AsyncProcessorConverterHelper.convert(processor);
             sync = AsyncProcessorHelper.process(afp, exchange, new AsyncCallback() {
                 public void done(boolean sync) {
                     log.trace("Failure processor done: {} processing Exchange: {}", processor, exchange);
@@ -950,21 +993,19 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
             // walk them to see if any of them have a maximum redeliveries > 0 or retry until set
             for (OnExceptionDefinition def : exceptionPolicies.values()) {
 
-                if (def.getRedeliveryPolicy() != null) {
-                    String ref = def.getRedeliveryPolicyRef();
-                    if (ref != null) {
-                        // lookup in registry if ref provided
-                        RedeliveryPolicy policy = CamelContextHelper.mandatoryLookup(camelContext, ref, RedeliveryPolicy.class);
-                        if (policy.getMaximumRedeliveries() != 0) {
-                            // must check for != 0 as (-1 means redeliver forever)
-                            return true;
-                        }
-                    } else {
-                        Integer max = CamelContextHelper.parseInteger(camelContext, def.getRedeliveryPolicy().getMaximumRedeliveries());
-                        if (max != null && max != 0) {
-                            // must check for != 0 as (-1 means redeliver forever)
-                            return true;
-                        }
+                String ref = def.getRedeliveryPolicyRef();
+                if (ref != null) {
+                    // lookup in registry if ref provided
+                    RedeliveryPolicy policy = CamelContextHelper.mandatoryLookup(camelContext, ref, RedeliveryPolicy.class);
+                    if (policy.getMaximumRedeliveries() != 0) {
+                        // must check for != 0 as (-1 means redeliver forever)
+                        return true;
+                    }
+                } else if (def.getRedeliveryPolicy() != null) {
+                    Integer max = CamelContextHelper.parseInteger(camelContext, def.getRedeliveryPolicy().getMaximumRedeliveries());
+                    if (max != null && max != 0) {
+                        // must check for != 0 as (-1 means redeliver forever)
+                        return true;
                     }
                 }
 
@@ -985,6 +1026,11 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
             // camel context will shutdown the executor when it shutdown so no need to shut it down when stopping
             if (executorServiceRef != null) {
                 executorService = camelContext.getRegistry().lookup(executorServiceRef, ScheduledExecutorService.class);
+                if (executorService == null) {
+                    ExecutorServiceManager manager = camelContext.getExecutorServiceManager();
+                    ThreadPoolProfile profile = manager.getThreadPoolProfile(executorServiceRef);
+                    executorService = manager.newScheduledThreadPool(this, executorServiceRef, profile);
+                }
                 if (executorService == null) {
                     throw new IllegalArgumentException("ExecutorServiceRef " + executorServiceRef + " not found in registry.");
                 }

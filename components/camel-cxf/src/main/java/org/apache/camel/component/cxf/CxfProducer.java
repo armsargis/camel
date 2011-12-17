@@ -128,6 +128,7 @@ public class CxfProducer extends DefaultProducer implements AsyncProcessor {
             // send the CXF request
             client.invoke(boi, getParams(endpoint, camelExchange), 
                       invocationContext, cxfExchange);
+
         } catch (Exception exception) {
             camelExchange.setException(exception);
         } finally {

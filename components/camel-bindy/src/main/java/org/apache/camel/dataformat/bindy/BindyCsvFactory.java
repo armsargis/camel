@@ -55,8 +55,6 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
     private Map<Integer, Field> annotatedFields = new LinkedHashMap<Integer, Field>();
     private Map<String, Integer> sections = new HashMap<String, Integer>();
 
-    private Map<Integer, List<String>> results;
-
     private int numberOptionalFields;
     private int numberMandatoryFields;
     private int totalFields;
@@ -65,6 +63,7 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
     private boolean skipFirstLine;
     private boolean generateHeaderColumnNames;
     private boolean messageOrdered;
+    private String quote;
 
     public BindyCsvFactory(PackageScanClassResolver resolver, String... packageNames) throws Exception {
         super(resolver, packageNames);
@@ -226,7 +225,7 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
     public String unbind(Map<String, Object> model) throws Exception {
 
         StringBuilder buffer = new StringBuilder();
-        results = new HashMap<Integer, List<String>>();
+        Map<Integer, List<String>> results = new HashMap<Integer, List<String>>();
 
         // Check if separator exists
         ObjectHelper.notNull(this.separator, "The separator has not been instantiated or property not defined in the @CsvRecord annotation");
@@ -247,7 +246,7 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
                 if (obj != null) {
 
                     // Generate Csv table
-                    generateCsvPositionMap(clazz, obj);
+                    generateCsvPositionMap(clazz, obj, results);
 
                 }
             }
@@ -290,7 +289,14 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
                 while (itx.hasNext()) {
                     String res = (String)itx.next();
                     if (res != null) {
+                        // the field may be enclosed in quotes if a quote was configured
+                        if (quote != null) {
+                            buffer.append(quote);
+                        }
                         buffer.append(res);
+                        if (quote != null) {
+                            buffer.append(quote);
+                        }
                     }
 
                     if (itx.hasNext()) {
@@ -360,7 +366,7 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
      * If a relation @OneToMany is defined, than we iterate recursively through this function
      * The result is placed in the Map<Integer, List> results
      */
-    private void generateCsvPositionMap(Class clazz, Object obj) throws Exception {
+    private void generateCsvPositionMap(Class clazz, Object obj, Map<Integer, List<String>> results) throws Exception {
 
         String result = "";
 
@@ -448,14 +454,14 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
                     Iterator it = list.iterator();
                     while (it.hasNext()) {
                         Object target = it.next();
-                        generateCsvPositionMap(target.getClass(), target);
+                        generateCsvPositionMap(target.getClass(), target, results);
                     }
 
                 } else {
 
                     // Call this function to add empty value
                     // in the table
-                    generateCsvPositionMap(field.getClass(), null);
+                    generateCsvPositionMap(field.getClass(), null, results);
                 }
 
             }
@@ -536,6 +542,11 @@ public class BindyCsvFactory extends BindyAbstractFactory implements BindyFactor
                     // Get isOrdered parameter
                     messageOrdered = record.isOrdered();
                     LOG.debug("Must CSV record be ordered: {}", messageOrdered);
+
+                    if (ObjectHelper.isNotEmpty(record.quote())) {
+                        quote = record.quote();
+                        LOG.debug("Quoting columns with: {}", quote);
+                    }
                 }
 
                 if (section != null) {

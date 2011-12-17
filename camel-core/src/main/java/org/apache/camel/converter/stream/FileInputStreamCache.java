@@ -16,7 +16,6 @@
  */
 package org.apache.camel.converter.stream;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -28,19 +27,19 @@ import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.StreamCache;
 import org.apache.camel.util.IOHelper;
 
-public class FileInputStreamCache extends InputStream implements StreamCache, Closeable {
+public class FileInputStreamCache extends InputStream implements StreamCache {
     private InputStream stream;
     private File file;
 
     public FileInputStreamCache(File file) throws FileNotFoundException {
         this.file = file;
-        this.stream = new FileInputStream(file);
+        this.stream = IOHelper.buffered(new FileInputStream(file));
     }
     
     @Override
     public void close() {
-        if (isSteamOpened()) {
-            IOHelper.close(getInputStream());
+        if (stream != null) {
+            IOHelper.close(stream);
         }
     }
 
@@ -50,8 +49,8 @@ public class FileInputStreamCache extends InputStream implements StreamCache, Cl
             // reset by closing and creating a new stream based on the file
             close();
             // reset by creating a new stream based on the file
-            stream = new FileInputStream(file);
-        } catch (Exception e) {
+            stream = IOHelper.buffered(new FileInputStream(file));
+        } catch (FileNotFoundException e) {
             throw new RuntimeCamelException("Cannot reset stream from file " + file, e);
         }            
     }
@@ -73,13 +72,4 @@ public class FileInputStreamCache extends InputStream implements StreamCache, Cl
     protected InputStream getInputStream() {
         return stream;
     }
-    
-    private boolean isSteamOpened() {
-        if (stream != null && stream instanceof FileInputStream) {
-            return ((FileInputStream) stream).getChannel().isOpen();            
-        } else {
-            return stream != null;
-        }
-    }
-
 }

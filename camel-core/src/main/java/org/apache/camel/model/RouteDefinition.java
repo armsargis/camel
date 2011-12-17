@@ -31,6 +31,7 @@ import javax.xml.bind.annotation.XmlType;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
+import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.FailedToCreateRouteException;
 import org.apache.camel.NoSuchEndpointException;
 import org.apache.camel.Route;
@@ -39,7 +40,6 @@ import org.apache.camel.ShutdownRoute;
 import org.apache.camel.ShutdownRunningTask;
 import org.apache.camel.builder.AdviceWithRouteBuilder;
 import org.apache.camel.builder.AdviceWithTask;
-import org.apache.camel.builder.ErrorHandlerBuilder;
 import org.apache.camel.builder.ErrorHandlerBuilderRef;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.impl.DefaultRouteContext;
@@ -75,6 +75,8 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
     private String routePolicyRef;
     private ShutdownRoute shutdownRoute;
     private ShutdownRunningTask shutdownRunningTask;
+    private String errorHandlerRef;
+    private ErrorHandlerFactory errorHandlerBuilder;
 
     public RouteDefinition() {
     }
@@ -92,7 +94,7 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
      *
      * @param context the camel context
      */
-    public void prepare(CamelContext context) {
+    public void prepare(ModelCamelContext context) {
         if (prepared.compareAndSet(false, true)) {
             RouteDefinitionHelper.prepareRoute(context, this);
         }
@@ -151,10 +153,11 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
         }
     }
 
-    public List<RouteContext> addRoutes(CamelContext camelContext, Collection<Route> routes) throws Exception {
+    public List<RouteContext> addRoutes(ModelCamelContext camelContext, Collection<Route> routes) throws Exception {
         List<RouteContext> answer = new ArrayList<RouteContext>();
 
-        ErrorHandlerBuilder handler = camelContext.getErrorHandlerBuilder();
+        @SuppressWarnings("deprecation")
+        ErrorHandlerFactory handler = camelContext.getErrorHandlerBuilder();
         if (handler != null) {
             setErrorHandlerBuilderIfNull(handler);
         }
@@ -178,6 +181,11 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
     public Endpoint resolveEndpoint(CamelContext camelContext, String uri) throws NoSuchEndpointException {
         ObjectHelper.notNull(camelContext, "CamelContext");
         return CamelContextHelper.getMandatoryEndpoint(camelContext, uri);
+    }
+    
+    @Deprecated
+    public RouteDefinition adviceWith(CamelContext camelContext, RouteBuilder builder) throws Exception {
+        return adviceWith((ModelCamelContext)camelContext, builder);
     }
 
     /**
@@ -204,7 +212,8 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
      * @throws Exception can be thrown from the route builder
      * @see AdviceWithRouteBuilder
      */
-    public RouteDefinition adviceWith(CamelContext camelContext, RouteBuilder builder) throws Exception {
+    @SuppressWarnings("deprecation")
+    public RouteDefinition adviceWith(ModelCamelContext camelContext, RouteBuilder builder) throws Exception {
         ObjectHelper.notNull(camelContext, "CamelContext");
         ObjectHelper.notNull(builder, "RouteBuilder");
 
@@ -426,7 +435,7 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
      * @param errorHandlerBuilder the error handler to be used by default for all child routes
      * @return the current builder with the error handler configured
      */
-    public RouteDefinition errorHandler(ErrorHandlerBuilder errorHandlerBuilder) {
+    public RouteDefinition errorHandler(ErrorHandlerFactory errorHandlerBuilder) {
         setErrorHandlerBuilder(errorHandlerBuilder);
         return this;
     }
@@ -654,7 +663,7 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
     /**
      * Sets the error handler if one is not already set
      */
-    public void setErrorHandlerBuilderIfNull(ErrorHandlerBuilder errorHandlerBuilder) {
+    public void setErrorHandlerBuilderIfNull(ErrorHandlerFactory errorHandlerBuilder) {
         if (this.errorHandlerBuilder == null) {
             setErrorHandlerBuilder(errorHandlerBuilder);
         }
@@ -695,6 +704,32 @@ public class RouteDefinition extends ProcessorDefinition<RouteDefinition> {
     public void setShutdownRunningTask(ShutdownRunningTask shutdownRunningTask) {
         this.shutdownRunningTask = shutdownRunningTask;
     }
+    
+    private ErrorHandlerFactory createErrorHandlerBuilder() {
+        if (errorHandlerRef != null) {
+            return new ErrorHandlerBuilderRef(errorHandlerRef);
+        }
+
+        // return a reference to the default error handler
+        return new ErrorHandlerBuilderRef(ErrorHandlerBuilderRef.DEFAULT_ERROR_HANDLER_BUILDER);
+    }
+
+    
+    @XmlTransient
+    public ErrorHandlerFactory getErrorHandlerBuilder() {
+        if (errorHandlerBuilder == null) {
+            errorHandlerBuilder = createErrorHandlerBuilder();
+        }
+        return errorHandlerBuilder;
+    }
+
+    /**
+     * Sets the error handler to use with processors created by this builder
+     */
+    public void setErrorHandlerBuilder(ErrorHandlerFactory errorHandlerBuilder) {
+        this.errorHandlerBuilder = errorHandlerBuilder;
+    }
+
 
     // Implementation methods
     // -------------------------------------------------------------------------

@@ -36,6 +36,7 @@ import javax.xml.namespace.QName;
 
 import org.apache.camel.Channel;
 import org.apache.camel.Endpoint;
+import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.Expression;
@@ -44,19 +45,16 @@ import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.Route;
 import org.apache.camel.builder.DataFormatClause;
-import org.apache.camel.builder.ErrorHandlerBuilder;
-import org.apache.camel.builder.ErrorHandlerBuilderRef;
 import org.apache.camel.builder.ExpressionBuilder;
 import org.apache.camel.builder.ExpressionClause;
 import org.apache.camel.builder.ProcessorBuilder;
-import org.apache.camel.component.properties.PropertiesComponent;
 import org.apache.camel.model.language.ConstantExpression;
 import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.model.language.LanguageExpression;
-import org.apache.camel.processor.DefaultChannel;
 import org.apache.camel.processor.InterceptEndpointProcessor;
 import org.apache.camel.processor.Pipeline;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
+import org.apache.camel.processor.interceptor.DefaultChannel;
 import org.apache.camel.processor.interceptor.Delayer;
 import org.apache.camel.processor.interceptor.HandleFault;
 import org.apache.camel.processor.interceptor.StreamCaching;
@@ -81,8 +79,6 @@ import org.slf4j.LoggerFactory;
 @XmlAccessorType(XmlAccessType.PROPERTY)
 public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>> extends OptionalIdentifiedDefinition implements Block {
     protected final transient Logger log = LoggerFactory.getLogger(getClass());
-    protected ErrorHandlerBuilder errorHandlerBuilder;
-    protected String errorHandlerRef;
     protected Boolean inheritErrorHandler;
     private NodeFactory nodeFactory;
     private final LinkedList<Block> blocks = new LinkedList<Block>();
@@ -150,7 +146,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         }
         // fallback to default implementation if factory did not create the child
         if (children == null) {
-            children = routeContext.createProcessor(this);
+            children = createOutputsProcessor(routeContext);
         }
 
         if (children == null && mandatory) {
@@ -169,7 +165,6 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
         output.setParent(this);
         output.setNodeFactory(getNodeFactory());
-        output.setErrorHandlerBuilder(getErrorHandlerBuilder());
         configureChild(output);
         getOutputs().add(output);
     }
@@ -223,7 +218,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
     protected Processor wrapChannel(RouteContext routeContext, Processor processor, ProcessorDefinition child) throws Exception {
         // put a channel in between this and each output to control the route flow logic
-        Channel channel = createChannel(routeContext);
+        ModelChannel channel = createChannel(routeContext);
         channel.setNextProcessor(processor);
 
         // add interceptor strategies to the channel must be in this order: camel context, route context, local
@@ -265,8 +260,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
             // do not use error handler for recipient list as it offers fine grained error handlers for its outputs
             // however if share unit of work is enabled, we need to wrap an error handler on the recipient list parent
             RecipientListDefinition def = (RecipientListDefinition) defn;
-            if (def.isShareUnitOfWork() && child == null) {
-                // only wrap the parent (not the children of the multicast)
+            if (def.isShareUnitOfWork()) {
+                // note a recipient list cannot have children so no need for a child == null check
                 wrapChannelInErrorHandler(channel, routeContext);
             } else {
                 log.trace("{} is part of multicast/recipientList which have special error handling so no error handler is applied", defn);
@@ -294,7 +289,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         if (isInheritErrorHandler() == null || isInheritErrorHandler()) {
             log.trace("{} is configured to inheritErrorHandler", this);
             Processor output = channel.getOutput();
-            Processor errorHandler = wrapInErrorHandler(routeContext, getErrorHandlerBuilder(), output);
+            Processor errorHandler = wrapInErrorHandler(routeContext, output);
             // set error handler on channel
             channel.setErrorHandler(errorHandler);
         } else {
@@ -310,7 +305,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return the output wrapped with the error handler
      * @throws Exception can be thrown if failed to create error handler builder
      */
-    protected Processor wrapInErrorHandler(RouteContext routeContext, ErrorHandlerBuilder builder, Processor output) throws Exception {
+    protected Processor wrapInErrorHandler(RouteContext routeContext, Processor output) throws Exception {
+        ErrorHandlerFactory builder = routeContext.getRoute().getErrorHandlerBuilder();
         // create error handler
         Processor errorHandler = builder.createErrorHandler(routeContext, output);
 
@@ -374,7 +370,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     /**
      * Creates a new instance of the {@link Channel}.
      */
-    protected Channel createChannel(RouteContext routeContext) throws Exception {
+    protected ModelChannel createChannel(RouteContext routeContext) throws Exception {
         return new DefaultChannel();
     }
 
@@ -428,6 +424,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         // resolve constant fields (eg Exchange.FILE_NAME)
         resolveKnownConstantFields(this);
 
+        // allow any custom logic before we create the processor
+        preCreateProcessor();
+
         // at first use custom factory
         if (routeContext.getCamelContext().getProcessorFactory() != null) {
             processor = routeContext.getCamelContext().getProcessorFactory().createProcessor(routeContext, this);
@@ -474,11 +473,17 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
                     if (value != null && value instanceof String) {
                         // value must be enclosed with placeholder tokens
                         String s = (String) value;
-                        if (!s.startsWith(PropertiesComponent.PREFIX_TOKEN)) {
-                            s = PropertiesComponent.PREFIX_TOKEN + s;
+                        String prefixToken = routeContext.getCamelContext().getPropertyPrefixToken();
+                        String suffixToken = routeContext.getCamelContext().getPropertySuffixToken();
+                        if (prefixToken == null) {
+                            throw new IllegalArgumentException("Property with name [" + local + "] uses property placeholders; however, no properties component is configured.");
                         }
-                        if (!s.endsWith(PropertiesComponent.SUFFIX_TOKEN)) {
-                            s = s + PropertiesComponent.SUFFIX_TOKEN;
+                        
+                        if (!s.startsWith(prefixToken)) {
+                            s = prefixToken + s;
+                        }
+                        if (!s.endsWith(suffixToken)) {
+                            s = s + suffixToken;
                         }
                         value = s;
                     }
@@ -559,13 +564,11 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         }
     }
 
-    protected ErrorHandlerBuilder createErrorHandlerBuilder() {
-        if (errorHandlerRef != null) {
-            return new ErrorHandlerBuilderRef(errorHandlerRef);
-        }
-
-        // return a reference to the default error handler
-        return new ErrorHandlerBuilderRef(ErrorHandlerBuilderRef.DEFAULT_ERROR_HANDLER_BUILDER);
+    /**
+     * Strategy to execute any custom logic before the {@link Processor} is created.
+     */
+    protected void preCreateProcessor() {
+        // noop
     }
 
     /**
@@ -1423,6 +1426,26 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         LogDefinition answer = new LogDefinition(message);
         answer.setLoggingLevel(loggingLevel);
         answer.setLogName(logName);
+        addOutput(answer);
+        return (Type) this;
+    }
+
+    /**
+     * Creates a log message to be logged at the given level and name.
+     *
+     *
+     * @param loggingLevel the logging level to use
+     * @param logName the log name to use
+     * @param marker  log marker name
+     * @param message the log message, (you can use {@link org.apache.camel.language.simple.SimpleLanguage} syntax)
+     * @return the builder
+     */
+    @SuppressWarnings("unchecked")
+    public Type log(LoggingLevel loggingLevel, String logName, String marker, String message) {
+        LogDefinition answer = new LogDefinition(message);
+        answer.setLoggingLevel(loggingLevel);
+        answer.setLogName(logName);
+        answer.setMarker(marker);
         addOutput(answer);
         return (Type) this;
     }
@@ -3060,21 +3083,6 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
     public void setParent(ProcessorDefinition parent) {
         this.parent = parent;
-    }
-
-    @XmlTransient
-    public ErrorHandlerBuilder getErrorHandlerBuilder() {
-        if (errorHandlerBuilder == null) {
-            errorHandlerBuilder = createErrorHandlerBuilder();
-        }
-        return errorHandlerBuilder;
-    }
-
-    /**
-     * Sets the error handler to use with processors created by this builder
-     */
-    public void setErrorHandlerBuilder(ErrorHandlerBuilder errorHandlerBuilder) {
-        this.errorHandlerBuilder = errorHandlerBuilder;
     }
 
     @XmlTransient

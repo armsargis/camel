@@ -79,7 +79,7 @@ public class S3ComponentIntegrationTest extends CamelTestSupport {
     private void assertResultExchange(Exchange resultExchange) {
         assertIsInstanceOf(InputStream.class, resultExchange.getIn().getBody());
         assertEquals("This is my bucket content.", resultExchange.getIn().getBody(String.class));
-        assertEquals("mycamelbucket", resultExchange.getIn().getHeader(S3Constants.BUCKET_NAME));
+        assertEquals("mynewcamelbucket", resultExchange.getIn().getHeader(S3Constants.BUCKET_NAME));
         assertEquals("CamelUnitTest", resultExchange.getIn().getHeader(S3Constants.KEY));
         assertNull(resultExchange.getIn().getHeader(S3Constants.VERSION_ID)); // not enabled on this bucket
         assertNotNull(resultExchange.getIn().getHeader(S3Constants.LAST_MODIFIED));
@@ -101,10 +101,14 @@ public class S3ComponentIntegrationTest extends CamelTestSupport {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
-                from("direct:start")
-                    .to("aws-s3://mycamelbucket?accessKey=xxx&secretKey=yyy&region=us-west-1");
+                String s3EndpointUri = "aws-s3://mynewcamelbucket?accessKey=xxx&secretKey=yyy&region=us-west-1&policy=%7B%22Version%22%3A%222008-10-17%22,%22Id%22%3A%22Policy4324355464%22,"
+                    + "%22Statement%22%3A%5B%7B%22Sid%22%3A%22Stmt456464646477%22,%22Action%22%3A%5B%22s3%3AGetObject%22%5D,%22Effect%22%3A%22Allow%22,%22Resource%22%3A%5B%22arn%3A"
+                    + "aws%3As3%3A%3A%3Amynewcamelbucket/*%22%5D,%22Principal%22%3A%7B%22AWS%22%3A%5B%22*%22%5D%7D%7D%5D%7D";
                 
-                from("aws-s3://mycamelbucket?accessKey=xxx&secretKey=yyy&region=us-west-1")
+                from("direct:start")
+                    .to(s3EndpointUri);
+                
+                from(s3EndpointUri)
                     .to("mock:result");
             }
         };

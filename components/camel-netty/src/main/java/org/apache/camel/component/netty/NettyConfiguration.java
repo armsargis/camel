@@ -26,6 +26,7 @@ import java.util.Map;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.util.EndpointHelper;
+import org.apache.camel.util.jsse.SSLContextParameters;
 import org.jboss.netty.channel.ChannelDownstreamHandler;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.handler.codec.frame.DelimiterBasedFrameDecoder;
@@ -66,8 +67,10 @@ public class NettyConfiguration implements Cloneable {
     private boolean ssl;
     private long sendBufferSize = 65536;
     private long receiveBufferSize = 65536;
+    private int receiveBufferSizePredictor;
     private int corePoolSize = 10;
     private int maxPoolSize = 100;
+    private int workerCount;
     private String keyStoreFormat;
     private String securityProvider;
     private boolean disconnect;
@@ -78,6 +81,7 @@ public class NettyConfiguration implements Cloneable {
     private boolean allowDefaultCodec = true;
     private ClientPipelineFactory clientPipelineFactory;
     private ServerPipelineFactory serverPipelineFactory;
+    private SSLContextParameters sslContextParameters;
     
     /**
      * Returns a copy of this configuration
@@ -348,6 +352,14 @@ public class NettyConfiguration implements Cloneable {
     public void setReceiveBufferSize(long receiveBufferSize) {
         this.receiveBufferSize = receiveBufferSize;
     }
+    
+    public int getReceiveBufferSizePredictor() {
+        return receiveBufferSizePredictor;
+    }
+
+    public void setReceiveBufferSizePredictor(int receiveBufferSizePredictor) {
+        this.receiveBufferSizePredictor = receiveBufferSizePredictor;
+    }
 
     public String getPassphrase() {
         return passphrase;
@@ -483,5 +495,20 @@ public class NettyConfiguration implements Cloneable {
     public ServerPipelineFactory getServerPipelineFactory() {
         return serverPipelineFactory;
     }
+    
+    public int getWorkerCount() {
+        return workerCount;
+    }
 
+    public void setWorkerCount(int workerCount) {
+        this.workerCount = workerCount;
+    }
+
+    public SSLContextParameters getSslContextParameters() {
+        return sslContextParameters;
+    }
+
+    public void setSslContextParameters(SSLContextParameters sslContextParameters) {
+        this.sslContextParameters = sslContextParameters;
+    }
 }

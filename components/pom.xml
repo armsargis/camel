@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.camel</groupId>
     <artifactId>camel-parent</artifactId>
-    <version>2.9-SNAPSHOT</version>
+    <version>2.10-SNAPSHOT</version>
     <relativePath>../parent</relativePath>
   </parent>
 
@@ -85,6 +85,7 @@
     <module>camel-javaspace</module>
     <module>camel-jaxb</module>
     <module>camel-jasypt</module>
+    <module>camel-jclouds</module>
     <module>camel-jcr</module>
     <module>camel-jdbc</module>
     <module>camel-jibx</module>
@@ -96,6 +97,7 @@
     <module>camel-juel</module>
     <module>camel-jxpath</module>
     <module>camel-kestrel</module>
+    <module>camel-krati</module>
     <module>camel-ldap</module>
     <module>camel-lucene</module>
     <module>camel-mail</module>
@@ -124,11 +126,13 @@
     <module>camel-smpp</module>
     <module>camel-snmp</module>
     <module>camel-soap</module>
+    <module>camel-solr</module>
     <module>camel-spring-javaconfig</module>
     <module>camel-spring-integration</module>
     <module>camel-spring-security</module>
     <module>camel-spring-ws</module>
     <module>camel-sql</module>
+    <module>camel-stax</module>
     <module>camel-stream</module>
     <module>camel-stringtemplate</module>
     <module>camel-syslog</module>

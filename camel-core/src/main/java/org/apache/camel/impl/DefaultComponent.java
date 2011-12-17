@@ -24,6 +24,7 @@ import java.util.Map;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Component;
 import org.apache.camel.Endpoint;
+import org.apache.camel.EndpointConfiguration;
 import org.apache.camel.ResolveEndpointFailedException;
 import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.CamelContextHelper;
@@ -52,10 +53,24 @@ public abstract class DefaultComponent extends ServiceSupport implements Compone
         this.camelContext = context;
     }
 
+    @Deprecated
+    protected String preProcessUri(String uri) {
+        // Give components a chance to preprocess URIs and migrate to URI syntax that discourages invalid URIs
+        // (see CAMEL-4425)
+        // check URI string to the unsafe URI characters
+        String encodedUri = UnsafeUriCharactersEncoder.encode(uri);
+        if (!encodedUri.equals(uri)) {
+            // uri supplied is not really valid
+            LOG.warn("Supplied URI '{}' contains unsafe characters, please check encoding", uri);
+        }
+        return encodedUri;
+    }
+
     public Endpoint createEndpoint(String uri) throws Exception {
         ObjectHelper.notNull(getCamelContext(), "camelContext");
-        //encode URI string to the unsafe URI characters
-        URI u = new URI(UnsafeUriCharactersEncoder.encode(uri));
+        // check URI string to the unsafe URI characters
+        String encodedUri = preProcessUri(uri);
+        URI u = new URI(encodedUri);
         String path = u.getSchemeSpecificPart();
 
         // lets trim off any query arguments
@@ -63,17 +78,17 @@ public abstract class DefaultComponent extends ServiceSupport implements Compone
             path = path.substring(2);
         }
         int idx = path.indexOf('?');
-        if (idx > 0) {
+        if (idx > -1) {
             path = path.substring(0, idx);
         }
         Map<String, Object> parameters = URISupport.parseParameters(u);
 
-        validateURI(uri, path, parameters);
+        validateURI(encodedUri, path, parameters);
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Creating endpoint uri=[{}], path=[{}], parameters=[{}]", new Object[]{uri, path, parameters});
+            LOG.debug("Creating endpoint uri=[{}], path=[{}], parameters=[{}]", new Object[]{URISupport.sanitizeUri(encodedUri), path, parameters});
         }
-        Endpoint endpoint = createEndpoint(uri, path, parameters);
+        Endpoint endpoint = createEndpoint(encodedUri, path, parameters);
         if (endpoint == null) {
             return null;
         }
@@ -87,12 +102,18 @@ public abstract class DefaultComponent extends ServiceSupport implements Compone
             // if endpoint is strict (not lenient) and we have unknown parameters configured then
             // fail if there are parameters that could not be set, then they are probably misspell or not supported at all
             if (!endpoint.isLenientProperties()) {
-                validateParameters(uri, parameters, null);
+                validateParameters(encodedUri, parameters, null);
             }
         }
 
-        afterConfiguration(uri, path, endpoint, parameters);
+        afterConfiguration(encodedUri, path, endpoint, parameters);
         return endpoint;
+    }
+
+    public EndpointConfiguration createConfiguration(String uri) throws Exception {
+        MappedEndpointConfiguration config = new MappedEndpointConfiguration(this);
+        config.setURI(new URI(uri));
+        return config;
     }
 
     /**

@@ -40,6 +40,8 @@ import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.Service;
 import org.apache.camel.ServiceStatus;
+import org.apache.camel.api.management.ManagedAttribute;
+import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.component.jms.reply.PersistentQueueReplyManager;
 import org.apache.camel.component.jms.reply.ReplyManager;
 import org.apache.camel.component.jms.reply.TemporaryQueueReplyManager;
@@ -48,10 +50,9 @@ import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.impl.SynchronousDelegateProducer;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.spi.HeaderFilterStrategyAware;
-import org.apache.camel.spi.management.ManagedAttribute;
-import org.apache.camel.spi.management.ManagedResource;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ServiceHelper;
+import org.apache.camel.util.UnsafeUriCharactersEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
@@ -96,14 +97,14 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public JmsEndpoint(String uri, JmsComponent component, String destinationName, boolean pubSubDomain, JmsConfiguration configuration) {
-        super(uri, component);
+        super(UnsafeUriCharactersEncoder.encode(uri), component);
         this.configuration = configuration;
         this.destinationName = destinationName;
         this.pubSubDomain = pubSubDomain;
     }
 
     public JmsEndpoint(String endpointUri, JmsBinding binding, JmsConfiguration configuration, String destinationName, boolean pubSubDomain) {
-        super(endpointUri);
+        super(UnsafeUriCharactersEncoder.encode(endpointUri));
         this.binding = binding;
         this.configuration = configuration;
         this.destinationName = destinationName;
@@ -111,7 +112,7 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public JmsEndpoint(String endpointUri, String destinationName, boolean pubSubDomain) {
-        this(endpointUri, null, new JmsConfiguration(), destinationName, pubSubDomain);
+        this(UnsafeUriCharactersEncoder.encode(endpointUri), null, new JmsConfiguration(), destinationName, pubSubDomain);
         this.binding = new JmsBinding(this);
     }
 
@@ -119,7 +120,7 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
      * Creates a pub-sub endpoint with the given destination
      */
     public JmsEndpoint(String endpointUri, String destinationName) {
-        this(endpointUri, destinationName, true);
+        this(UnsafeUriCharactersEncoder.encode(endpointUri), destinationName, true);
     }
 
 
@@ -191,8 +192,10 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public void configureListenerContainer(AbstractMessageListenerContainer listenerContainer, JmsConsumer consumer) {
         if (destinationName != null) {
             listenerContainer.setDestinationName(destinationName);
+            log.debug("Using destinationName: {} on listenerContainer: ", destinationName, listenerContainer);
         } else if (destination != null) {
             listenerContainer.setDestination(destination);
+            log.debug("Using destination: {} on listenerContainer: ", destinationName, listenerContainer);
         } else {
             DestinationResolver resolver = getDestinationResolver();
             if (resolver != null) {
@@ -200,8 +203,12 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
             } else {
                 throw new IllegalArgumentException("Neither destination, destinationName or destinationResolver are specified on this endpoint!");
             }
+            log.debug("Using destinationResolver: {} on listenerContainer: ", resolver, listenerContainer);
         }
         listenerContainer.setPubSubDomain(pubSubDomain);
+
+        // include destination name as part of thread and transaction name
+        String consumerName = "JmsConsumer[" + getEndpointConfiguredDestinationName() + "]";
 
         if (configuration.getTaskExecutor() != null) {
             if (log.isDebugEnabled()) {
@@ -209,11 +216,16 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
             }
             setContainerTaskExecutor(listenerContainer, configuration.getTaskExecutor());
         } else {
-            // include destination name as part of thread name
-            String name = "JmsConsumer[" + getEndpointConfiguredDestinationName() + "]";
             // use a cached pool as DefaultMessageListenerContainer will throttle pool sizing
-            ExecutorService executor = getCamelContext().getExecutorServiceManager().newCachedThreadPool(consumer, name);
+            ExecutorService executor = getCamelContext().getExecutorServiceManager().newCachedThreadPool(consumer, consumerName);
             setContainerTaskExecutor(listenerContainer, executor);
+        }
+        
+        // set a default transaction name if none provided
+        if (configuration.getTransactionName() == null) {
+            if (listenerContainer instanceof DefaultMessageListenerContainer) {
+                ((DefaultMessageListenerContainer) listenerContainer).setTransactionName(consumerName);
+            }            
         }
     }
 
@@ -232,6 +244,10 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
      */
     public String getEndpointConfiguredDestinationName() {
         String remainder = ObjectHelper.after(getEndpointKey(), "//");
+        if (remainder != null && remainder.contains("?")) {
+            // remove parameters
+            remainder = ObjectHelper.before(remainder, "?");
+        }
         return JmsMessageHelper.normalizeDestinationName(remainder);
     }
 
@@ -1007,6 +1023,16 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     @ManagedAttribute
     public void setDisableTimeToLive(boolean disableTimeToLive) {
         configuration.setDisableTimeToLive(disableTimeToLive);
+    }
+
+    @ManagedAttribute
+    public void setAsyncConsumer(boolean asyncConsumer) {
+        configuration.setAsyncConsumer(asyncConsumer);
+    }
+
+    @ManagedAttribute
+    public boolean isAsyncConsumer() {
+        return configuration.isAsyncConsumer();
     }
 
     @ManagedAttribute

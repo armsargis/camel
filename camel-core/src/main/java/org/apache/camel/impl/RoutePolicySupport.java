@@ -42,6 +42,30 @@ public abstract class RoutePolicySupport extends ServiceSupport implements Route
         // noop
     }
 
+    public void onRemove(Route route) {
+        // noop
+    }
+
+    @Override
+    public void onStart(Route route) {
+        // noop
+    }
+
+    @Override
+    public void onStop(Route route) {
+        // noop
+    }
+
+    @Override
+    public void onSuspend(Route route) {
+        // noop
+    }
+
+    @Override
+    public void onResume(Route route) {
+        // noop
+    }
+
     public void onExchangeBegin(Route route, Exchange exchange) {
         // noop
     }

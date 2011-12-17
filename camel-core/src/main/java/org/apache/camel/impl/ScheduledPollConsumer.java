@@ -21,6 +21,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.camel.Endpoint;
+import org.apache.camel.Exchange;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.PollingConsumerPollingStrategy;
 import org.apache.camel.Processor;
@@ -50,6 +51,8 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
     private boolean useFixedDelay = true;
     private PollingConsumerPollStrategy pollStrategy = new DefaultPollingConsumerPollStrategy();
     private LoggingLevel runLoggingLevel = LoggingLevel.TRACE;
+    private boolean sendEmptyMessageWhenIdle;
+    private volatile boolean polling;
 
     public ScheduledPollConsumer(Endpoint endpoint, Processor processor) {
         super(endpoint, processor);
@@ -128,13 +131,25 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
                         LOG.debug("Retrying attempt {} to poll: {}", retryCounter, this.getEndpoint());
                     }
 
-                    boolean begin = pollStrategy.begin(this, getEndpoint());
-                    if (begin) {
-                        retryCounter++;
-                        int polledMessages = poll();
-                        pollStrategy.commit(this, getEndpoint(), polledMessages);
-                    } else {
-                        LOG.debug("Cannot begin polling as pollStrategy returned false: {}", pollStrategy);
+                    // mark we are polling which should also include the begin/poll/commit
+                    polling = true;
+                    try {
+                        boolean begin = pollStrategy.begin(this, getEndpoint());
+                        if (begin) {
+                            retryCounter++;
+                            int polledMessages = poll();
+
+                            if (polledMessages == 0 && isSendEmptyMessageWhenIdle()) {
+                                // send an "empty" exchange
+                                processEmptyMessage();
+                            }
+
+                            pollStrategy.commit(this, getEndpoint(), polledMessages);
+                        } else {
+                            LOG.debug("Cannot begin polling as pollStrategy returned false: {}", pollStrategy);
+                        }
+                    } finally {
+                        polling = false;
                     }
                 }
 
@@ -164,11 +179,29 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
         // avoid this thread to throw exceptions because the thread pool wont re-schedule a new thread
     }
 
+    /**
+     * No messages to poll so send an empty message instead.
+     *
+     * @throws Exception is thrown if error processing the empty message.
+     */
+    protected void processEmptyMessage() throws Exception {
+        Exchange exchange = getEndpoint().createExchange();
+        log.debug("Sending empty message as there were no messages from polling: {}", this.getEndpoint());
+        getProcessor().process(exchange);
+    }
+
     // Properties
     // -------------------------------------------------------------------------
 
     protected boolean isPollAllowed() {
         return isRunAllowed() && !isSuspended();
+    }
+
+    /**
+     * Whether polling is currently in progress
+     */
+    protected boolean isPolling() {
+        return polling;
     }
 
     public long getInitialDelay() {
@@ -241,6 +274,14 @@ public abstract class ScheduledPollConsumer extends DefaultConsumer implements R
      */
     public void setStartScheduler(boolean startScheduler) {
         this.startScheduler = startScheduler;
+    }
+    
+    public void setSendEmptyMessageWhenIdle(boolean sendEmptyMessageWhenIdle) {
+        this.sendEmptyMessageWhenIdle = sendEmptyMessageWhenIdle;
+    }
+    
+    public boolean isSendEmptyMessageWhenIdle() {
+        return sendEmptyMessageWhenIdle;
     }
 
     // Implementation methods

@@ -22,25 +22,31 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.net.ssl.SSLContext;
+
 import org.apache.camel.Endpoint;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.impl.DefaultComponent;
+import org.apache.camel.util.jsse.SSLContextParameters;
 import org.cometd.bayeux.server.BayeuxServer;
 import org.cometd.bayeux.server.SecurityPolicy;
 import org.cometd.server.BayeuxServerImpl;
 import org.cometd.server.CometdServlet;
+import org.eclipse.jetty.http.ssl.SslContextFactory;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
 import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.eclipse.jetty.server.session.HashSessionManager;
 import org.eclipse.jetty.server.session.SessionHandler;
+import org.eclipse.jetty.server.ssl.SslConnector;
+import org.eclipse.jetty.server.ssl.SslSelectChannelConnector;
 import org.eclipse.jetty.server.ssl.SslSocketConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.resource.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 /**
  * Component for Jetty Cometd
@@ -54,9 +60,9 @@ public class CometdComponent extends DefaultComponent {
     private String sslKeyPassword;
     private String sslPassword;
     private String sslKeystore;
-    private SslSocketConnector sslSocketConnector;
     private SecurityPolicy securityPolicy;
     private List<BayeuxServer.Extension> extensions;
+    private SSLContextParameters sslContextParameters;
 
     class ConnectorRef {
         Connector connector;
@@ -197,9 +203,19 @@ public class CometdComponent extends DefaultComponent {
         return servlet;
     }
 
-    public synchronized SslSocketConnector getSslSocketConnector() {
-        if (sslSocketConnector == null) {
-            sslSocketConnector = new SslSocketConnector();
+    protected SslConnector getSslSocketConnector() {
+        SslSelectChannelConnector sslSocketConnector = null;
+        if (sslContextParameters != null) {
+            SslContextFactory sslContextFactory = new CometdComponentSslContextFactory();
+            try {
+                sslContextFactory.setSslContext(sslContextParameters.createSSLContext());
+            } catch (Exception e) {
+                throw new RuntimeCamelException("Error initiating SSLContext.", e);
+            }
+            sslSocketConnector = new SslSelectChannelConnector(sslContextFactory);
+        } else {
+
+            sslSocketConnector = new SslSelectChannelConnector();
             // with default null values, jetty ssl system properties
             // and console will be read by jetty implementation
             sslSocketConnector.getSslContextFactory().setKeyManagerPassword(sslPassword);
@@ -207,7 +223,9 @@ public class CometdComponent extends DefaultComponent {
             if (sslKeystore != null) {
                 sslSocketConnector.getSslContextFactory().setKeyStore(sslKeystore);
             }
+
         }
+
         return sslSocketConnector;
     }
 
@@ -268,6 +286,14 @@ public class CometdComponent extends DefaultComponent {
         }
         extensions.add(extension);
     }
+    
+    public SSLContextParameters getSslContextParameters() {
+        return sslContextParameters;
+    }
+
+    public void setSslContextParameters(SSLContextParameters sslContextParameters) {
+        this.sslContextParameters = sslContextParameters;
+    }
 
     protected Server createServer() throws Exception {
         Server server = new Server();
@@ -292,5 +318,15 @@ public class CometdComponent extends DefaultComponent {
     @Override
     protected void doStart() throws Exception {
         super.doStart();
+    }
+    
+    /**
+     * Override the key/trust store check method as it does not account for a factory that has
+     * a pre-configured {@link SSLContext}.
+     */
+    private static final class CometdComponentSslContextFactory extends SslContextFactory {
+        @Override
+        public void checkKeyStore() {
+        }
     }
 }

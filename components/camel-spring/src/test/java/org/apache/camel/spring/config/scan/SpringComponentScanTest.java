@@ -18,9 +18,9 @@ package org.apache.camel.spring.config.scan;
 
 import java.util.concurrent.TimeUnit;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.ContextTestSupport;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.model.ModelCamelContext;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 
@@ -33,7 +33,7 @@ public class SpringComponentScanTest extends ContextTestSupport {
             context.stop();
         }
         ApplicationContext c = new ClassPathXmlApplicationContext("org/apache/camel/spring/config/scan/componentScan.xml");
-        context = (CamelContext)c.getBean("camelScan");
+        context = c.getBean("camelScan", ModelCamelContext.class);
         template = context.createProducerTemplate();
         template.start();
     }

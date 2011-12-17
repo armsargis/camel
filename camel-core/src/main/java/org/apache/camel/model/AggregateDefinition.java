@@ -19,6 +19,8 @@ package org.apache.camel.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -39,6 +41,7 @@ import org.apache.camel.processor.aggregate.GroupedExchangeAggregationStrategy;
 import org.apache.camel.spi.AggregationRepository;
 import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
+import org.apache.camel.spi.ThreadPoolProfile;
 import org.apache.camel.util.concurrent.SynchronousExecutorService;
 
 /**
@@ -66,11 +69,15 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     @XmlTransient
     private ExecutorService executorService;
     @XmlTransient
+    private ScheduledExecutorService timeoutCheckerExecutorService;
+    @XmlTransient
     private AggregationRepository aggregationRepository;
     @XmlAttribute
     private Boolean parallelProcessing;
     @XmlAttribute
     private String executorServiceRef;
+    @XmlAttribute
+    private String timeoutCheckerExecutorServiceRef;
     @XmlAttribute
     private String aggregationRepositoryRef;
     @XmlAttribute
@@ -93,6 +100,8 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     private Integer closeCorrelationKeyOnCompletion;
     @XmlAttribute
     private Boolean discardOnCompletionTimeout;
+    @XmlAttribute
+    private Boolean forceCompletionOnStop;
 
     public AggregateDefinition() {
     }
@@ -164,11 +173,19 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
                 executorService = new SynchronousExecutorService();
             }
         }
+       
+        if (timeoutCheckerExecutorServiceRef != null && timeoutCheckerExecutorService == null) {
+            timeoutCheckerExecutorService = getConfiguredScheduledExecutorService(routeContext);
+        }
         AggregateProcessor answer = new AggregateProcessor(routeContext.getCamelContext(), processor, correlation, strategy, executorService);
 
         AggregationRepository repository = createAggregationRepository(routeContext);
         if (repository != null) {
             answer.setAggregationRepository(repository);
+        }
+        
+        if (getTimeoutCheckerExecutorService() != null) {
+            answer.setTimeoutCheckerExecutorService(timeoutCheckerExecutorService);
         }
 
         // set other options
@@ -209,7 +226,32 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         if (getDiscardOnCompletionTimeout() != null) {
             answer.setDiscardOnCompletionTimeout(isDiscardOnCompletionTimeout());
         }
+        if (getForceCompletionOnStop() != null) {
+            answer.setForceCompletionOnStop(getForceCompletionOnStop());
+        }
 
+        return answer;
+    }
+
+    private ScheduledExecutorService getConfiguredScheduledExecutorService(RouteContext routeContext) {
+        // TODO: maybe rather than this one-off method to support an executorService & scheduledExecutorService for the aggregator,
+        // create ScheduledExecutorServiceAwareDefinition and the change other definitions that currently use ScheduledExecutorServices to
+        // use that one instead of the more generic ExecutorServiceAwareDefinition
+        ScheduledExecutorService answer = routeContext.getCamelContext().getRegistry().lookup(timeoutCheckerExecutorServiceRef, ScheduledExecutorService.class);
+        if (answer == null) {
+            ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
+            // then create a thread pool assuming the ref is a thread pool profile id                
+            ThreadPoolProfile profile = manager.getThreadPoolProfile(timeoutCheckerExecutorServiceRef);
+            if (profile != null) {
+                // okay we need to grab the pool size from the ref
+                Integer poolSize = profile.getPoolSize();
+                if (poolSize == null) {
+                    // fallback and use the default pool size, if none was set on the profile
+                    poolSize = manager.getDefaultThreadPoolProfile().getPoolSize();
+                }
+                answer = manager.newScheduledThreadPool(this, "Aggregator", poolSize);
+            }
+        }
         return answer;
     }
 
@@ -450,6 +492,22 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     public void setDiscardOnCompletionTimeout(Boolean discardOnCompletionTimeout) {
         this.discardOnCompletionTimeout = discardOnCompletionTimeout;
     }
+    
+    public void setTimeoutCheckerExecutorService(ScheduledExecutorService timeoutCheckerExecutorService) {
+        this.timeoutCheckerExecutorService = timeoutCheckerExecutorService;
+    }
+
+    public ScheduledExecutorService getTimeoutCheckerExecutorService() {
+        return timeoutCheckerExecutorService;
+    }
+
+    public void setTimeoutCheckerExecutorServiceRef(String timeoutCheckerExecutorServiceRef) {
+        this.timeoutCheckerExecutorServiceRef = timeoutCheckerExecutorServiceRef;
+    }
+
+    public String getTimeoutCheckerExecutorServiceRef() {
+        return timeoutCheckerExecutorServiceRef;
+    }
 
     // Fluent API
     //-------------------------------------------------------------------------
@@ -648,6 +706,29 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         return this;
     }
 
+     /**
+     * Sets the force completion on stop flag, which considers the current group as complete
+     * and sends out the aggregated exchange when the stop event is executed
+     *
+     * @return builder
+     */
+    public AggregateDefinition forceCompletionOnStop() {
+        setForceCompletionOnStop(true);
+        return this;
+    }
+
+    public Boolean getForceCompletionOnStop() {
+        return forceCompletionOnStop;
+    }
+
+    public boolean isForceCompletionOnStop() {
+        return forceCompletionOnStop != null && forceCompletionOnStop;
+    }
+
+    public void setForceCompletionOnStop(Boolean forceCompletionOnStop) {
+        this.forceCompletionOnStop = forceCompletionOnStop;
+    }
+
     /**
      * Sending the aggregated output in parallel
      *
@@ -668,6 +749,16 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         return this;
     }
 
+    public AggregateDefinition timeoutCheckerExecutorService(ScheduledExecutorService executorService) {
+        setTimeoutCheckerExecutorService(executorService);
+        return this;
+    }
+
+    public AggregateDefinition timeoutCheckerExecutorServiceRef(String executorServiceRef) {
+        setTimeoutCheckerExecutorServiceRef(executorServiceRef);
+        return this;
+    }
+    
     protected void checkNoCompletedPredicate() {
         if (getCompletionPredicate() != null) {
             throw new IllegalArgumentException("There is already a completionPredicate defined for this aggregator: " + this);

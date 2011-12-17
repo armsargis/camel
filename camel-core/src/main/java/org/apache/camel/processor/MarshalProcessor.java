@@ -23,6 +23,7 @@ import org.apache.camel.CamelContextAware;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
+import org.apache.camel.Traceable;
 import org.apache.camel.spi.DataFormat;
 import org.apache.camel.support.ServiceSupport;
 import org.apache.camel.util.ObjectHelper;
@@ -54,9 +55,15 @@ public class MarshalProcessor extends ServiceSupport implements Processor, Trace
         Message out = exchange.getOut();
         out.copyFrom(in);
 
-        dataFormat.marshal(exchange, body, buffer);
-        byte[] data = buffer.toByteArray();
-        out.setBody(data);
+        try {
+            dataFormat.marshal(exchange, body, buffer);
+            byte[] data = buffer.toByteArray();
+            out.setBody(data);
+        } catch (Exception e) {
+            // remove OUT message, as an exception occurred
+            exchange.setOut(null);
+            throw e;
+        }
     }
 
     @Override

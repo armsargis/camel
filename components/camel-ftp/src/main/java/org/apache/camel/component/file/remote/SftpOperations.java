@@ -32,6 +32,7 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.SftpException;
+import com.jcraft.jsch.UIKeyboardInteractive;
 import com.jcraft.jsch.UserInfo;
 import org.apache.camel.Exchange;
 import org.apache.camel.InvalidPayloadException;
@@ -57,6 +58,12 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
     private SftpEndpoint endpoint;
     private ChannelSftp channel;
     private Session session;
+
+    /**
+     * Extended user info which supports interactive keyboard mode, by entering the password.
+     */
+    public interface ExtendedUserInfo extends UserInfo, UIKeyboardInteractive {
+    }
 
     public void setEndpoint(GenericFileEndpoint endpoint) {
         this.endpoint = (SftpEndpoint) endpoint;
@@ -139,17 +146,15 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
         SftpConfiguration sftpConfig = (SftpConfiguration) configuration;
 
         if (isNotEmpty(sftpConfig.getCiphers())) {
-            LOG.debug("Using ciphers: " + sftpConfig.getCiphers());
+            LOG.debug("Using ciphers: {}", sftpConfig.getCiphers());
             Hashtable<String, String> ciphers = new Hashtable<String, String>();
-            
             ciphers.put("cipher.s2c", sftpConfig.getCiphers());
             ciphers.put("cipher.c2s", sftpConfig.getCiphers());
-
             JSch.setConfig(ciphers);
         }
         
         if (isNotEmpty(sftpConfig.getPrivateKeyFile())) {
-            LOG.debug("Using private keyfile: " + sftpConfig.getPrivateKeyFile());
+            LOG.debug("Using private keyfile: {}", sftpConfig.getPrivateKeyFile());
             if (isNotEmpty(sftpConfig.getPrivateKeyFilePassphrase())) {
                 jsch.addIdentity(sftpConfig.getPrivateKeyFile(), sftpConfig.getPrivateKeyFilePassphrase());
             } else {
@@ -158,22 +163,30 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
         }
 
         if (isNotEmpty(sftpConfig.getKnownHostsFile())) {
-            LOG.debug("Using knownhosts file: " + sftpConfig.getKnownHostsFile());
+            LOG.debug("Using knownhosts file: {}", sftpConfig.getKnownHostsFile());
             jsch.setKnownHosts(sftpConfig.getKnownHostsFile());
         }
 
         final Session session = jsch.getSession(configuration.getUsername(), configuration.getHost(), configuration.getPort());
 
         if (isNotEmpty(sftpConfig.getStrictHostKeyChecking())) {
-            LOG.debug("Using StrickHostKeyChecking: " + sftpConfig.getStrictHostKeyChecking());
+            LOG.debug("Using StrickHostKeyChecking: {}", sftpConfig.getStrictHostKeyChecking());
             session.setConfig("StrictHostKeyChecking", sftpConfig.getStrictHostKeyChecking());
         }
         
         session.setServerAliveInterval(sftpConfig.getServerAliveInterval());
         session.setServerAliveCountMax(sftpConfig.getServerAliveCountMax());
 
+        // compression
+        if (sftpConfig.getCompression() > 0) {
+            LOG.debug("Using compression: {}", sftpConfig.getCompression());
+            session.setConfig("compression.s2c", "zlib@openssh.com, zlib, none");
+            session.setConfig("compression.c2s", "zlib@openssh.com, zlib, none");
+            session.setConfig("compression_level", Integer.toString(sftpConfig.getCompression()));
+        }
+
         // set user information
-        session.setUserInfo(new UserInfo() {
+        session.setUserInfo(new ExtendedUserInfo() {
             public String getPassphrase() {
                 return null;
             }
@@ -199,6 +212,12 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
             public void showMessage(String s) {
                 LOG.trace("Message received from Server: " + s);
             }
+
+            public String[] promptKeyboardInteractive(String destination, String name,
+                                                      String instruction, String[] prompt, boolean[] echo) {
+                return new String[]{configuration.getPassword()};
+            }
+
         });
         return session;
     }
@@ -589,8 +608,12 @@ public class SftpOperations implements RemoteFileOperations<ChannelSftp.LsEntry>
 
         // operation went okay so rename temp to local after we have retrieved the data
         LOG.trace("Renaming local in progress file from: {} to: {}", temp, local);
-        if (!FileUtil.renameFile(temp, local)) {
-            throw new GenericFileOperationFailedException("Cannot rename local work file from: " + temp + " to: " + local);
+        try {
+            if (!FileUtil.renameFile(temp, local, false)) {
+                throw new GenericFileOperationFailedException("Cannot rename local work file from: " + temp + " to: " + local);
+            }
+        } catch (IOException e) {
+            throw new GenericFileOperationFailedException("Cannot rename local work file from: " + temp + " to: " + local, e);
         }
 
         return true;

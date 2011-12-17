@@ -24,6 +24,7 @@ import org.apache.camel.CamelExecutionException;
 import org.apache.camel.ServiceStatus;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.impl.DefaultCamelContext;
+import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.spi.RoutePolicy;
 import org.apache.camel.test.junit4.TestSupport;
@@ -43,7 +44,7 @@ public abstract class SpringScheduledRoutePolicyTest extends TestSupport {
     public void startTest() throws Exception {
         CamelContext context = startRouteWithPolicy("startPolicy");
         
-        MockEndpoint mock = (MockEndpoint) context.getEndpoint("mock:success");
+        MockEndpoint mock = context.getEndpoint("mock:success", MockEndpoint.class);
         mock.expectedMinimumMessageCount(1);
         
         context.stopRoute("testRoute", 0, TimeUnit.MILLISECONDS);
@@ -93,7 +94,7 @@ public abstract class SpringScheduledRoutePolicyTest extends TestSupport {
     public void resumeTest() throws Exception {
         CamelContext context = startRouteWithPolicy("resumePolicy");
         
-        MockEndpoint mock = (MockEndpoint) context.getEndpoint("mock:success");
+        MockEndpoint mock = context.getEndpoint("mock:success", MockEndpoint.class);
         mock.expectedMinimumMessageCount(1);
 
         ServiceHelper.suspendService(context.getRoute("testRoute").getConsumer());
@@ -109,12 +110,12 @@ public abstract class SpringScheduledRoutePolicyTest extends TestSupport {
     private CamelContext startRouteWithPolicy(String policyBeanName) throws Exception {
         CamelContext context = new DefaultCamelContext();
         ArrayList<RouteDefinition> routes = (ArrayList<RouteDefinition>)applicationContext.getBean("testRouteContext");
-        RoutePolicy policy = (RoutePolicy)applicationContext.getBean(policyBeanName);
+        RoutePolicy policy = applicationContext.getBean(policyBeanName, RoutePolicy.class);
         assertTrue(getTestType() == TestType.SIMPLE 
             ? policy instanceof SimpleScheduledRoutePolicy 
             : policy instanceof CronScheduledRoutePolicy);
         routes.get(0).routePolicy(policy);
-        context.addRouteDefinitions(routes);
+        ((ModelCamelContext)context).addRouteDefinitions(routes);
         context.start();
         return context;
     }

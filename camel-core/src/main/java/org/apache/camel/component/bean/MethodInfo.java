@@ -22,6 +22,7 @@ import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -39,11 +40,11 @@ import org.apache.camel.NoTypeConversionAvailableException;
 import org.apache.camel.Pattern;
 import org.apache.camel.Processor;
 import org.apache.camel.RuntimeExchangeException;
-import org.apache.camel.impl.ExpressionAdapter;
 import org.apache.camel.processor.DynamicRouter;
 import org.apache.camel.processor.RecipientList;
 import org.apache.camel.processor.RoutingSlip;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
+import org.apache.camel.support.ExpressionAdapter;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.ServiceHelper;
@@ -328,6 +329,10 @@ public class MethodInfo {
 
     public boolean isReturnTypeVoid() {
         return method.getReturnType().getName().equals("void");
+    }
+
+    public boolean isStaticMethod() {
+        return Modifier.isStatic(method.getModifiers());
     }
 
     protected Object invoke(Method mth, Object pojo, Object[] arguments, Exchange exchange) throws IllegalAccessException, InvocationTargetException {

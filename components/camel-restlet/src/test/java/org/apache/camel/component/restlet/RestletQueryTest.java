@@ -35,11 +35,8 @@ public class RestletQueryTest extends RestletTestSupport {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
-                from("restlet:http://localhost:" + portNum + "/users/{username}")
-                    .process(new SetUserProcessor());
-                
+                from("restlet:http://localhost:" + portNum + "/users/{username}").process(new SetUserProcessor());
                 from("direct:start").to("restlet:http://localhost:" + portNum + "/users/{username}");
-
             }
         };
     }

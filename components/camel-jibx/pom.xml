@@ -20,7 +20,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>camel-parent</artifactId>
-        <version>2.9-SNAPSHOT</version>
+        <version>2.10-SNAPSHOT</version>
         <relativePath>../../parent</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -79,7 +79,7 @@
                     <plugin>
                         <groupId>org.jibx</groupId>
                         <artifactId>maven-jibx-plugin</artifactId>
-                        <version>1.2.3</version>
+                        <version>${jibx-version}</version>
                         <configuration>
                             <bindingDirectory>src/test/resources</bindingDirectory>
                             <includeSchemaBindings>

@@ -16,25 +16,22 @@
  */
 package org.apache.camel.management.mbean;
 
+import org.apache.camel.api.management.ManagedResource;
+import org.apache.camel.api.management.mbean.ManagedCounterMBean;
 import org.apache.camel.spi.ManagementStrategy;
-import org.apache.camel.spi.management.ManagedAttribute;
-import org.apache.camel.spi.management.ManagedOperation;
-import org.apache.camel.spi.management.ManagedResource;
 
 @ManagedResource(description = "Managed Counter")
-public abstract class ManagedCounter {
+public abstract class ManagedCounter implements ManagedCounterMBean {
     protected Statistic exchangesTotal;
 
     public void init(ManagementStrategy strategy) {
         this.exchangesTotal = new Statistic("org.apache.camel.exchangesTotal", this, Statistic.UpdateMode.COUNTER);
     }
 
-    @ManagedOperation(description = "Reset counters")
     public synchronized void reset() {
         exchangesTotal.reset();
     }
 
-    @ManagedAttribute(description = "Total number of exchanges")
     public long getExchangesTotal() throws Exception {
         return exchangesTotal.getValue();
     }

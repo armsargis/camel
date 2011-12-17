@@ -279,7 +279,7 @@ public class AggregateProcessorTest extends ContextTestSupport {
 
         ap.stop();
     }
-
+    
     public void testAggregateIgnoreInvalidCorrelationKey() throws Exception {
         MockEndpoint mock = getMockEndpoint("mock:result");
         mock.expectedBodiesReceived("A+C+END");

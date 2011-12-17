@@ -20,7 +20,9 @@ import org.apache.camel.AsyncCallback;
 import org.apache.camel.AsyncProcessor;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
+import org.apache.camel.Traceable;
 import org.apache.camel.util.AsyncProcessorHelper;
+import org.apache.camel.util.CamelLogger;
 
 /**
  * A processor which evaluates an Expression and logs it.
@@ -57,7 +59,7 @@ public class LogProcessor implements AsyncProcessor, Traceable {
 
     @Override
     public String toString() {
-        return "Log[" + expression + "]";
+        return "Log(" + logger.getLog().getName() + ")[" + expression + "]";
     }
 
     public String getTraceLabel() {

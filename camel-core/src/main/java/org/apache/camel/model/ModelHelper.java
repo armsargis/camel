@@ -24,6 +24,7 @@ import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.NamedNode;
 
 /**
  * Helper for the Camel {@link org.apache.camel.model model} classes.
@@ -37,11 +38,11 @@ public final class ModelHelper {
     /**
      * Dumps the definition as XML
      *
-     * @param definition  the definition, such as a {@link org.apache.camel.model.RouteDefinition}
+     * @param definition  the definition, such as a {@link org.apache.camel.NamedNode}
      * @return            the output in XML (is formatted)
      * @throws JAXBException is throw if error marshalling to XML
      */
-    public static String dumpModelAsXml(OptionalIdentifiedDefinition definition) throws JAXBException {
+    public static String dumpModelAsXml(NamedNode definition) throws JAXBException {
         // create a new jaxb context
         // must use classloader from CamelContext to have JAXB working
         JAXBContext jaxbContext = JAXBContext.newInstance(Constants.JAXB_CONTEXT_PACKAGES, CamelContext.class.getClassLoader());
@@ -62,7 +63,7 @@ public final class ModelHelper {
      * @return the model definition
      * @throws javax.xml.bind.JAXBException is thrown if error unmarshalling from xml to model
      */
-    public static <T extends OptionalIdentifiedDefinition> T createModelFromXml(String xml, Class<T> type) throws JAXBException {
+    public static <T extends NamedNode> T createModelFromXml(String xml, Class<T> type) throws JAXBException {
         // create a new jaxb context
         // must use classloader from CamelContext to have JAXB working
         JAXBContext jaxbContext = JAXBContext.newInstance(Constants.JAXB_CONTEXT_PACKAGES, CamelContext.class.getClassLoader());

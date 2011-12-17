@@ -22,7 +22,6 @@ import java.io.FileNotFoundException;
 import org.apache.camel.Component;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
-import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.processor.idempotent.MemoryIdempotentRepository;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.ObjectHelper;
@@ -34,6 +33,7 @@ public class FileEndpoint extends GenericFileEndpoint<File> {
 
     private FileOperations operations = new FileOperations(this);
     private File file;
+    private boolean copyAndDeleteOnRenameFail = true;
 
     public FileEndpoint() {
         // use marker file as default exclusive read locks
@@ -50,24 +50,21 @@ public class FileEndpoint extends GenericFileEndpoint<File> {
         ObjectHelper.notNull(operations, "operations");
         ObjectHelper.notNull(file, "file");
 
-        // we assume its a file if the name has a dot in it (eg foo.txt)
-        boolean isDirectory = file.isDirectory();
-        if (!isDirectory && file.getName().contains(".")) {
-            throw new IllegalArgumentException("Only directory is supported. Endpoint must be configured with a valid starting directory: " + file);
-        }
-
         // auto create starting directory if needed
-        if (!file.exists() && !isDirectory) {
+        if (!file.exists() && !file.isDirectory()) {
             if (isAutoCreate()) {
                 log.debug("Creating non existing starting directory: {}", file);
                 boolean absolute = FileUtil.isAbsolute(file);
-                operations.buildDirectory(file.getPath(), absolute);
+                boolean created = operations.buildDirectory(file.getPath(), absolute);
+                if (!created) {
+                    log.warn("Cannot auto create starting directory: {}", file);
+                }
             } else if (isStartingDirectoryMustExist()) {
                 throw new FileNotFoundException("Starting directory does not exist: " + file);
             }
         }
 
-        FileConsumer result = new FileConsumer(this, processor, operations);
+        FileConsumer result = newFileConsumer(processor, operations);
 
         if (isDelete() && getMove() != null) {
             throw new IllegalArgumentException("You cannot set both delete=true and move options");
@@ -104,11 +101,22 @@ public class FileEndpoint extends GenericFileEndpoint<File> {
     }
 
     public Exchange createExchange(GenericFile<File> file) {
-        Exchange exchange = new DefaultExchange(this);
+        Exchange exchange =  createExchange();
         if (file != null) {
             file.bindToExchange(exchange);
         }
         return exchange;
+    }
+
+    /**
+     * Strategy to create a new {@link FileConsumer}
+     *
+     * @param processor  the given processor
+     * @param operations file operations
+     * @return the created consumer
+     */
+    protected FileConsumer newFileConsumer(Processor processor, GenericFileOperations<File> operations) {
+        return new FileConsumer(this, processor, operations);
     }
 
     public File getFile() {
@@ -128,7 +136,7 @@ public class FileEndpoint extends GenericFileEndpoint<File> {
 
     @Override
     protected String createEndpointUri() {
-        return "file://" + getFile().getAbsolutePath();
+        return getFile().toURI().toString();
     }
 
     @Override
@@ -142,4 +150,11 @@ public class FileEndpoint extends GenericFileEndpoint<File> {
         return FileUtil.isAbsolute(new File(name));
     }
 
+    public boolean isCopyAndDeleteOnRenameFail() {
+        return copyAndDeleteOnRenameFail;
+    }
+
+    public void setCopyAndDeleteOnRenameFail(boolean copyAndDeleteOnRenameFail) {
+        this.copyAndDeleteOnRenameFail = copyAndDeleteOnRenameFail;
+    }
 }

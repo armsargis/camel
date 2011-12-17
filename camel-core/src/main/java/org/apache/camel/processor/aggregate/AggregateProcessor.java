@@ -35,16 +35,15 @@ import org.apache.camel.CamelContext;
 import org.apache.camel.CamelExchangeException;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
-import org.apache.camel.ExchangePattern;
 import org.apache.camel.Expression;
 import org.apache.camel.Navigate;
 import org.apache.camel.NoSuchEndpointException;
 import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
+import org.apache.camel.ProducerTemplate;
 import org.apache.camel.TimeoutMap;
+import org.apache.camel.Traceable;
 import org.apache.camel.impl.LoggingExceptionHandler;
-import org.apache.camel.processor.SendProcessor;
-import org.apache.camel.processor.Traceable;
 import org.apache.camel.spi.AggregationRepository;
 import org.apache.camel.spi.ExceptionHandler;
 import org.apache.camel.spi.RecoverableAggregationRepository;
@@ -77,6 +76,8 @@ import org.slf4j.LoggerFactory;
  */
 public class AggregateProcessor extends ServiceSupport implements Processor, Navigate<Processor>, Traceable {
 
+    public static final String AGGREGATE_TIMEOUT_CHECKER = "AggregateTimeoutChecker";
+
     private static final Logger LOG = LoggerFactory.getLogger(AggregateProcessor.class);
 
     private final Lock lock = new ReentrantLock();
@@ -85,6 +86,7 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
     private final AggregationStrategy aggregationStrategy;
     private final Expression correlationExpression;
     private final ExecutorService executorService;
+    private ScheduledExecutorService timeoutCheckerExecutorService;    
     private ScheduledExecutorService recoverService;
     // store correlation key -> exchange id in timeout map
     private TimeoutMap<String, String> timeoutMap;
@@ -94,8 +96,6 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
     private Set<String> batchConsumerCorrelationKeys = new LinkedHashSet<String>();
     private final Set<String> inProgressCompleteExchanges = new HashSet<String>();
     private final Map<String, RedeliveryData> redeliveryState = new ConcurrentHashMap<String, RedeliveryData>();
-    // optional dead letter channel for exhausted recovered exchanges
-    private Processor deadLetterProcessor;
 
     // keep booking about redelivery
     private class RedeliveryData {
@@ -118,6 +118,9 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
     private boolean completionFromBatchConsumer;
     private AtomicInteger batchConsumerCounter = new AtomicInteger();
     private boolean discardOnCompletionTimeout;
+    private boolean forceCompletionOnStop;
+
+    private ProducerTemplate deadLetterProducerTemplate;
 
     public AggregateProcessor(CamelContext camelContext, Processor processor,
                               Expression correlationExpression, AggregationStrategy aggregationStrategy,
@@ -568,6 +571,18 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
         this.discardOnCompletionTimeout = discardOnCompletionTimeout;
     }
 
+    public void setForceCompletionOnStop(boolean forceCompletionOnStop) {
+        this.forceCompletionOnStop = forceCompletionOnStop;
+    }
+
+    public void setTimeoutCheckerExecutorService(ScheduledExecutorService timeoutCheckerExecutorService) {
+        this.timeoutCheckerExecutorService = timeoutCheckerExecutorService;
+    }
+
+    public ScheduledExecutorService getTimeoutCheckerExecutorService() {
+        return timeoutCheckerExecutorService;
+    }
+    
     /**
      * On completion task which keeps the booking of the in progress up to date
      */
@@ -741,7 +756,7 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
                                 // set redelivery counter
                                 exchange.getIn().setHeader(Exchange.REDELIVERY_COUNTER, data.redeliveryCounter);
                                 exchange.getIn().setHeader(Exchange.REDELIVERY_EXHAUSTED, Boolean.TRUE);
-                                deadLetterProcessor.process(exchange);
+                                deadLetterProducerTemplate.send(recoverable.getDeadLetterUri(), exchange);
                             } catch (Throwable e) {
                                 exchange.setException(e);
                             }
@@ -830,9 +845,7 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
                     if (endpoint == null) {
                         throw new NoSuchEndpointException(recoverable.getDeadLetterUri());
                     }
-                    // force MEP to be InOnly so when sending to DLQ we would not expect a reply if the MEP was InOut
-                    deadLetterProcessor = new SendProcessor(endpoint, ExchangePattern.InOnly);
-                    ServiceHelper.startService(deadLetterProcessor);
+                    deadLetterProducerTemplate = camelContext.createProducerTemplate();
                 }
             }
         }
@@ -842,17 +855,21 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
         }
         if (getCompletionInterval() > 0) {
             LOG.info("Using CompletionInterval to run every " + getCompletionInterval() + " millis.");
-            ScheduledExecutorService scheduler = camelContext.getExecutorServiceManager().newScheduledThreadPool(this, "AggregateTimeoutChecker", 1);
+            if (getTimeoutCheckerExecutorService() == null) {
+                setTimeoutCheckerExecutorService(camelContext.getExecutorServiceManager().newScheduledThreadPool(this, AGGREGATE_TIMEOUT_CHECKER, 1));
+            }
             // trigger completion based on interval
-            scheduler.scheduleAtFixedRate(new AggregationIntervalTask(), 1000L, getCompletionInterval(), TimeUnit.MILLISECONDS);
+            getTimeoutCheckerExecutorService().scheduleAtFixedRate(new AggregationIntervalTask(), getCompletionInterval(), getCompletionInterval(), TimeUnit.MILLISECONDS);
         }
 
         // start timeout service if its in use
         if (getCompletionTimeout() > 0 || getCompletionTimeoutExpression() != null) {
             LOG.info("Using CompletionTimeout to trigger after " + getCompletionTimeout() + " millis of inactivity.");
-            ScheduledExecutorService scheduler = camelContext.getExecutorServiceManager().newScheduledThreadPool(this, "AggregateTimeoutChecker", 1);
+            if (getTimeoutCheckerExecutorService() == null) {
+                setTimeoutCheckerExecutorService(camelContext.getExecutorServiceManager().newScheduledThreadPool(this, AGGREGATE_TIMEOUT_CHECKER, 1));
+            }
             // check for timed out aggregated messages once every second
-            timeoutMap = new AggregationTimeoutMap(scheduler, 1000L);
+            timeoutMap = new AggregationTimeoutMap(getTimeoutCheckerExecutorService(), 1000L);
             // fill in existing timeout values from the aggregation repository, for example if a restart occurred, then we
             // need to re-establish the timeout map so timeout can trigger
             restoreTimeoutMapFromAggregationRepository();
@@ -862,10 +879,20 @@ public class AggregateProcessor extends ServiceSupport implements Processor, Nav
 
     @Override
     protected void doStop() throws Exception {
+
+        if (forceCompletionOnStop) {
+            forceCompletionOfAllGroups();
+
+            while (inProgressCompleteExchanges.size() > 0) {
+                LOG.trace("waiting for {} in progress exchanges to complete", inProgressCompleteExchanges.size());
+                Thread.sleep(100);
+            }
+        }
+
         if (recoverService != null) {
             camelContext.getExecutorServiceManager().shutdownNow(recoverService);
         }
-        ServiceHelper.stopServices(timeoutMap, processor, deadLetterProcessor);
+        ServiceHelper.stopServices(timeoutMap, processor, deadLetterProducerTemplate);
 
         if (closedCorrelationKeys != null) {
             // it may be a service so stop it as well

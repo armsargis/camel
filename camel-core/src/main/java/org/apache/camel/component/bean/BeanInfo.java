@@ -80,6 +80,13 @@ public class BeanInfo {
         EXCLUDED_METHODS.addAll(Arrays.asList(Object.class.getMethods()));
         // exclude all java.lang.reflect.Proxy methods as we dont want to invoke them
         EXCLUDED_METHODS.addAll(Arrays.asList(Proxy.class.getMethods()));
+        try {
+            // but keep toString as this method is okay
+            EXCLUDED_METHODS.remove(Object.class.getMethod("toString"));
+            EXCLUDED_METHODS.remove(Proxy.class.getMethod("toString"));
+        } catch (Throwable e) {
+            // ignore
+        }
     }
 
     public BeanInfo(CamelContext camelContext, Class<?> type) {
@@ -140,6 +147,7 @@ public class BeanInfo {
         return null;
     }
 
+    @SuppressWarnings("unchecked")
     public MethodInvocation createInvocation(Object pojo, Exchange exchange)
         throws AmbiguousMethodCallException, MethodNotFoundException {
         MethodInfo methodInfo = null;
@@ -153,25 +161,37 @@ public class BeanInfo {
                 name = ObjectHelper.before(methodName, "(");
             }
 
-            List<MethodInfo> methods = getOperations(name);
-            if (methods != null && methods.size() == 1) {
-                // only one method then choose it
-                methodInfo = methods.get(0);
-            } else if (methods != null) {
-                // there are more methods with that name so we cannot decide which to use
-
-                // but first lets try to choose a method and see if that comply with the name
-                // must use the method name which may have qualifiers
-                methodInfo = chooseMethod(pojo, exchange, methodName);
-
-                if (methodInfo == null || !name.equals(methodInfo.getMethod().getName())) {
-                    throw new AmbiguousMethodCallException(exchange, methods);
+            // special for getClass, as we want the user to be able to invoke this method
+            // for example to log the class type or the likes
+            if ("class".equals(name) || "getClass".equals(name)) {
+                try {
+                    Method method = pojo.getClass().getMethod("getClass");
+                    methodInfo = new MethodInfo(exchange.getContext(), pojo.getClass(), method, Collections.EMPTY_LIST, Collections.EMPTY_LIST, false, false);
+                } catch (NoSuchMethodException e) {
+                    throw new MethodNotFoundException(exchange, pojo, "getClass");
                 }
             } else {
-                // a specific method was given to invoke but not found
-                throw new MethodNotFoundException(exchange, pojo, methodName);
+                List<MethodInfo> methods = getOperations(name);
+                if (methods != null && methods.size() == 1) {
+                    // only one method then choose it
+                    methodInfo = methods.get(0);
+                } else if (methods != null) {
+                    // there are more methods with that name so we cannot decide which to use
+
+                    // but first lets try to choose a method and see if that comply with the name
+                    // must use the method name which may have qualifiers
+                    methodInfo = chooseMethod(pojo, exchange, methodName);
+
+                    if (methodInfo == null || !name.equals(methodInfo.getMethod().getName())) {
+                        throw new AmbiguousMethodCallException(exchange, methods);
+                    }
+                } else {
+                    // a specific method was given to invoke but not found
+                    throw new MethodNotFoundException(exchange, pojo, methodName);
+                }
             }
         }
+
         if (methodInfo == null) {
             // no name or type
             methodInfo = chooseMethod(pojo, exchange, null);
@@ -196,13 +216,25 @@ public class BeanInfo {
     protected void introspect(Class<?> clazz) {
         // get the target clazz as it could potentially have been enhanced by CGLIB etc.
         clazz = getTargetClass(clazz);
+        ObjectHelper.notNull(clazz, "clazz", this);
 
         LOG.trace("Introspecting class: {}", clazz);
 
-        Method[] methods = clazz.getDeclaredMethods();
+        // if the class is not public then fallback and use interface methods if possible
+        // this allow Camel to invoke private beans which implements interfaces
+        List<Method> methods = Arrays.asList(clazz.getDeclaredMethods());
+        if (!Modifier.isPublic(clazz.getModifiers())) {
+            LOG.trace("Preferring interface methods as class: {} is not public accessible", clazz);
+            List<Method> interfaceMethods = getInterfaceMethods(clazz);
+            
+            // still keep non-accessible class methods to provide more specific Exception if method is non-accessible
+            interfaceMethods.addAll(methods);
+            methods = interfaceMethods;
+        }
+        
         for (Method method : methods) {
             boolean valid = isValidMethod(clazz, method);
-            LOG.trace("Method:  {} is valid: {}", method, valid);
+            LOG.trace("Method: {} is valid: {}", method, valid);
             if (valid) {
                 introspect(clazz, method);
             }
@@ -286,9 +318,8 @@ public class BeanInfo {
         return answer;
     }
 
-    @SuppressWarnings("unchecked")
-    protected MethodInfo createMethodInfo(Class clazz, Method method) {
-        Class[] parameterTypes = method.getParameterTypes();
+    protected MethodInfo createMethodInfo(Class<?> clazz, Method method) {
+        Class<?>[] parameterTypes = method.getParameterTypes();
         List<Annotation>[] parametersAnnotations = collectParameterAnnotations(clazz, method);
 
         List<ParameterInfo> parameters = new ArrayList<ParameterInfo>();
@@ -303,7 +334,7 @@ public class BeanInfo {
         }
 
         for (int i = 0; i < size; i++) {
-            Class parameterType = parameterTypes[i];
+            Class<?> parameterType = parameterTypes[i];
             Annotation[] parameterAnnotations = parametersAnnotations[i].toArray(new Annotation[parametersAnnotations[i].size()]);
             Expression expression = createParameterUnmarshalExpression(clazz, method, parameterType, parameterAnnotations);
             hasCustomAnnotation |= expression != null;
@@ -443,7 +474,7 @@ public class BeanInfo {
         Message in = exchange.getIn();
         Object body = in.getBody();
         if (body != null) {
-            Class bodyType = body.getClass();
+            Class<?> bodyType = body.getClass();
             if (LOG.isTraceEnabled()) {
                 LOG.trace("Matching for method with a single parameter that matches type: {}", bodyType.getCanonicalName());
             }
@@ -664,6 +695,17 @@ public class BeanInfo {
 
         return null;
     }
+    
+    private static List<Method> getInterfaceMethods(Class<?> clazz) {
+        final List<Method> answer = new ArrayList<Method>();
+        for (Class<?> interfaceClazz : clazz.getInterfaces()) {
+            for (Method interfaceMethod : interfaceClazz.getDeclaredMethods()) {
+                answer.add(interfaceMethod);
+            }
+        }
+
+        return answer;
+    }
 
     private static void removeAllSetterOrGetterMethods(List<MethodInfo> methods) {
         Iterator<MethodInfo> it = methods.iterator();
@@ -714,7 +756,7 @@ public class BeanInfo {
         String types = ObjectHelper.between(methodName, "(", ")");
         if (types != null) {
             // we must qualify based on types to match method
-            Iterator it = ObjectHelper.createIterator(types);
+            Iterator<?> it = ObjectHelper.createIterator(types);
             for (int i = 0; i < method.getParameterTypes().length; i++) {
                 if (it.hasNext()) {
                     Class<?> parameterType = method.getParameterTypes()[i];
@@ -785,14 +827,35 @@ public class BeanInfo {
     }
 
     /**
+     * Do we have a static method with the given name.
+     * <p/>
+     * Shorthand method names for getters is supported, so you can pass in eg 'name' and Camel
+     * will can find the real 'getName' method instead.
+     *
+     * @param methodName the method name
+     * @return <tt>true</tt> if we have such a static method.
+     */
+    public boolean hasStaticMethod(String methodName) {
+        List<MethodInfo> methods = getOperations(methodName);
+        if (methods == null || methods.isEmpty()) {
+            return false;
+        }
+        for (MethodInfo method : methods) {
+            if (method.isStaticMethod()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Gets the list of methods sorted by A..Z method name.
      *
      * @return the methods.
      */
-    @SuppressWarnings("unchecked")
     public List<MethodInfo> getMethods() {
         if (operations.isEmpty()) {
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
 
         List<MethodInfo> methods = new ArrayList<MethodInfo>();

@@ -27,7 +27,6 @@ import org.apache.camel.BatchConsumer;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.ShutdownRunningTask;
-import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.impl.ScheduledPollConsumer;
 import org.apache.camel.spi.ShutdownAware;
 import org.apache.camel.util.CastUtils;
@@ -196,12 +195,24 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
     }
 
     public int getPendingExchangesSize() {
+        int answer;
         // only return the real pending size in case we are configured to complete all tasks
         if (ShutdownRunningTask.CompleteAllTasks == shutdownRunningTask) {
-            return pendingExchanges;
+            answer = pendingExchanges;
         } else {
-            return 0;
+            answer = 0;
         }
+
+        if (answer == 0 && isPolling()) {
+            // force at least one pending exchange if we are polling as there is a little gap
+            // in the processBatch method and until an exchange gets enlisted as in-flight
+            // which happens later, so we need to signal back to the shutdown strategy that
+            // there is a pending exchange. When we are no longer polling, then we will return 0
+            log.trace("Currently polling so returning 1 as pending exchanges");
+            answer = 1;
+        }
+
+        return answer;
     }
 
     public void prepareShutdown() {
@@ -518,7 +529,7 @@ public abstract class GenericFileConsumer<T> extends ScheduledPollConsumer imple
     private void evaluateFileExpression() {
         if (fileExpressionResult == null) {
             // create a dummy exchange as Exchange is needed for expression evaluation
-            Exchange dummy = new DefaultExchange(endpoint.getCamelContext());
+            Exchange dummy = endpoint.createExchange();
             fileExpressionResult = endpoint.getFileName().evaluate(dummy, String.class);
         }
     }

@@ -41,18 +41,29 @@ public class CxfEndpointBeansRouterTest extends AbstractSpringBeanTestSupport {
 
     @Test
     public void testCxfEndpointBeanDefinitionParser() {
-        CxfEndpoint routerEndpoint = (CxfEndpoint)ctx.getBean("routerEndpoint");
+        CxfEndpoint routerEndpoint = ctx.getBean("routerEndpoint", CxfEndpoint.class);
         assertEquals("Got the wrong endpoint address", routerEndpoint.getAddress(),
                      "http://localhost:" + CXFTestSupport.getPort1() + "/CxfEndpointBeansRouterTest/router");
         assertEquals("Got the wrong endpont service class", 
                      "org.apache.camel.component.cxf.HelloService", 
                      routerEndpoint.getServiceClass().getName());
     }
+    
+    @Test
+    public void testCreateCxfEndpointFromURI() {
+        CamelContext camelContext = ctx.getBean("camel", CamelContext.class);
+        CxfEndpoint endpoint1 = camelContext.getEndpoint("cxf:bean:routerEndpoint?address=http://localhost:9000/test1", CxfEndpoint.class);
+        CxfEndpoint endpoint2 = camelContext.getEndpoint("cxf:bean:routerEndpoint?address=http://localhost:8000/test2", CxfEndpoint.class);
+        assertEquals("Get a wrong endpoint address.", "http://localhost:9000/test1", endpoint1.getAddress());
+        assertEquals("Get a wrong endpoint address.", "http://localhost:8000/test2", endpoint2.getAddress());
+        assertEquals("Get a wrong endpoint key.", "cxf://bean:routerEndpoint?address=http://localhost:9000/test1", endpoint1.getEndpointKey());
+        assertEquals("Get a wrong endpoint key.", "cxf://bean:routerEndpoint?address=http://localhost:8000/test2", endpoint2.getEndpointKey());
+    }
 
     @Test
     public void testCxfBusConfiguration() throws Exception {
         // get the camelContext from application context
-        CamelContext camelContext = (CamelContext) ctx.getBean("camel");
+        CamelContext camelContext = ctx.getBean("camel", CamelContext.class);
         ProducerTemplate template = camelContext.createProducerTemplate();
 
         Exchange reply = template.request("cxf:bean:serviceEndpoint", new Processor() {
@@ -73,8 +84,8 @@ public class CxfEndpointBeansRouterTest extends AbstractSpringBeanTestSupport {
     @Test
     public void testCxfBeanWithCamelPropertiesHolder() throws Exception {
         // get the camelContext from application context
-        CamelContext camelContext = (CamelContext) ctx.getBean("camel");
-        CxfEndpoint testEndpoint = (CxfEndpoint)camelContext.getEndpoint("cxf:bean:testEndpoint");
+        CamelContext camelContext = ctx.getBean("camel", CamelContext.class);
+        CxfEndpoint testEndpoint = camelContext.getEndpoint("cxf:bean:testEndpoint", CxfEndpoint.class);
         QName endpointName = QName.valueOf("{http://org.apache.camel.component.cxf}myEndpoint");
         QName serviceName = QName.valueOf("{http://org.apache.camel.component.cxf}myService");
 

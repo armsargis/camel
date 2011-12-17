@@ -21,12 +21,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
+import org.apache.camel.DelegateProcessor;
 import org.apache.camel.Endpoint;
+import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.Route;
 import org.apache.camel.Service;
-import org.apache.camel.builder.ErrorHandlerBuilder;
 import org.apache.camel.component.bean.BeanProcessor;
 import org.apache.camel.impl.ScheduledPollConsumer;
 import org.apache.camel.management.mbean.ManagedBeanProcessor;
@@ -47,10 +48,9 @@ import org.apache.camel.management.mbean.ManagedService;
 import org.apache.camel.management.mbean.ManagedSuspendableRoute;
 import org.apache.camel.management.mbean.ManagedThreadPool;
 import org.apache.camel.management.mbean.ManagedThrottler;
+import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.processor.Delayer;
-import org.apache.camel.processor.DelegateAsyncProcessor;
-import org.apache.camel.processor.DelegateProcessor;
 import org.apache.camel.processor.ErrorHandler;
 import org.apache.camel.processor.SendProcessor;
 import org.apache.camel.processor.Throttler;
@@ -65,7 +65,7 @@ import org.apache.camel.spi.RouteContext;
 public class DefaultManagementObjectStrategy implements ManagementObjectStrategy {
 
     public Object getManagedObjectForCamelContext(CamelContext context) {
-        ManagedCamelContext mc = new ManagedCamelContext(context);
+        ManagedCamelContext mc = new ManagedCamelContext((ModelCamelContext)context);
         mc.init(context.getManagementStrategy());
         return mc;
     }
@@ -102,7 +102,7 @@ public class DefaultManagementObjectStrategy implements ManagementObjectStrategy
     }
 
     public Object getManagedObjectForErrorHandler(CamelContext context, RouteContext routeContext,
-                                                  Processor errorHandler, ErrorHandlerBuilder errorHandlerBuilder) {
+                                                  Processor errorHandler, ErrorHandlerFactory errorHandlerBuilder) {
         ManagedErrorHandler me = new ManagedErrorHandler(routeContext, errorHandler, errorHandlerBuilder);
         me.init(context.getManagementStrategy());
         return me;
@@ -111,9 +111,9 @@ public class DefaultManagementObjectStrategy implements ManagementObjectStrategy
     public Object getManagedObjectForRoute(CamelContext context, Route route) {
         ManagedRoute mr;
         if (route.supportsSuspension()) {
-            mr = new ManagedSuspendableRoute(context, route);
+            mr = new ManagedSuspendableRoute((ModelCamelContext)context, route);
         } else {
-            mr = new ManagedRoute(context, route);
+            mr = new ManagedRoute((ModelCamelContext)context, route);
         }
         mr.init(context.getManagementStrategy());
         return mr;
@@ -190,8 +190,6 @@ public class DefaultManagementObjectStrategy implements ManagementObjectStrategy
             // no answer yet, so unwrap any delegates and try again
             if (target instanceof DelegateProcessor) {
                 target = ((DelegateProcessor) target).getProcessor();
-            } else if (target instanceof DelegateAsyncProcessor) {
-                target = ((DelegateAsyncProcessor) target).getProcessor();
             } else {
                 // no delegate so we dont have any target to try next
                 break;

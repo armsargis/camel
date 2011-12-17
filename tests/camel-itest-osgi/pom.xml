@@ -24,12 +24,12 @@
   <parent>
     <groupId>org.apache.camel</groupId>
     <artifactId>camel-parent</artifactId>
-    <version>2.9-SNAPSHOT</version>
+    <version>2.10-SNAPSHOT</version>
     <relativePath>../../parent</relativePath>
   </parent>
 
   <artifactId>camel-itest-osgi</artifactId>
-  <name>Camel :: OSGi Integration Tests</name>
+  <name>Camel :: Integration Tests :: OSGi</name>
   <description>Performs OSGi compliance integration tests</description>
 
   <repositories>
@@ -143,6 +143,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.camel</groupId>
+      <artifactId>camel-jclouds</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
       <artifactId>camel-jpa</artifactId>
       <scope>test</scope>
     </dependency>
@@ -158,7 +163,22 @@
     </dependency>
     <dependency>
       <groupId>org.apache.camel</groupId>
+      <artifactId>camel-hazelcast</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-hdfs</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
       <artifactId>camel-hl7</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-krati</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -180,6 +200,11 @@
     <dependency>
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-shiro</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.camel</groupId>
+      <artifactId>camel-sql</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -269,6 +294,16 @@
     <dependency>
         <groupId>org.apache.felix</groupId>
         <artifactId>org.apache.felix.configadmin</artifactId>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>javax.servlet</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.osgi.foundation</artifactId>
+          </exclusion>
+        </exclusions>
         <scope>test</scope>
     </dependency>
     <dependency>
@@ -312,6 +347,11 @@
           <groupId>org.apache.camel</groupId>
           <artifactId>camel-aws</artifactId>
           <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.derby</groupId>
+        <artifactId>derby</artifactId>
+        <scope>test</scope>
       </dependency>
   </dependencies>
 
@@ -372,7 +412,61 @@
                 </execution>
             </executions>
         </plugin>
+        <!-- lets enhance the classes for OpenJPA (shame it can't do it at runtime!) -->
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openjpa</groupId>
+                    <artifactId>openjpa-persistence-jdbc</artifactId>
+                    <version>${openjpa-version}</version>
+                </dependency>
+            </dependencies>
 
+            <executions>
+                <execution>
+                    <phase>process-test-classes</phase>
+                    <configuration>
+                        <target>
+                            <path id="cp">
+                                <path refid="maven.test.classpath" />
+                                <path refid="maven.compile.classpath" />
+                                <path refid="maven.dependency.classpath" />
+                            </path>
+                            <taskdef name="openjpac" classname="org.apache.openjpa.ant.PCEnhancerTask">
+                                <classpath refid="cp" />
+                            </taskdef>
+
+                            <mkdir dir="${basedir}/target/jpa-test-classes" />
+
+                            <openjpac directory="${basedir}/target/jpa-test-classes">
+                                <classpath refid="cp" />
+                                <fileset dir="${basedir}/target/classes">
+                                    <include name="org/apache/camel/itest/osgi/jpa/SendEmail.class" />
+                                </fileset>
+                                <config propertiesFile="${basedir}/src/test/resources/META-INF/persistence.xml" />
+                            </openjpac>
+
+                            <openjpac directory="${basedir}/target/jpa-test-classes">
+                                <classpath refid="cp" />
+                                <fileset dir="${basedir}/target/test-classes">
+                                    <include name="org/apache/camel/examples/*.class" />
+                                </fileset>
+                                <config propertiesFile="${basedir}/src/test/resources/META-INF/persistence.xml" />
+                            </openjpac>
+
+                            <copy overwrite="true" todir="${basedir}/target/test-classes">
+                                <fileset dir="${basedir}/target/jpa-test-classes" />
+                            </copy>
+                        </target>
+                    </configuration>
+                    <goals>
+                        <goal>run</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
     </plugins>
   </build>
    

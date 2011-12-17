@@ -28,8 +28,8 @@ import org.apache.camel.InvalidPayloadException;
 import org.apache.camel.InvalidPayloadRuntimeException;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
-import org.apache.camel.impl.ExpressionAdapter;
 import org.apache.camel.impl.ScheduledPollEndpoint;
+import org.apache.camel.support.ExpressionAdapter;
 import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.IntrospectionSupport;
 import org.apache.camel.util.ObjectHelper;
@@ -58,6 +58,11 @@ public class JpaEndpoint extends ScheduledPollEndpoint {
     public JpaEndpoint() {
     }
 
+    /**
+     * 
+     * @param endpointUri
+     * @deprecated use {@link JpaEndpoint#JpaEndpoint(String, JpaComponent)} instead
+     */
     public JpaEndpoint(String endpointUri) {
         super(endpointUri);
     }
@@ -68,11 +73,24 @@ public class JpaEndpoint extends ScheduledPollEndpoint {
         transactionManager = component.getTransactionManager();
     }
 
+    /**
+     * 
+     * @param endpointUri
+     * @param entityManagerFactory
+     * @deprecated use {@link JpaEndpoint#JpaEndpoint(String, JpaComponent)} instead
+     */
     public JpaEndpoint(String endpointUri, EntityManagerFactory entityManagerFactory) {
         super(endpointUri);
         this.entityManagerFactory = entityManagerFactory;
     }
 
+    /**
+     * 
+     * @param endpointUri
+     * @param entityManagerFactory
+     * @param transactionManager
+     * @deprecated use {@link JpaEndpoint#JpaEndpoint(String, JpaComponent)} instead
+     */
     public JpaEndpoint(String endpointUri, EntityManagerFactory entityManagerFactory, PlatformTransactionManager transactionManager) {
         super(endpointUri);
         this.entityManagerFactory = entityManagerFactory;

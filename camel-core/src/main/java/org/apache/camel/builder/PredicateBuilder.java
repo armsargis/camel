@@ -17,12 +17,14 @@
 package org.apache.camel.builder;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Predicate;
+import org.apache.camel.util.ExpressionToPredicateAdapter;
 import org.apache.camel.util.ObjectHelper;
 
 import static org.apache.camel.util.ObjectHelper.notNull;
@@ -40,26 +42,12 @@ public final class PredicateBuilder {
      */
     private PredicateBuilder() {
     }
-
+    
     /**
      * Converts the given expression into an {@link Predicate}
      */
     public static Predicate toPredicate(final Expression expression) {
-        return new Predicate() {
-            public boolean matches(Exchange exchange) {
-                if (expression instanceof Predicate) {
-                    return ((Predicate) expression).matches(exchange);
-                } else {
-                    Object value = expression.evaluate(exchange, Object.class);
-                    return ObjectHelper.evaluateValuePredicate(value);
-                }
-            }
-
-            @Override
-            public String toString() {
-                return expression.toString();
-            }
-        };
+        return ExpressionToPredicateAdapter.toPredicate(expression);
     }
 
     /**
@@ -433,5 +421,24 @@ public final class PredicateBuilder {
                 return expression + ".matches('" + pattern + "')";
             }
         };
+    }
+
+    /**
+     * Concat the given predicates into a single predicate, which
+     * only matches if all the predicates matches.
+     *
+     * @param predicates predicates
+     * @return a single predicate containing all the predicates
+     */
+    public static Predicate and(List<Predicate> predicates) {
+        Predicate answer = null;
+        for (Predicate predicate : predicates) {
+            if (answer == null) {
+                answer = predicate;
+            } else {
+                answer = and(answer, predicate);
+            }
+        }
+        return answer;
     }
 }

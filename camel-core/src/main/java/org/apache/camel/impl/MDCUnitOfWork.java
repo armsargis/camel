@@ -21,6 +21,8 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.spi.UnitOfWork;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
 /**
@@ -34,26 +36,33 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
     public static final String MDC_EXCHANGE_ID = "exchangeId";
     public static final String MDC_CORRELATION_ID = "correlationId";
     public static final String MDC_ROUTE_ID = "routeId";
+    public static final String MDC_CAMEL_CONTEXT_ID = "camelContextId";
     public static final String MDC_TRANSACTION_KEY = "transactionKey";
+
+    private static final Logger LOG = LoggerFactory.getLogger(MDCUnitOfWork.class);
 
     private final String originalBreadcrumbId;
     private final String originalExchangeId;
     private final String originalCorrelationId;
     private final String originalRouteId;
+    private final String originalCamelContextId;
     private final String originalTransactionKey;
 
     public MDCUnitOfWork(Exchange exchange) {
-        super(exchange);
+        super(exchange, LOG);
 
         // remember existing values
         this.originalExchangeId = MDC.get(MDC_EXCHANGE_ID);
         this.originalBreadcrumbId = MDC.get(MDC_BREADCRUMB_ID);
         this.originalCorrelationId = MDC.get(MDC_CORRELATION_ID);
         this.originalRouteId = MDC.get(MDC_ROUTE_ID);
+        this.originalCamelContextId = MDC.get(MDC_CAMEL_CONTEXT_ID);
         this.originalTransactionKey = MDC.get(MDC_TRANSACTION_KEY);
 
         // must add exchange id in constructor
         MDC.put(MDC_EXCHANGE_ID, exchange.getExchangeId());
+        // the camel context id is from exchange
+        MDC.put(MDC_CAMEL_CONTEXT_ID, exchange.getContext().getName());
         // and add optional correlation id
         String corrId = exchange.getProperty(Exchange.CORRELATION_ID, String.class);
         if (corrId != null) {
@@ -141,6 +150,11 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
         } else {
             MDC.remove(MDC_ROUTE_ID);
         }
+        if (this.originalCamelContextId != null) {
+            MDC.put(MDC_CAMEL_CONTEXT_ID, originalCamelContextId);
+        } else {
+            MDC.remove(MDC_CAMEL_CONTEXT_ID);
+        }
         if (this.originalTransactionKey != null) {
             MDC.put(MDC_TRANSACTION_KEY, originalTransactionKey);
         } else {
@@ -164,12 +178,14 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
         private final String exchangeId;
         private final String correlationId;
         private final String routeId;
+        private final String camelContextId;
 
         private MDCCallback(AsyncCallback delegate) {
             this.delegate = delegate;
             this.exchangeId = MDC.get(MDC_EXCHANGE_ID);
             this.breadcrumbId = MDC.get(MDC_BREADCRUMB_ID);
             this.correlationId = MDC.get(MDC_CORRELATION_ID);
+            this.camelContextId = MDC.get(MDC_CAMEL_CONTEXT_ID);
 
             String routeId = MDC.get(MDC_ROUTE_ID);
             if (routeId != null) {
@@ -195,6 +211,9 @@ public class MDCUnitOfWork extends DefaultUnitOfWork {
                     }
                     if (routeId != null) {
                         MDC.put(MDC_ROUTE_ID, routeId);
+                    }
+                    if (camelContextId != null) {
+                        MDC.put(MDC_CAMEL_CONTEXT_ID, camelContextId);
                     }
                 }
             } finally {

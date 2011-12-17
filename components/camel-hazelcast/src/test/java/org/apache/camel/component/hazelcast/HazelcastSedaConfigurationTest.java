@@ -16,6 +16,7 @@
  */
 package org.apache.camel.component.hazelcast;
 
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.component.hazelcast.seda.HazelcastSedaEndpoint;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Test;
@@ -25,6 +26,7 @@ public class HazelcastSedaConfigurationTest extends CamelTestSupport {
     @Test
     public void createEndpointWithTransferExchange() throws Exception {
         HazelcastComponent hzlqComponent = new HazelcastComponent(context);
+        hzlqComponent.start();
 
         HazelcastSedaEndpoint hzlqEndpoint = (HazelcastSedaEndpoint) hzlqComponent.createEndpoint("hazelcast:seda:foo?transferExchange=true");
 
@@ -35,44 +37,50 @@ public class HazelcastSedaConfigurationTest extends CamelTestSupport {
 
         assertEquals("Invalid queue name", "foo", hzlqEndpoint.getConfiguration().getQueueName());
         assertFalse("Default value of concurrent consumers is invalid", hzlqEndpoint.getConfiguration().isTransferExchange());
+        hzlqComponent.stop();
     }
 
     @Test
     public void createEndpointWithNoParams() throws Exception {
         HazelcastComponent hzlqComponent = new HazelcastComponent(context);
-
+        hzlqComponent.start();
         HazelcastSedaEndpoint hzlqEndpoint = (HazelcastSedaEndpoint) hzlqComponent.createEndpoint("hazelcast:seda:foo");
 
         assertEquals("Invalid queue name", "foo", hzlqEndpoint.getConfiguration().getQueueName());
         assertEquals("Default value of concurrent consumers is invalid", 1, hzlqEndpoint.getConfiguration().getConcurrentConsumers());
         assertEquals("Default value of pool interval is invalid", 1000, hzlqEndpoint.getConfiguration().getPollInterval());
+        hzlqComponent.stop();
     }
 
     @Test
     public void createEndpointWithConcurrentConsumersParam() throws Exception {
         HazelcastComponent hzlqComponent = new HazelcastComponent(context);
+        hzlqComponent.start();
         HazelcastSedaEndpoint hzlqEndpoint = (HazelcastSedaEndpoint) hzlqComponent.createEndpoint("hazelcast:seda:foo?concurrentConsumers=4");
 
         assertEquals("Invalid queue name", "foo", hzlqEndpoint.getConfiguration().getQueueName());
         assertEquals("Value of concurrent consumers is invalid", 4, hzlqEndpoint.getConfiguration().getConcurrentConsumers());
         assertEquals("Default value of pool interval is invalid", 1000, hzlqEndpoint.getConfiguration().getPollInterval());
-
+        hzlqComponent.stop();
     }
 
     @Test
     public void createEndpointWithPoolIntevalParam() throws Exception {
         HazelcastComponent hzlqComponent = new HazelcastComponent(context);
+        hzlqComponent.start();
         HazelcastSedaEndpoint hzlqEndpoint = (HazelcastSedaEndpoint) hzlqComponent.createEndpoint("hazelcast:seda:foo?pollInterval=4000");
 
         assertEquals("Invalid queue name", "foo", hzlqEndpoint.getConfiguration().getQueueName());
         assertEquals("Default value of concurrent consumers is invalid", 1, hzlqEndpoint.getConfiguration().getConcurrentConsumers());
         assertEquals("Invalid pool interval", 4000, hzlqEndpoint.getConfiguration().getPollInterval());
+        hzlqComponent.stop();
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void createEndpointWithoutEmptyName() throws Exception {
         HazelcastComponent hzlqComponent = new HazelcastComponent(context);
+        hzlqComponent.start();
         hzlqComponent.createEndpoint("hazelcast:seda: ?concurrentConsumers=4");
+        hzlqComponent.stop();
     }
-
 }

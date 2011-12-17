@@ -30,10 +30,10 @@ import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.ProducerCallback;
 import org.apache.camel.ServicePoolAware;
-import org.apache.camel.impl.converter.AsyncProcessorTypeConverter;
 import org.apache.camel.processor.UnitOfWorkProducer;
 import org.apache.camel.spi.ServicePool;
 import org.apache.camel.support.ServiceSupport;
+import org.apache.camel.util.AsyncProcessorConverterHelper;
 import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.EventHelper;
 import org.apache.camel.util.LRUCache;
@@ -281,7 +281,7 @@ public class ProducerCache extends ServiceSupport {
 
         try {
             // invoke the callback
-            AsyncProcessor asyncProcessor = AsyncProcessorTypeConverter.convert(producer);
+            AsyncProcessor asyncProcessor = AsyncProcessorConverterHelper.convert(producer);
             sync = producerCallback.doInAsyncProducer(producer, asyncProcessor, exchange, pattern, new AsyncCallback() {
                 @Override
                 public void done(boolean doneSync) {

@@ -17,6 +17,8 @@
 package org.apache.camel.component.jetty;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
@@ -38,6 +40,7 @@ import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.IntrospectionSupport;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.URISupport;
+import org.apache.camel.util.UnsafeUriCharactersEncoder;
 import org.apache.camel.util.jsse.SSLContextParameters;
 import org.eclipse.jetty.client.Address;
 import org.eclipse.jetty.client.HttpClient;
@@ -128,7 +131,6 @@ public class JettyHttpComponent extends HttpComponent {
 
     @Override
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
-        String addressUri = uri.startsWith("jetty:") ? remaining : uri;
         Map<String, Object> httpClientParameters = new HashMap<String, Object>(parameters);
         
         // must extract well known parameters before we create the endpoint
@@ -190,10 +192,12 @@ public class JettyHttpComponent extends HttpComponent {
         for (String key : parameters.keySet()) {
             httpClientParameters.remove(key);
         }
-        URI endpointUri = URISupport.createRemainingURI(new URI(addressUri), CastUtils.cast(httpClientParameters));
-        
+
+        String address = uri.startsWith("jetty:") ? remaining : uri;
+        URI addressUri = new URI(UnsafeUriCharactersEncoder.encode(address));
+        URI endpointUri = URISupport.createRemainingURI(addressUri, CastUtils.cast(httpClientParameters));
         // restructure uri to be based on the parameters left as we dont want to include the Camel internal options
-        URI httpUri = URISupport.createRemainingURI(new URI(addressUri), CastUtils.cast(parameters));
+        URI httpUri = URISupport.createRemainingURI(addressUri, CastUtils.cast(parameters));
      
         // create endpoint after all known parameters have been extracted from parameters
         JettyHttpEndpoint endpoint = new JettyHttpEndpoint(this, endpointUri.toString(), httpUri);
@@ -492,13 +496,18 @@ public class JettyHttpComponent extends HttpComponent {
                  * we short-circuit it here to just let things go when the context is already
                  * provided.
                  */
-                @Override
+                // This method is for Jetty 7.0.x ~ 7.4.x
+                @SuppressWarnings("unused")
                 public boolean checkConfig() {
                     if (getSslContext() == null) {
-                        return super.checkConfig();
+                        return checkSSLContextFactoryConfig(this);
                     } else {
                         return true;
                     }
+                }
+                // This method is for Jetty 7.5.x
+                public void checkKeyStore() {
+                    // here we don't check the SslContext as it is already created
                 }
                 
             };
@@ -550,6 +559,22 @@ public class JettyHttpComponent extends HttpComponent {
             }
         }
         return answer;
+    }
+    
+    protected boolean checkSSLContextFactoryConfig(SslContextFactory instance) {
+        try {
+            Method method = SslContextFactory.class.getMethod("checkConfig");
+            return (Boolean)method.invoke(instance);
+        } catch (NoSuchMethodException ex) {
+            // ignore
+        } catch (IllegalArgumentException e) {
+            // ignore
+        } catch (IllegalAccessException e) {
+            // ignore
+        } catch (InvocationTargetException e) {
+            // ignore
+        }
+        return false;
     }
 
     public Map<Integer, SslSelectChannelConnector> getSslSocketConnectors() {

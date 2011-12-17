@@ -63,15 +63,15 @@ import org.apache.camel.spi.UuidGenerator;
  *   <li>{@link #resume()} - to resume after a suspend</li>
  * </ul>
  * <p/>
- * <b>Notice:</b> that {@link #stop()} and {@link #suspend()} will graceful stop/suspend routs ensuring any in progress
- * messages is given time to complete. See more details at {@link org.apache.camel.spi.ShutdownStrategy}.
+ * <b>Notice:</b> {@link #stop()} and {@link #suspend()} will gracefully stop/suspend routes ensuring any messages
+ * in progress will be given time to complete. See more details at {@link org.apache.camel.spi.ShutdownStrategy}.
  * <p/>
- * If you are doing a hot restart then its adviced to use the suspend/resume methods which ensures a faster
+ * If you are doing a hot restart then it's advised to use the suspend/resume methods which ensure a faster
  * restart but also allows any internal state to be kept as is.
  * The stop/start approach will do a <i>cold</i> restart of Camel, where all internal state is reset.
  * <p/>
- * End users is adviced to use suspend/resume. Using stop is for shutting down Camel and its not guaranteed that
- * when its being started again using the start method that everything works out of the box.
+ * End users are advised to use suspend/resume. Using stop is for shutting down Camel and it's not guaranteed that
+ * when it's being started again using the start method that Camel will operate consistently.
  *
  * @version 
  */
@@ -310,6 +310,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @return list of the current route definitions
      */
+    @Deprecated
     List<RouteDefinition> getRouteDefinitions();
 
     /**
@@ -318,6 +319,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param id id of the route
      * @return the route definition or <tt>null</tt> if not found
      */
+    @Deprecated
     RouteDefinition getRouteDefinition(String id);
 
     /**
@@ -351,6 +353,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @throws Exception if the route definitions could not be loaded for whatever reason
      * @return the route definitions
      */
+    @Deprecated
     RoutesDefinition loadRoutesDefinition(InputStream is) throws Exception;
 
     /**
@@ -359,6 +362,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param routeDefinitions the route(s) definition to add
      * @throws Exception if the route definitions could not be created for whatever reason
      */
+    @Deprecated
     void addRouteDefinitions(Collection<RouteDefinition> routeDefinitions) throws Exception;
 
     /**
@@ -367,6 +371,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param routeDefinition the route definition to add
      * @throws Exception if the route definition could not be created for whatever reason
      */
+    @Deprecated
     void addRouteDefinition(RouteDefinition routeDefinition) throws Exception;
 
     /**
@@ -376,6 +381,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param routeDefinitions route(s) definitions to remove
      * @throws Exception if the route definitions could not be removed for whatever reason
      */
+    @Deprecated
     void removeRouteDefinitions(Collection<RouteDefinition> routeDefinitions) throws Exception;
 
     /**
@@ -385,6 +391,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param routeDefinition route definition to remove
      * @throws Exception if the route definition could not be removed for whatever reason
      */
+    @Deprecated
     void removeRouteDefinition(RouteDefinition routeDefinition) throws Exception;
 
     /**
@@ -393,6 +400,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param route the route to start
      * @throws Exception is thrown if the route could not be started for whatever reason
      */
+    @Deprecated
     void startRoute(RouteDefinition route) throws Exception;
 
     /**
@@ -409,6 +417,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param route the route to stop
      * @throws Exception is thrown if the route could not be stopped for whatever reason
      */
+    @Deprecated
     void stopRoute(RouteDefinition route) throws Exception;
 
     /**
@@ -610,6 +619,22 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @throws Exception is thrown if property placeholders was used and there was an error resolving them
      */
     String resolvePropertyPlaceholders(String text) throws Exception;
+    
+    /**
+     * Returns the configured property placeholder prefix token if and only if the context has
+     * property placeholder abilities, otherwise returns {@code null}.
+     * 
+     * @return the prefix token or {@code null}
+     */
+    String getPropertyPrefixToken();
+    
+    /**
+     * Returns the configured property placeholder suffix token if and only if the context has
+     * property placeholder abilities, otherwise returns {@code null}.
+     * 
+     * @return the suffix token or {@code null}
+     */
+    String getPropertySuffixToken();
 
     /**
      * Gets a readonly list with the names of the languages currently registered.
@@ -690,9 +715,11 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
 
     /**
      * Gets the default error handler builder which is inherited by the routes
+     * @deprecated The return type will be switched to ErrorHandlerFactory in Camel 3.0
      *
      * @return the builder
      */
+    @Deprecated
     ErrorHandlerBuilder getErrorHandlerBuilder();
 
     /**
@@ -700,13 +727,14 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param errorHandlerBuilder the builder
      */
-    void setErrorHandlerBuilder(ErrorHandlerBuilder errorHandlerBuilder);
+    void setErrorHandlerBuilder(ErrorHandlerFactory errorHandlerBuilder);
 
     /**
      * Sets the data formats that can be referenced in the routes.
      *
      * @param dataFormats the data formats
      */
+    @Deprecated
     void setDataFormats(Map<String, DataFormatDefinition> dataFormats);
 
     /**
@@ -714,6 +742,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @return the data formats available
      */
+    @Deprecated
     Map<String, DataFormatDefinition> getDataFormats();
 
     /**
@@ -730,6 +759,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param name the data format definition name or a reference to it in the {@link Registry}
      * @return the resolved data format definition, or <tt>null</tt> if not found
      */
+    @Deprecated
     DataFormatDefinition resolveDataFormatDefinition(String name);
 
     /**
@@ -1023,5 +1053,4 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param useBreadcrumb <tt>true</tt> to enable breadcrumb, <tt>false</tt> to disable
      */
     void setUseBreadcrumb(Boolean useBreadcrumb);
-
 }

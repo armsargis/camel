@@ -28,6 +28,7 @@ import org.apache.camel.Processor;
 import org.apache.camel.component.bean.BeanHolder;
 import org.apache.camel.component.bean.BeanProcessor;
 import org.apache.camel.component.bean.ConstantBeanHolder;
+import org.apache.camel.component.bean.ConstantTypeBeanHolder;
 import org.apache.camel.component.bean.RegistryBean;
 import org.apache.camel.util.KeyValueHolder;
 import org.apache.camel.util.ObjectHelper;
@@ -40,9 +41,10 @@ import org.apache.camel.util.StringHelper;
  * @version 
  */
 public class BeanExpression implements Expression, Predicate {
-    private String beanName;
-    private String method;
     private Object bean;
+    private String beanName;
+    private Class<?> type;
+    private String method;
 
     public BeanExpression(Object bean, String method) {
         this.bean = bean;
@@ -54,18 +56,39 @@ public class BeanExpression implements Expression, Predicate {
         this.method = method;
     }
 
+    public BeanExpression(Class<?> type, String method) {
+        this.type = type;
+        this.method = method;
+    }
+
     @Override
     public String toString() {
-        return "BeanExpression[bean:" + (bean == null ? beanName : bean) + " method: " + method + "]";
+        StringBuilder sb = new StringBuilder("BeanExpression[");
+        if (bean != null) {
+            sb.append(bean.toString());
+        } else if (beanName != null) {
+            sb.append(beanName);
+        } else if (type != null) {
+            sb.append(ObjectHelper.className(type));
+        }
+        if (method != null) {
+            sb.append(" method: ").append(method);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     public Object evaluate(Exchange exchange) {
         // either use registry lookup or a constant bean
         BeanHolder holder;
-        if (bean == null) {
-            holder = new RegistryBean(exchange.getContext(), beanName);
-        } else {
+        if (bean != null) {
             holder = new ConstantBeanHolder(bean, exchange.getContext());
+        } else if (beanName != null) {
+            holder = new RegistryBean(exchange.getContext(), beanName);
+        } else if (type != null) {
+            holder = new ConstantTypeBeanHolder(type, exchange.getContext());
+        } else {
+            throw new IllegalArgumentException("Either bean, beanName or type should be set on " + this);
         }
 
         // invoking the bean can either be the easy way or using OGNL
@@ -78,8 +101,7 @@ public class BeanExpression implements Expression, Predicate {
 
         if (OgnlHelper.isValidOgnlExpression(method)) {
             // okay the method is an ognl expression
-            Object beanToCall = holder.getBean();
-            OgnlInvokeProcessor ognl = new OgnlInvokeProcessor(beanToCall, method);
+            OgnlInvokeProcessor ognl = new OgnlInvokeProcessor(holder, method);
             try {
                 ognl.process(exchange);
                 return ognl.getResult();
@@ -132,6 +154,9 @@ public class BeanExpression implements Expression, Predicate {
             try {
                 // copy the original exchange to avoid side effects on it
                 Exchange resultExchange = exchange.copy();
+                // remove any existing exception in case we do OGNL on the exception
+                resultExchange.setException(null);
+
                 // force to use InOut to retrieve the result on the OUT message
                 resultExchange.setPattern(ExchangePattern.InOut);
                 processor.process(resultExchange);
@@ -159,20 +184,22 @@ public class BeanExpression implements Expression, Predicate {
      */
     private final class OgnlInvokeProcessor implements Processor {
 
-        private final Object bean;
         private final String ognl;
+        private final BeanHolder beanHolder;
         private Object result;
 
-        public OgnlInvokeProcessor(Object bean, String ognl) {
-            this.bean = bean;
+        public OgnlInvokeProcessor(BeanHolder beanHolder, String ognl) {
+            this.beanHolder = beanHolder;
             this.ognl = ognl;
             // we must start with having bean as the result
-            this.result = bean;
+            this.result = beanHolder.getBean();
         }
 
         public void process(Exchange exchange) throws Exception {
             // copy the original exchange to avoid side effects on it
             Exchange resultExchange = exchange.copy();
+            // remove any existing exception in case we do OGNL on the exception
+            resultExchange.setException(null);
             // force to use InOut to retrieve the result on the OUT message
             resultExchange.setPattern(ExchangePattern.InOut);
             // do not propagate any method name when using OGNL, as with OGNL we
@@ -183,7 +210,11 @@ public class BeanExpression implements Expression, Predicate {
             String ognlPath = "";
 
             // loop and invoke each method
-            Object beanToCall = bean;
+            Object beanToCall = beanHolder.getBean();
+            // there must be a bean to call with, we currently does not support OGNL expressions on using purely static methods
+            if (beanToCall == null) {
+                throw new IllegalArgumentException("Bean instance is null. OGNL bean expressions requires bean instances.");
+            }
 
             // Split ognl except when this is not a Map, Array
             // and we would like to keep the dots within the key name

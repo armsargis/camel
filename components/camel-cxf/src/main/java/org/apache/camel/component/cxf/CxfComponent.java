@@ -30,12 +30,20 @@ import org.apache.cxf.message.Message;
  * Defines the <a href="http://camel.apache.org/cxf.html">CXF Component</a>
  */
 public class CxfComponent extends HeaderFilterStrategyComponent {
-
+    Boolean allowStreaming;
+    
     public CxfComponent() {
     }
 
     public CxfComponent(CamelContext context) {
         super(context);
+    }
+    
+    public void setAllowStreaming(Boolean b) {
+        allowStreaming = b;
+    }
+    public Boolean getAllowStreaming() {
+        return allowStreaming;
     }
 
     /**
@@ -47,6 +55,10 @@ public class CxfComponent extends HeaderFilterStrategyComponent {
     protected Endpoint createEndpoint(String uri, String remaining, Map<String, Object> parameters) throws Exception {
 
         CxfEndpoint result = null;
+        
+        if (allowStreaming != null && !parameters.containsKey("allowStreaming")) {
+            parameters.put("allowStreaming", Boolean.toString(allowStreaming));
+        }
 
         if (remaining.startsWith(CxfConstants.SPRING_CONTEXT_ENDPOINT)) {
             // Get the bean from the Spring context
@@ -56,10 +68,11 @@ public class CxfComponent extends HeaderFilterStrategyComponent {
             }
 
             result = CamelContextHelper.mandatoryLookup(getCamelContext(), beanId, CxfEndpoint.class);
-            // need to set the CamelContext value 
-            if (result.getCamelContext() == null) {
+            // need to check the CamelContext value 
+            if (getCamelContext().equals(result.getCamelContext())) {
                 result.setCamelContext(getCamelContext());
             }
+            
         } else {
             // endpoint URI does not specify a bean
             result = new CxfEndpoint(remaining, this);

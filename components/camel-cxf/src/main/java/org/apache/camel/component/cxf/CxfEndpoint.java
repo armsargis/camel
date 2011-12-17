@@ -17,12 +17,18 @@
 package org.apache.camel.component.cxf;
 
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stax.StAXSource;
 import javax.xml.ws.WebServiceProvider;
 import javax.xml.ws.handler.Handler;
 
@@ -33,6 +39,7 @@ import org.apache.camel.CamelException;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
+import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.Service;
 import org.apache.camel.component.cxf.common.header.CxfHeaderFilterStrategy;
 import org.apache.camel.component.cxf.common.message.CxfConstants;
@@ -42,36 +49,45 @@ import org.apache.camel.impl.DefaultEndpoint;
 import org.apache.camel.impl.SynchronousDelegateProducer;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.spi.HeaderFilterStrategyAware;
-import org.apache.camel.spring.SpringCamelContext;
 import org.apache.camel.util.EndpointHelper;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.UnsafeUriCharactersEncoder;
+
 import org.apache.cxf.Bus;
 import org.apache.cxf.BusFactory;
+import org.apache.cxf.binding.BindingConfiguration;
 import org.apache.cxf.common.classloader.ClassLoaderUtils;
+import org.apache.cxf.common.injection.ResourceInjector;
 import org.apache.cxf.common.util.ClassHelper;
 import org.apache.cxf.common.util.ModCountCopyOnWriteArrayList;
+import org.apache.cxf.databinding.DataBinding;
 import org.apache.cxf.endpoint.Client;
 import org.apache.cxf.endpoint.ClientImpl;
 import org.apache.cxf.endpoint.Endpoint;
 import org.apache.cxf.feature.AbstractFeature;
 import org.apache.cxf.feature.LoggingFeature;
 import org.apache.cxf.frontend.ClientFactoryBean;
-import org.apache.cxf.frontend.ClientProxy;
-import org.apache.cxf.frontend.ClientProxyFactoryBean;
 import org.apache.cxf.frontend.ServerFactoryBean;
 import org.apache.cxf.headers.Header;
 import org.apache.cxf.interceptor.Interceptor;
 import org.apache.cxf.jaxws.JaxWsClientFactoryBean;
-import org.apache.cxf.jaxws.JaxWsProxyFactoryBean;
 import org.apache.cxf.jaxws.JaxWsServerFactoryBean;
+import org.apache.cxf.jaxws.context.WebServiceContextResourceResolver;
+import org.apache.cxf.jaxws.handler.AnnotationHandlerChainBuilder;
+import org.apache.cxf.jaxws.support.JaxWsEndpointImpl;
+import org.apache.cxf.jaxws.support.JaxWsServiceFactoryBean;
 import org.apache.cxf.message.Attachment;
 import org.apache.cxf.message.Message;
 import org.apache.cxf.message.MessageContentsList;
+import org.apache.cxf.resource.DefaultResourceManager;
+import org.apache.cxf.resource.ResourceManager;
+import org.apache.cxf.resource.ResourceResolver;
+import org.apache.cxf.service.factory.ReflectionServiceFactoryBean;
 import org.apache.cxf.service.model.BindingOperationInfo;
 import org.apache.cxf.service.model.MessagePartInfo;
+import org.apache.cxf.staxutils.StaxSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationContext;
 
 /**
  * Defines the <a href="http://camel.apache.org/cxf.html">CXF Endpoint</a>.
@@ -79,7 +95,7 @@ import org.springframework.context.ApplicationContext;
  * {@link CxfBinding}, and {@link HeaderFilterStrategy}.  The default DataFormat
  * mode is {@link DataFormat#POJO}.
  */
-public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategyAware, Service {
+public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategyAware, Service, Cloneable {
 
     private static final Logger LOG = LoggerFactory.getLogger(CxfEndpoint.class);
 
@@ -97,6 +113,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     private boolean isWrapped;
     // This is for marshal or unmarshal message with the document-literal wrapped or unwrapped style
     private Boolean wrappedStyle;
+    private Boolean allowStreaming;
     private DataFormat dataFormat = DataFormat.POJO;
     private String publishedEndpointUrl;
     private boolean inOut = true;
@@ -105,6 +122,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     private AtomicBoolean getBusHasBeenCalled = new AtomicBoolean(false);
     private boolean isSetDefaultBus;
     private boolean loggingFeatureEnabled;
+    private int loggingSizeLimit;
     private String address;
     private boolean mtomEnabled;
     private boolean skipPayloadMessagePartCheck;
@@ -124,7 +142,10 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     private List<String> schemaLocations;
     private String transportId;
     private String bindingId;
-
+    
+    private BindingConfiguration bindingConfig;
+    private DataBinding dataBinding;
+    private ReflectionServiceFactoryBean serviceFactoryBean;
     
 
     public CxfEndpoint(String remaining, CxfComponent cxfComponent) {
@@ -132,11 +153,13 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         setAddress(remaining);
     }
 
+    @Deprecated
     public CxfEndpoint(String remaining, CamelContext context) {
         super(remaining, context);
         setAddress(remaining);
     }
 
+    @Deprecated
     public CxfEndpoint(String remaining) {
         super(remaining);
         setAddress(remaining);
@@ -145,10 +168,18 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public CxfEndpoint() {
         super();
     }
+    
+    public CxfEndpoint copy() {
+        try {
+            return (CxfEndpoint)this.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeCamelException(e);
+        }
+    }
 
     // This method is for CxfComponent setting the EndpointUri
     protected void updateEndpointUri(String endpointUri) {
-        super.setEndpointUri(endpointUri);
+        super.setEndpointUri(UnsafeUriCharactersEncoder.encode(endpointUri));
     }
 
     public Producer createProducer() throws Exception {
@@ -187,6 +218,17 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         if (schemaLocations != null) {
             sfb.setSchemaLocations(schemaLocations);
         }
+        if (bindingConfig != null) {
+            sfb.setBindingConfig(bindingConfig);
+        }
+        
+        if (dataBinding != null) {
+            sfb.setDataBinding(dataBinding);
+        }
+        
+        if (serviceFactoryBean != null) {
+            sfb.setServiceFactory(serviceFactoryBean);
+        }
         
         if (sfb instanceof JaxWsServerFactoryBean && handlers != null) {
             ((JaxWsServerFactoryBean)sfb).setHandlers(handlers);
@@ -216,16 +258,23 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         // apply feature here
         if (!CxfEndpointUtils.hasAnnotation(cls, WebServiceProvider.class)) {
             if (getDataFormat() == DataFormat.PAYLOAD) {
-                sfb.getFeatures().add(new PayLoadDataFormatFeature());
+                sfb.getFeatures().add(new PayLoadDataFormatFeature(allowStreaming));
             } else if (getDataFormat() == DataFormat.MESSAGE) {
-                sfb.getFeatures().add(new MessageDataFormatFeature());
+                MessageDataFormatFeature feature = new MessageDataFormatFeature();
+                feature.addInIntercepters(getInInterceptors());
+                feature.addOutInterceptors(getOutInterceptors());
+                sfb.getFeatures().add(feature);
             }
         } else {
             LOG.debug("Ignore DataFormat mode {} since SEI class is annotated with WebServiceProvider", getDataFormat());
         }
 
-        if (loggingFeatureEnabled) {
-            sfb.getFeatures().add(new LoggingFeature());
+        if (isLoggingFeatureEnabled()) {
+            if (getLoggingSizeLimit() > 0) {
+                sfb.getFeatures().add(new LoggingFeature(getLoggingSizeLimit()));
+            } else {
+                sfb.getFeatures().add(new LoggingFeature());
+            }
         }
 
         if (getDataFormat() == DataFormat.PAYLOAD) {
@@ -245,7 +294,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
             } else {
                 sfb.setProperties(getProperties());
             }
-            LOG.debug("ServerFactoryBean: {} added properties: {}", sfb, properties);
+            LOG.debug("ServerFactoryBean: {} added properties: {}", sfb, getProperties());
         }
 
         sfb.setBus(getBus());
@@ -256,21 +305,21 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
      * Create a client factory bean object.  Notice that the serviceClass <b>must</b> be
      * an interface.
      */
-    protected ClientProxyFactoryBean createClientFactoryBean(Class<?> cls) throws CamelException {
+    protected ClientFactoryBean createClientFactoryBean(Class<?> cls) throws CamelException {
         if (CxfEndpointUtils.hasWebServiceAnnotation(cls)) {
-            return new JaxWsProxyFactoryBean(new JaxWsClientFactoryBean() {
+            return new JaxWsClientFactoryBean() {
                 @Override
                 protected Client createClient(Endpoint ep) {
                     return new CamelCxfClientImpl(getBus(), ep);
                 }
-            });
+            };
         } else {
-            return new ClientProxyFactoryBean(new ClientFactoryBean() {
+            return new ClientFactoryBean() {
                 @Override
                 protected Client createClient(Endpoint ep) {
                     return new CamelCxfClientImpl(getBus(), ep);
                 }
-            });
+            };
         }
     }
 
@@ -292,40 +341,61 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         };
     }
 
-    protected Bus doGetBus() {
-        BusFactory busFactory = BusFactory.newInstance();
-        // need to check if the camelContext is SpringCamelContext and
-        // update the bus configuration with the applicationContext
-        // which SpringCamelContext holds
-        if (getCamelContext() instanceof SpringCamelContext) {
-            SpringCamelContext springCamelContext = (SpringCamelContext) getCamelContext();
-            ApplicationContext applicationContext = springCamelContext.getApplicationContext();
-            busFactory = new org.apache.cxf.bus.spring.SpringBusFactory(applicationContext);
+    protected void setupHandlers(ClientFactoryBean factoryBean, Client client) {
+
+        if (factoryBean instanceof JaxWsClientFactoryBean && handlers != null) {
+            AnnotationHandlerChainBuilder builder = new AnnotationHandlerChainBuilder();
+            JaxWsServiceFactoryBean sf = (JaxWsServiceFactoryBean)factoryBean.getServiceFactory();
+            List<Handler> chain = new ArrayList<Handler>(handlers);
+
+            chain.addAll(builder.buildHandlerChainFromClass(sf.getServiceClass(),
+                                                            sf.getEndpointInfo().getName(),
+                                                            sf.getServiceQName(),
+                                                            factoryBean.getBindingId()));
+
+            if (!chain.isEmpty()) {
+                ResourceManager resourceManager = getBus().getExtension(ResourceManager.class);
+                List<ResourceResolver> resolvers = resourceManager.getResourceResolvers();
+                resourceManager = new DefaultResourceManager(resolvers);
+                resourceManager.addResourceResolver(new WebServiceContextResourceResolver());
+                ResourceInjector injector = new ResourceInjector(resourceManager);
+                for (Handler h : chain) {
+                    if (Proxy.isProxyClass(h.getClass()) && getServiceClass() != null) {
+                        injector.inject(h, getServiceClass());
+                        injector.construct(h, getServiceClass());
+                    } else {
+                        injector.inject(h);
+                        injector.construct(h);
+                    }
+                }
+            }
+
+            ((JaxWsEndpointImpl)client.getEndpoint()).getJaxwsBinding().setHandlerChain(chain);
         }
-        return busFactory.createBus();
     }
 
-    /**
-     * Populate a client factory bean
-     */
-    protected void setupClientFactoryBean(ClientProxyFactoryBean factoryBean, Class<?> cls) {
-        // service class
-        factoryBean.setServiceClass(cls);
-
+    protected void setupClientFactoryBean(ClientFactoryBean factoryBean, Class<?> cls) {
+        if (cls != null) {
+            factoryBean.setServiceClass(cls);
+        }
         factoryBean.setInInterceptors(in);
         factoryBean.setOutInterceptors(out);
         factoryBean.setOutFaultInterceptors(outFault);
-        factoryBean.setInFaultInterceptors(inFault); 
+        factoryBean.setInFaultInterceptors(inFault);
         factoryBean.setFeatures(features);
+        factoryBean.setTransportId(transportId);
+        factoryBean.setBindingId(bindingId);
         
-        if (factoryBean instanceof JaxWsProxyFactoryBean && handlers != null) {
-            ((JaxWsProxyFactoryBean)factoryBean).setHandlers(handlers);
+        if (bindingConfig != null) {
+            factoryBean.setBindingConfig(bindingConfig);
         }
-        if (getTransportId() != null) {
-            factoryBean.setTransportId(getTransportId());
+        
+        if (dataBinding != null) {
+            factoryBean.setDataBinding(dataBinding);
         }
-        if (getBindingId() != null) {
-            factoryBean.setBindingId(getBindingId());
+        
+        if (serviceFactoryBean != null) {
+            factoryBean.setServiceFactory(serviceFactoryBean);
         }
 
         // address
@@ -348,22 +418,29 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
 
         // apply feature here
         if (getDataFormat() == DataFormat.MESSAGE) {
-            factoryBean.getFeatures().add(new MessageDataFormatFeature());
+            MessageDataFormatFeature feature = new MessageDataFormatFeature();
+            feature.addInIntercepters(getInInterceptors());
+            feature.addOutInterceptors(getOutInterceptors());
+            factoryBean.getFeatures().add(feature);
         } else if (getDataFormat() == DataFormat.PAYLOAD) {
-            factoryBean.getFeatures().add(new PayLoadDataFormatFeature());
+            factoryBean.getFeatures().add(new PayLoadDataFormatFeature(allowStreaming));
             factoryBean.setDataBinding(new HybridSourceDataBinding());
         }
 
-        if (loggingFeatureEnabled) {
-            factoryBean.getFeatures().add(new LoggingFeature());
+        if (isLoggingFeatureEnabled()) {
+            if (getLoggingSizeLimit() > 0) {
+                factoryBean.getFeatures().add(new LoggingFeature(getLoggingSizeLimit()));
+            } else {
+                factoryBean.getFeatures().add(new LoggingFeature());
+            }
         }
 
         // set the document-literal wrapped style
         if (getWrappedStyle() != null) {
             factoryBean.getServiceFactory().setWrapped(getWrappedStyle());
         }
-
-        // set the properties on CxfProxyFactoryBean
+        
+        // any optional properties
         if (getProperties() != null) {
             if (factoryBean.getProperties() != null) {
                 // add to existing properties
@@ -371,54 +448,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
             } else {
                 factoryBean.setProperties(getProperties());
             }
-            LOG.debug("ClientProxyFactoryBean: {} added properties: {}", factoryBean, properties);
-        }
-
-        factoryBean.setBus(getBus());
-    }
-
-    protected void setupClientFactoryBean(ClientFactoryBean factoryBean) {
-        factoryBean.setInInterceptors(in);
-        factoryBean.setOutInterceptors(out);
-        factoryBean.setOutFaultInterceptors(outFault);
-        factoryBean.setInFaultInterceptors(inFault); 
-        factoryBean.setFeatures(features);
-        factoryBean.setTransportId(transportId);
-        factoryBean.setBindingId(bindingId);
-
-        // address
-        factoryBean.setAddress(getAddress());
-
-        // wsdl url
-        if (getWsdlURL() != null) {
-            factoryBean.setWsdlURL(getWsdlURL());
-        }
-
-        // service name qname
-        if (getServiceName() != null) {
-            factoryBean.setServiceName(getServiceName());
-        }
-
-        // port name qname
-        if (getPortName() != null) {
-            factoryBean.setEndpointName(getPortName());
-        }
-
-        // apply feature here
-        if (getDataFormat() == DataFormat.MESSAGE) {
-            factoryBean.getFeatures().add(new MessageDataFormatFeature());
-        } else if (getDataFormat() == DataFormat.PAYLOAD) {
-            factoryBean.getFeatures().add(new PayLoadDataFormatFeature());
-            factoryBean.setDataBinding(new HybridSourceDataBinding());
-        }
-
-        if (loggingFeatureEnabled) {
-            factoryBean.getFeatures().add(new LoggingFeature());
-        }
-
-        // set the document-literal wrapped style
-        if (getWrappedStyle() != null) {
-            factoryBean.getServiceFactory().setWrapped(getWrappedStyle());
+            LOG.debug("ClientFactoryBean: {} added properties: {}", factoryBean, getProperties());
         }
 
         factoryBean.setBus(getBus());
@@ -451,17 +481,22 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         if (getServiceClass() != null) {
             cls = getServiceClass();
             // create client factory bean
-            ClientProxyFactoryBean factoryBean = createClientFactoryBean(cls);
+            ClientFactoryBean factoryBean = createClientFactoryBean(cls);
             // setup client factory bean
             setupClientFactoryBean(factoryBean, cls);
-            return ((ClientProxy) Proxy.getInvocationHandler(factoryBean.create())).getClient();
+            Client client = factoryBean.create();
+            // setup the handlers
+            setupHandlers(factoryBean, client);
+            return client;
         } else {
+            // create the client without service class
+
             checkName(portName, "endpoint/port name");
             checkName(serviceName, "service name");
 
             ClientFactoryBean factoryBean = createClientFactoryBean();
             // setup client factory bean
-            setupClientFactoryBean(factoryBean);
+            setupClientFactoryBean(factoryBean, null);
             return factoryBean.create();
         }
     }
@@ -632,6 +667,13 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public void setWrappedStyle(Boolean wrapped) {
         wrappedStyle = wrapped;
     }
+    
+    public void setAllowStreaming(Boolean b) {
+        allowStreaming = b;
+    }
+    public Boolean getAllowStreaming() {
+        return allowStreaming;
+    }
 
     public void setCxfBinding(CxfBinding cxfBinding) {
         this.cxfBinding = cxfBinding;
@@ -658,7 +700,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
 
     public Bus getBus() {
         if (bus == null) {
-            bus = doGetBus();
+            bus = CxfEndpointUtils.createBus(getCamelContext());
             LOG.debug("Using DefaultBus {}", bus);
         }
 
@@ -683,6 +725,14 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
 
     public boolean isLoggingFeatureEnabled() {
         return loggingFeatureEnabled;
+    }
+
+    public int getLoggingSizeLimit() {
+        return loggingSizeLimit;
+    }
+
+    public void setLoggingSizeLimit(int loggingSizeLimit) {
+        this.loggingSizeLimit = loggingSizeLimit;
     }
 
     protected boolean isSkipPayloadMessagePartCheck() {
@@ -754,7 +804,7 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     }
 
     public void setAddress(String address) {
-        super.setEndpointUri(address);
+        super.setEndpointUri(UnsafeUriCharactersEncoder.encode(address));
         this.address = address;
     }
 
@@ -797,16 +847,22 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
             if (DataFormat.PAYLOAD == message.get(DataFormat.class)) {
 
                 CxfPayload<?> payload = (CxfPayload<?>) params[0];
-                List<Element> elements = payload.getBody();
+                List<Source> elements = payload.getBodySources();
 
                 BindingOperationInfo boi = message.get(BindingOperationInfo.class);
                 MessageContentsList content = new MessageContentsList();
                 int i = 0;
 
                 for (MessagePartInfo partInfo : boi.getInput().getMessageParts()) {
-                    if (elements.size() > i && (isSkipPayloadMessagePartCheck() || partInfo.getConcreteName().getLocalPart().equals(elements.get(i)
-                                                                                                                                            .getLocalName()))) {
-                        content.put(partInfo, elements.get(i++));
+                    if (elements.size() > i) {
+                        if (isSkipPayloadMessagePartCheck()) {
+                            content.put(partInfo, elements.get(i++));
+                        } else {
+                            String name = findName(elements, i);
+                            if (partInfo.getConcreteName().getLocalPart().equals(name)) {
+                                content.put(partInfo, elements.get(i++));
+                            }
+                        }
                     }
                 }
 
@@ -823,6 +879,28 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
             }
 
             message.remove(DataFormat.class);
+        }
+
+        private String findName(List<Source> sources, int i) {
+            Source source = sources.get(i);
+            if (source instanceof DOMSource) {
+                return ((Element)((DOMSource)source).getNode()).getLocalName();
+            } else if (source instanceof StaxSource) {
+                StaxSource s = (StaxSource)source;
+                return s.getXMLStreamReader().getLocalName();
+            } else if (source instanceof StAXSource) {
+                StAXSource s = (StAXSource)source;
+                XMLStreamReader r = s.getXMLStreamReader();
+                if (r.getEventType() != XMLStreamReader.START_ELEMENT) {
+                    try {
+                        r.nextTag();
+                    } catch (XMLStreamException e) {
+                        //ignore
+                    }
+                }
+                return r.getLocalName();
+            }
+            return null;
         }
     }
     
@@ -898,5 +976,30 @@ public class CxfEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public void setBindingId(String bindingId) {
         this.bindingId = bindingId;
     }
+    
+    public BindingConfiguration getBindingConfig() {
+        return bindingConfig;
+    }
+
+    public void setBindingConfig(BindingConfiguration bindingConfig) {
+        this.bindingConfig = bindingConfig;
+    }
+
+    public DataBinding getDataBinding() {
+        return dataBinding;
+    }
+
+    public void setDataBinding(DataBinding dataBinding) {
+        this.dataBinding = dataBinding;
+    }
+
+    public ReflectionServiceFactoryBean getServiceFactoryBean() {
+        return serviceFactoryBean;
+    }
+
+    public void setServiceFactoryBean(ReflectionServiceFactoryBean serviceFactoryBean) {
+        this.serviceFactoryBean = serviceFactoryBean;
+    }
+
     
 }

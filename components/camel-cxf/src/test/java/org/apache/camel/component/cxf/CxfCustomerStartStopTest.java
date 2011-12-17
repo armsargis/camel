@@ -17,11 +17,8 @@
 package org.apache.camel.component.cxf;
 
 import org.apache.camel.CamelContext;
-import org.apache.camel.Exchange;
-import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.camel.test.AvailablePortFinder;
 import org.apache.cxf.Bus;
 import org.apache.cxf.BusFactory;
 import org.apache.cxf.transport.http_jetty.JettyHTTPServerEngine;
@@ -69,7 +66,7 @@ public class CxfCustomerStartStopTest extends Assert {
         
         ClassPathXmlApplicationContext applicationContext = 
             new ClassPathXmlApplicationContext("org/apache/camel/component/cxf/CamelCxfConsumerContext.xml");
-        Bus bus = (Bus)applicationContext.getBean("cxf");
+        Bus bus = applicationContext.getBean("cxf", Bus.class);
         // Bus shutdown will be called when the application context is closed.
         String orig = System.setProperty("org.apache.cxf.transports.http_jetty.DontClosePort", "false");
         applicationContext.close();

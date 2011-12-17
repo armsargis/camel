@@ -131,7 +131,7 @@ public abstract class AbstractFeatureTest {
         return sb.toString();
     }
 
-     private static URL getResource(String location) {
+    private static URL getResource(String location) {
         URL url = null;
         if (Thread.currentThread().getContextClassLoader() != null) {
             url = Thread.currentThread().getContextClassLoader().getResource(location);
@@ -172,6 +172,9 @@ public abstract class AbstractFeatureTest {
                 Helper.getDefaultProvisioningOptions()),
             // install the spring, http features first
             scanFeatures(getKarafFeatureUrl(), "spring", "http"),
+            
+            // install the cxf jaxb spec as the karaf doesn't provide it by default
+            scanFeatures(getCamelKarafFeatureUrl(), "cxf-jaxb"),
 
             // using the features to install the camel components
             scanFeatures(getCamelKarafFeatureUrl(),

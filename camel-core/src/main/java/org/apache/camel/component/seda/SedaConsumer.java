@@ -31,12 +31,14 @@ import org.apache.camel.Processor;
 import org.apache.camel.ShutdownRunningTask;
 import org.apache.camel.SuspendableService;
 import org.apache.camel.impl.LoggingExceptionHandler;
-import org.apache.camel.impl.converter.AsyncProcessorTypeConverter;
 import org.apache.camel.processor.MulticastProcessor;
 import org.apache.camel.spi.ExceptionHandler;
 import org.apache.camel.spi.ShutdownAware;
 import org.apache.camel.support.ServiceSupport;
+import org.apache.camel.util.AsyncProcessorConverterHelper;
 import org.apache.camel.util.AsyncProcessorHelper;
+import org.apache.camel.util.ExchangeHelper;
+import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +63,7 @@ public class SedaConsumer extends ServiceSupport implements Consumer, Runnable, 
 
     public SedaConsumer(SedaEndpoint endpoint, Processor processor) {
         this.endpoint = endpoint;
-        this.processor = AsyncProcessorTypeConverter.convert(processor);
+        this.processor = AsyncProcessorConverterHelper.convert(processor);
     }
 
     @Override
@@ -152,10 +154,20 @@ public class SedaConsumer extends ServiceSupport implements Consumer, Runnable, 
                 exchange = queue.poll(1000, TimeUnit.MILLISECONDS);
                 if (exchange != null) {
                     try {
-                        sendToConsumers(exchange);
-
+                        // send a new copied exchange with new camel context
+                        Exchange newExchange = ExchangeHelper.copyExchangeAndSetCamelContext(exchange, endpoint.getCamelContext());
+                        // set the fromEndpoint 
+                        newExchange.setFromEndpoint(endpoint);
+                        sendToConsumers(newExchange);
+                        // copy the message back
+                        if (newExchange.hasOut()) {
+                            exchange.setOut(newExchange.getOut().copy());
+                        } else {
+                            exchange.setIn(newExchange.getIn());
+                        }
                         // log exception if an exception occurred and was not handled
-                        if (exchange.getException() != null) {
+                        if (newExchange.getException() != null) {
+                            exchange.setException(newExchange.getException());
                             getExceptionHandler().handleException("Error processing exchange", exchange, exchange.getException());
                         }
                     } catch (Exception e) {
@@ -199,12 +211,18 @@ public class SedaConsumer extends ServiceSupport implements Consumer, Runnable, 
         // if there are multiple consumers then multicast to them
         if (size > 1) {
 
+            // validate multiple consumers has been enabled
+            if (!endpoint.isMultipleConsumersSupported()) {
+                throw new IllegalStateException("Multiple consumers for the same endpoint is not allowed: " + endpoint);
+            }
+
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Multicasting to {} consumers for Exchange: {}", endpoint.getConsumers().size(), exchange);
             }
            
             // use a multicast processor to process it
             MulticastProcessor mp = endpoint.getConsumerMulticastProcessor();
+            ObjectHelper.notNull(mp, "ConsumerMulticastProcessor", this);
 
             // and use the asynchronous routing engine to support it
             AsyncProcessorHelper.process(mp, exchange, new AsyncCallback() {

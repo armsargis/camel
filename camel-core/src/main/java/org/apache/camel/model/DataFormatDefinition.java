@@ -58,12 +58,13 @@ public class DataFormatDefinition extends IdentifiedType {
      * @param ref          reference to lookup for a data format
      * @return the data format or null if not possible to create
      */
+    @SuppressWarnings("deprecation")
     public static DataFormat getDataFormat(RouteContext routeContext, DataFormatDefinition type, String ref) {
         if (type == null) {
             ObjectHelper.notNull(ref, "ref or type");
 
             // try to let resolver see if it can resolve it, its not always possible
-            type = routeContext.getCamelContext().resolveDataFormatDefinition(ref);
+            type = ((ModelCamelContext)routeContext.getCamelContext()).resolveDataFormatDefinition(ref);
 
             if (type != null) {
                 return type.getDataFormat(routeContext);

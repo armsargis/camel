@@ -64,6 +64,35 @@ public class PropertiesComponentTest extends ContextTestSupport {
 
         assertMockEndpointsSatisfied();
     }
+    
+    public void testPropertiesComponentCustomTokens() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPrefixToken("[[");
+        pc.setSuffixToken("]]");
+        
+        assertEquals("[[", pc.getPrefixToken());
+        assertEquals("]]", pc.getSuffixToken());
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:[[cool.end]]");
+            }
+        });
+        context.start();
+
+        getMockEndpoint("mock:result").expectedMessageCount(1);
+
+        template.sendBody("direct:start", "Hello World");
+
+        assertMockEndpointsSatisfied();
+        
+        pc.setPrefixToken(null);
+        pc.setSuffixToken(null);
+        
+        assertEquals(PropertiesComponent.DEFAULT_PREFIX_TOKEN, pc.getPrefixToken());
+        assertEquals(PropertiesComponent.DEFAULT_SUFFIX_TOKEN, pc.getSuffixToken());
+    }
 
     public void testPropertiesComponentTemplate() throws Exception {
         context.addRoutes(new RouteBuilder() {
@@ -239,6 +268,155 @@ public class PropertiesComponentTest extends ContextTestSupport {
 
         assertMockEndpointsSatisfied();
     }
+    
+    public void testPropertiesComponentPropertyPrefix() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPropertyPrefix("cool.");
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:end");
+                from("direct:foo").to("properties:mock:{{result}}");
+            }
+        });
+        context.start();
+
+        getMockEndpoint("mock:result").expectedMessageCount(2);
+
+        template.sendBody("direct:start", "Hello World");
+        template.sendBody("direct:foo", "Hello Foo");
+
+        assertMockEndpointsSatisfied();
+    }
+    
+    public void testPropertiesComponentPropertyPrefixFallbackDefault() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPropertyPrefix("cool.");
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:cool.end");
+                from("direct:foo").to("properties:mock:{{result}}");
+            }
+        });
+        context.start();
+
+        getMockEndpoint("mock:result").expectedMessageCount(2);
+
+        template.sendBody("direct:start", "Hello World");
+        template.sendBody("direct:foo", "Hello Foo");
+
+        assertMockEndpointsSatisfied();
+    }
+    
+    public void testPropertiesComponentPropertyPrefixFallbackDefaultNotFound() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPropertyPrefix("cool.");
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:doesnotexist");
+            }
+        });
+        
+        try {
+            context.start();
+            
+            fail("Should throw exception");
+        } catch (FailedToCreateRouteException e) {
+            ResolveEndpointFailedException cause = assertIsInstanceOf(ResolveEndpointFailedException.class, e.getCause());
+            IllegalArgumentException iae = assertIsInstanceOf(IllegalArgumentException.class, cause.getCause());
+            assertEquals("Property with key [cool.doesnotexist] (and original key [doesnotexist]) not found in properties from text: {{doesnotexist}}", iae.getMessage());
+        }
+    }
+    
+    public void testPropertiesComponentPropertyPrefixFallbackFalse() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPropertyPrefix("cool.");
+        pc.setFallbackToUnaugmentedProperty(false);
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:cool.end");
+                from("direct:foo").to("properties:mock:{{result}}");
+            }
+        });
+        
+        try {
+            context.start();
+            
+            fail("Should throw exception");
+        } catch (FailedToCreateRouteException e) {
+            ResolveEndpointFailedException cause = assertIsInstanceOf(ResolveEndpointFailedException.class, e.getCause());
+            IllegalArgumentException iae = assertIsInstanceOf(IllegalArgumentException.class, cause.getCause());
+            assertEquals("Property with key [cool.cool.end] not found in properties from text: {{cool.end}}", iae.getMessage());
+        }
+    }
+    
+    public void testPropertiesComponentPropertySuffix() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPropertySuffix(".end");
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:cool");
+            }
+        });
+        context.start();
+
+        getMockEndpoint("mock:result").expectedMessageCount(1);
+
+        template.sendBody("direct:start", "Hello World");
+
+        assertMockEndpointsSatisfied();
+    }
+    
+    public void testPropertiesComponentPropertySuffixFallbackDefault() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPropertySuffix(".end");
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:cool.end");
+            }
+        });
+        context.start();
+
+        getMockEndpoint("mock:result").expectedMessageCount(1);
+
+        template.sendBody("direct:start", "Hello World");
+
+        assertMockEndpointsSatisfied();
+    }
+    
+    public void testPropertiesComponentPropertySuffixFallbackFalse() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        pc.setPropertySuffix(".end");
+        pc.setFallbackToUnaugmentedProperty(false);
+        
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start").to("properties:cool.end");
+            }
+        });
+        
+        try {
+            context.start();
+            
+            fail("Should throw exception");
+        } catch (FailedToCreateRouteException e) {
+            ResolveEndpointFailedException cause = assertIsInstanceOf(ResolveEndpointFailedException.class, e.getCause());
+            IllegalArgumentException iae = assertIsInstanceOf(IllegalArgumentException.class, cause.getCause());
+            assertEquals("Property with key [cool.end.end] not found in properties from text: {{cool.end}}", iae.getMessage());
+        }
+    }
 
     public void testJvmSystemPropertyNotFound() throws Exception {
         try {
@@ -254,6 +432,37 @@ public class PropertiesComponentTest extends ContextTestSupport {
             IllegalArgumentException cause = assertIsInstanceOf(IllegalArgumentException.class, e.getCause().getCause());
             assertEquals("Cannot find JVM system property with key: xxx", cause.getMessage());
         }
+    }
+
+    public void testCache() throws Exception {
+        PropertiesComponent pc = context.getComponent("properties", PropertiesComponent.class);
+        assertTrue(pc.isCache());
+        assertNotNull(pc);
+
+        for (int i = 0; i < 2000; i++) {
+            String uri = pc.parseUri("{{cool.mock}}:" + i);
+            assertEquals("mock:" + i, uri);
+        }
+    }
+
+    public void testCacheRoute() throws Exception {
+        context.addRoutes(new RouteBuilder() {
+            @Override
+            public void configure() throws Exception {
+                from("direct:start")
+                    .setBody(simple("${properties:cool.mock}${body}"))
+                    .to("mock:result");
+            }
+        });
+        context.start();
+
+        getMockEndpoint("mock:result").expectedMessageCount(2000);
+
+        for (int i = 0; i < 2000; i++) {
+            template.sendBody("direct:start", i);
+        }
+
+        assertMockEndpointsSatisfied();
     }
 
     @Override

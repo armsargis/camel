@@ -46,10 +46,6 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
         PersistentQueueReplyHandler handler = new PersistentQueueReplyHandler(replyManager, exchange, callback,
                 originalCorrelationId, requestTimeout, dynamicMessageSelector);
         correlation.put(correlationId, handler, requestTimeout);
-        if (dynamicMessageSelector != null) {
-            // also remember to keep the dynamic selector updated with the new correlation id
-            dynamicMessageSelector.addCorrelationID(correlationId);
-        }
         return correlationId;
     }
 
@@ -63,12 +59,6 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
         }
 
         correlation.put(newCorrelationId, handler, requestTimeout);
-
-        // no not arrived early
-        if (dynamicMessageSelector != null) {
-            // also remember to keep the dynamic selector updated with the new correlation id
-            dynamicMessageSelector.addCorrelationID(newCorrelationId);
-        }
     }
 
     protected void handleReplyMessage(String correlationID, Message message) {
@@ -81,10 +71,6 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
             try {
                 handler.onReply(correlationID, message);
             } finally {
-                if (dynamicMessageSelector != null) {
-                    // also remember to keep the dynamic selector updated with the new correlation id
-                    dynamicMessageSelector.removeCorrelationID(correlationID);
-                }
                 correlation.remove(correlationID);
             }
         } else {
@@ -142,15 +128,22 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
                 replyToSelectorValue = "ID:" + new BigInteger(24 * 8, new Random()).toString(16);
                 String fixedMessageSelector = replyToSelectorName + "='" + replyToSelectorValue + "'";
                 answer = new SharedPersistentQueueMessageListenerContainer(fixedMessageSelector);
+                // must use cache level consumer for fixed message selector
+                answer.setCacheLevel(DefaultMessageListenerContainer.CACHE_CONSUMER);
                 log.debug("Using shared queue: " + endpoint.getReplyTo() + " with fixed message selector [" + fixedMessageSelector + "] as reply listener: " + answer);
             } else {
                 // use a dynamic message selector which will select the message we want to receive as reply
-                dynamicMessageSelector = new MessageSelectorCreator();
+                dynamicMessageSelector = new MessageSelectorCreator(correlation);
                 answer = new SharedPersistentQueueMessageListenerContainer(dynamicMessageSelector);
+                // must use cache level session for dynamic message selector,
+                // as otherwise the dynamic message selector will not be updated on-the-fly
+                answer.setCacheLevel(DefaultMessageListenerContainer.CACHE_SESSION);
                 log.debug("Using shared queue: " + endpoint.getReplyTo() + " with dynamic message selector as reply listener: " + answer);
             }
         } else if (ReplyToType.Exclusive == type) {
             answer = new ExclusivePersistentQueueMessageListenerContainer();
+            // must use cache level consumer for exclusive as there is no message selector
+            answer.setCacheLevel(DefaultMessageListenerContainer.CACHE_CONSUMER);
             log.debug("Using exclusive queue:" + endpoint.getReplyTo() + " as reply listener: " + answer);
         } else {
             throw new IllegalArgumentException("ReplyToType " + type + " is not supported for persistent reply queues");
@@ -168,14 +161,13 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
         answer.setPubSubDomain(false);
         answer.setSubscriptionDurable(false);
         answer.setConcurrentConsumers(1);
+        answer.setMaxConcurrentConsumers(1);
         answer.setConnectionFactory(endpoint.getConnectionFactory());
         String clientId = endpoint.getClientId();
         if (clientId != null) {
             clientId += ".CamelReplyManager";
             answer.setClientId(clientId);
         }
-        // must use cache level session
-        answer.setCacheLevel(DefaultMessageListenerContainer.CACHE_SESSION);
 
         // we cannot do request-reply over JMS with transaction
         answer.setSessionTransacted(false);
@@ -194,6 +186,11 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
             answer.setRecoveryInterval(endpoint.getRecoveryInterval());
         }
         // do not use a task executor for reply as we are are always a single threaded task
+
+        // setup a bean name which is used ny Spring JMS as the thread name
+        String name = "PersistentQueueReplyManager[" + answer.getDestinationName() + "]";
+        name = endpoint.getCamelContext().getExecutorServiceManager().resolveThreadName(name);
+        answer.setBeanName(name);
 
         return answer;
     }

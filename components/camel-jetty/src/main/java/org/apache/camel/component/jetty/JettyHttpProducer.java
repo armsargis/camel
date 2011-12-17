@@ -91,6 +91,8 @@ public class JettyHttpProducer extends DefaultProducer implements AsyncProcessor
         HttpMethods methodToUse = HttpHelper.createMethod(exchange, getEndpoint(), exchange.getIn().getBody() != null);
         String method = methodToUse.createMethod(url).getName();
 
+        LOG.trace("Using URL: {} with method: {}", url, method);
+
         JettyContentExchange httpExchange = new JettyContentExchange(exchange, getBinding(), client);
         httpExchange.setMethod(method);
         httpExchange.setURL(url);
@@ -98,8 +100,8 @@ public class JettyHttpProducer extends DefaultProducer implements AsyncProcessor
         // set query parameters
         doSetQueryParameters(exchange, httpExchange);
 
-        // if we post then set data
-        if (HttpMethods.POST.equals(methodToUse)) {
+        // if we post or put then set data
+        if (HttpMethods.POST.equals(methodToUse) || HttpMethods.PUT.equals(methodToUse)) {
 
             String contentType = ExchangeHelper.getContentType(exchange);
             if (contentType != null) {
@@ -204,7 +206,7 @@ public class JettyHttpProducer extends DefaultProducer implements AsyncProcessor
         }
 
         // okay we need to add the query string to the URI so we need to juggle a bit with the parameters
-        String uri = httpExchange.getURI();
+        String uri = httpExchange.getRequestURI();
 
         Map parameters = URISupport.parseParameters(new URI(uri));
         parameters.putAll(URISupport.parseQuery(queryString));
@@ -214,7 +216,7 @@ public class JettyHttpProducer extends DefaultProducer implements AsyncProcessor
         }
         if (!parameters.isEmpty()) {
             uri = uri + "?" + URISupport.createQueryString(parameters);
-            httpExchange.setURI(uri);
+            httpExchange.setRequestURI(uri);
         }
     }
 

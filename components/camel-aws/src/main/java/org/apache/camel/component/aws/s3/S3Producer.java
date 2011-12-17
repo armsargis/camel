@@ -17,6 +17,7 @@
 package org.apache.camel.component.aws.s3;
 
 import java.io.InputStream;
+import java.util.Date;
 
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -55,12 +56,42 @@ public class S3Producer extends DefaultProducer {
             objectMetadata.setContentType(contentType);
         }
         
+        String cacheControl = exchange.getIn().getHeader(S3Constants.CACHE_CONTROL, String.class);
+        if (cacheControl != null) {
+            objectMetadata.setCacheControl(cacheControl);
+        }
+        
+        String contentDisposition = exchange.getIn().getHeader(S3Constants.CONTENT_DISPOSITION, String.class);
+        if (contentDisposition != null) {
+            objectMetadata.setContentDisposition(contentDisposition);
+        }
+        
+        String contentEncoding = exchange.getIn().getHeader(S3Constants.CONTENT_ENCODING, String.class);
+        if (contentEncoding != null) {
+            objectMetadata.setContentEncoding(contentEncoding);
+        }
+        
+        String contentMD5 = exchange.getIn().getHeader(S3Constants.CONTENT_MD5, String.class);
+        if (contentMD5 != null) {
+            objectMetadata.setContentMD5(contentMD5);
+        }
+        
+        Date lastModified = exchange.getIn().getHeader(S3Constants.LAST_MODIFIED, Date.class);
+        if (lastModified != null) {
+            objectMetadata.setLastModified(lastModified);
+        }
+        
         PutObjectRequest putObjectRequest = new PutObjectRequest(
                 getConfiguration().getBucketName(),
                 determineKey(exchange),
                 exchange.getIn().getMandatoryBody(InputStream.class),
                 objectMetadata);
-        
+
+        String storageClass = determineStorageClass(exchange);
+        if (storageClass != null) {
+            putObjectRequest.setStorageClass(storageClass);
+        }
+
         LOG.trace("Put object [{}] from exchange [{}]...", putObjectRequest, exchange);
         
         PutObjectResult putObjectResult = getEndpoint().getS3Client().putObject(putObjectRequest);
@@ -80,6 +111,15 @@ public class S3Producer extends DefaultProducer {
             throw new IllegalArgumentException("AWS S3 Key header missing.");
         }
         return key;
+    }
+    
+    private String determineStorageClass(Exchange exchange) {
+        String storageClass = exchange.getIn().getHeader(S3Constants.STORAGE_CLASS, String.class);
+        if (storageClass == null) {
+            storageClass = getConfiguration().getStorageClass();
+        }
+        
+        return storageClass;
     }
 
     private Message getMessageForResponse(Exchange exchange) {

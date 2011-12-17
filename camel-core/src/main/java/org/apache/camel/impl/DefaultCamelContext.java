@@ -44,6 +44,7 @@ import org.apache.camel.Component;
 import org.apache.camel.Consumer;
 import org.apache.camel.ConsumerTemplate;
 import org.apache.camel.Endpoint;
+import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.FailedToStartRouteException;
 import org.apache.camel.IsSingleton;
 import org.apache.camel.MultipleConsumersSupport;
@@ -75,6 +76,7 @@ import org.apache.camel.management.JmxSystemPropertyKeys;
 import org.apache.camel.management.ManagementStrategyFactory;
 import org.apache.camel.model.Constants;
 import org.apache.camel.model.DataFormatDefinition;
+import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.model.RoutesDefinition;
 import org.apache.camel.processor.interceptor.Debug;
@@ -130,7 +132,7 @@ import org.slf4j.LoggerFactory;
  *
  * @version 
  */
-public class DefaultCamelContext extends ServiceSupport implements CamelContext, SuspendableService {
+public class DefaultCamelContext extends ServiceSupport implements ModelCamelContext, SuspendableService {
     private final transient Logger log = LoggerFactory.getLogger(getClass());
     private JAXBContext jaxbContext;
     private CamelContextNameStrategy nameStrategy = new DefaultCamelContextNameStrategy();
@@ -171,7 +173,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
     private Boolean useMDCLogging = Boolean.FALSE;
     private Boolean useBreadcrumb = Boolean.TRUE;
     private Long delay;
-    private ErrorHandlerBuilder errorHandlerBuilder;
+    private ErrorHandlerFactory errorHandlerBuilder;
     private Map<String, DataFormatDefinition> dataFormats = new HashMap<String, DataFormatDefinition>();
     private DataFormatResolver dataFormatResolver = new DefaultDataFormatResolver();
     private Map<String, String> properties = new HashMap<String, String>();
@@ -814,7 +816,6 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
                 routeService.setRemovingRoutes(true);
                 shutdownRouteService(routeService);
                 removeRouteDefinition(routeId);
-                ServiceHelper.stopAndShutdownServices(routeService);
                 routeServices.remove(routeId);
                 // remove route from startup order as well, as it was removed
                 Iterator<RouteStartupOrder> it = routeStartupOrder.iterator();
@@ -956,32 +957,53 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         // no language resolved
         return answer;
     }
+    
+    public String getPropertyPrefixToken() {
+        PropertiesComponent pc = getPropertiesComponent();
+        
+        if (pc != null) {
+            return pc.getPrefixToken();
+        } else {
+            return null;
+        }
+    }
+    
+    public String getPropertySuffixToken() {
+        PropertiesComponent pc = getPropertiesComponent();
+        
+        if (pc != null) {
+            return pc.getSuffixToken();
+        } else {
+            return null;
+        }
+    }
 
     public String resolvePropertyPlaceholders(String text) throws Exception {
-        // do not parse uris that are designated for the properties component as it will handle that itself
-        if (text != null && !text.startsWith("properties:") && text.contains(PropertiesComponent.PREFIX_TOKEN)) {
-            // the uri contains property placeholders so lookup mandatory properties component and let it parse it
-            Component component = hasComponent("properties");
-            if (component == null) {
-                // then fallback to lookup the component
-                component = getRegistry().lookup("properties", Component.class);
-            }
-            if (component == null) {
+        // While it is more efficient to only do the lookup if we are sure we need the component,
+        // with custom tokens, we cannot know if the URI contains a property or not without having
+        // the component.  We also lose fail-fast behavior for the missing component with this change.
+        PropertiesComponent pc = getPropertiesComponent();
+        
+        // Do not parse uris that are designated for the properties component as it will handle that itself
+        if (text != null && !text.startsWith("properties:")) {
+            // No component, assume default tokens.
+            if (pc == null && text.contains(PropertiesComponent.DEFAULT_PREFIX_TOKEN)) {
                 throw new IllegalArgumentException("PropertiesComponent with name properties must be defined"
                         + " in CamelContext to support property placeholders.");
+                
+            // Component available, use actual tokens
+            } else if (pc != null && text.contains(pc.getPrefixToken())) {
+                // the parser will throw exception if property key was not found
+                String answer = pc.parseUri(text);
+                log.debug("Resolved text: {} -> {}", text, answer);
+                return answer; 
             }
-            // force component to be created and registered as a component
-            PropertiesComponent pc = getComponent("properties", PropertiesComponent.class);
-            // the parser will throw exception if property key was not found
-            String answer = pc.parseUri(text);
-            log.debug("Resolved text: {} -> {}", text, answer);
-            return answer;
         }
 
         // return original text as is
         return text;
     }
-
+    
     // Properties
     // -----------------------------------------------------------------------
 
@@ -1216,10 +1238,10 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
     }
 
     public ErrorHandlerBuilder getErrorHandlerBuilder() {
-        return errorHandlerBuilder;
+        return (ErrorHandlerBuilder)errorHandlerBuilder;
     }
 
-    public void setErrorHandlerBuilder(ErrorHandlerBuilder errorHandlerBuilder) {
+    public void setErrorHandlerBuilder(ErrorHandlerFactory errorHandlerBuilder) {
         this.errorHandlerBuilder = errorHandlerBuilder;
     }
 
@@ -1333,7 +1355,18 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         firstStartDone = true;
 
         // super will invoke doStart which will prepare internal services and start routes etc.
-        super.start();
+        try {
+            super.start();
+        } catch (VetoCamelContextStartException e) {
+            if (e.isRethrowException()) {
+                throw e;
+            } else {
+                log.info("CamelContext ({}) vetoed to not start due {}", getName(), e.getMessage());
+                // swallow exception and change state of this camel context to stopped
+                stop();
+                return;
+            }
+        }
 
         stopWatch.stop();
         if (log.isInfoEnabled()) {
@@ -1413,6 +1446,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
         getManagementStrategy().start();
 
         // start lifecycle strategies
+        ServiceHelper.startServices(lifecycleStrategies);
         Iterator<LifecycleStrategy> it = lifecycleStrategies.iterator();
         while (it.hasNext()) {
             LifecycleStrategy strategy = it.next();
@@ -1420,10 +1454,10 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
                 strategy.onContextStart(this);
             } catch (VetoCamelContextStartException e) {
                 // okay we should not start Camel since it was vetoed
-                log.warn("Lifecycle strategy vetoed starting CamelContext (" + getName() + ")", e);
+                log.warn("Lifecycle strategy vetoed starting CamelContext ({}) due {}", getName(), e.getMessage());
                 throw e;
             } catch (Exception e) {
-                log.warn("Lifecycle strategy " + strategy + " failed starting CamelContext (" + getName() + ")", e);
+                log.warn("Lifecycle strategy " + strategy + " failed starting CamelContext ({}) due {}", getName(), e.getMessage());
                 throw e;
             }
         }
@@ -1463,7 +1497,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
         // start routes
         if (doNotStartRoutesOnFirstStart) {
-            log.info("Cannot start routes as CamelContext has been configured with autoStartup=false");
+            log.debug("Skip starting of routes as CamelContext has been configured with autoStartup=false");
         }
 
         // invoke this logic to warmup the routes and if possible also start the routes
@@ -1474,7 +1508,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
     protected synchronized void doStop() throws Exception {
         stopWatch.restart();
-        log.info("Apache Camel " + getVersion() + " (CamelContext:" + getName() + ") is shutting down");
+        log.info("Apache Camel " + getVersion() + " (CamelContext: " + getName() + ") is shutting down");
         EventHelper.notifyCamelContextStopping(this);
 
         // stop route inputs in the same order as they was started so we stop the very first inputs first
@@ -1524,6 +1558,8 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
 
         // shutdown management as the last one
         shutdownServices(managementStrategy);
+        shutdownServices(lifecycleStrategies);
+        // do not clear lifecycleStrategies as we can start Camel again and get the route back as before
 
         // stop the lazy created so they can be re-created on restart
         forceStopLazyInitialization();
@@ -1877,7 +1913,7 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
             // if we are starting camel, then skip routes which are configured to not be auto started
             boolean autoStartup = routeService.getRouteDefinition().isAutoStartup(this);
             if (addingRoute && !autoStartup) {
-                log.info("Cannot start route " + routeService.getId() + " as its configured with autoStartup=false");
+                log.info("Skipping starting of route " + routeService.getId() + " as its configured with autoStartup=false");
                 continue;
             }
 
@@ -1928,8 +1964,12 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
                 }
             }
 
-            // and start the route service (no need to start children as they are already warmed up)
-            routeService.start(false);
+            if (resumeOnly) {
+                routeService.resume();
+            } else {
+                // and start the route service (no need to start children as they are already warmed up)
+                routeService.start(false);
+            }
         }
     }
 
@@ -2060,6 +2100,27 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
      */
     protected boolean shouldStartRoutes() {
         return isStarted() && !isStarting();
+    }
+    
+    /**
+     * Looks up the properties component if one may be resolved or has already been created.
+     * Returns {@code null} if one was not created or is not in the registry.
+     */
+    protected PropertiesComponent getPropertiesComponent() {
+        Component component = hasComponent("properties");
+        if (component == null) {
+            // then fallback to lookup the component
+            component = getRegistry().lookup("properties", Component.class);
+        }
+        
+        PropertiesComponent pc = null;
+        // Ensure that we don't create one if one is not really available.
+        if (component != null) {
+            // force component to be created and registered as a component
+            pc = getComponent("properties", PropertiesComponent.class);
+        }
+        
+        return pc;
     }
 
     public void setDataFormats(Map<String, DataFormatDefinition> dataFormats) {
@@ -2240,7 +2301,21 @@ public class DefaultCamelContext extends ServiceSupport implements CamelContext,
     }
 
     public DataFormatDefinition resolveDataFormatDefinition(String name) {
-        return dataFormatResolver.resolveDataFormatDefinition(name, this);
+        // lookup type and create the data format from it
+        DataFormatDefinition type = lookup(this, name, DataFormatDefinition.class);
+        if (type == null && getDataFormats() != null) {
+            type = getDataFormats().get(name);
+        }
+        return type;
+    }
+
+    private static <T> T lookup(CamelContext context, String ref, Class<T> type) {
+        try {
+            return context.getRegistry().lookup(ref, type);
+        } catch (Exception e) {
+            // need to ignore not same type and return it as null
+            return null;
+        }
     }
 
     public ShutdownStrategy getShutdownStrategy() {

@@ -17,13 +17,12 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:cxf="http://camel.apache.org/schema/cxf"
 	xmlns:util="http://www.springframework.org/schema/util"
 	xsi:schemaLocation="
-       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.0.xsd
-       http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.0.xsd
+       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd
        http://camel.apache.org/schema/cxf http://camel.apache.org/schema/cxf/camel-cxf.xsd
        http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd
-  ">
-  
-     <bean class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer"/>
+    ">
+    <bean class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer"/>
   
 	<cxf:cxfEndpoint id="routerEndpoint"
 		address="http://localhost:${CXFTestSupport.port1}/WSAddressingTest/SoapContext/SoapPort" endpointName="tns:SoapPort"
@@ -55,7 +54,13 @@
 			<wsa:addressing xmlns:wsa="http://cxf.apache.org/ws/addressing" />
 		</cxf:features-->
 	</cxf:cxfEndpoint>	
-
+	
+	<bean id="removeRequestOutHeaderProcessor"
+		class="org.apache.camel.component.cxf.wsa.WSAddressingTest$RemoveRequestOutHeaderProcessor" />
+		
+	<bean id="loggingOutInterceptor" class="org.apache.cxf.interceptor.LoggingOutInterceptor" />
+	<bean id="logInbound" class="org.apache.cxf.interceptor.LoggingInInterceptor" />
+	
 	<camelContext id="camel" trace="true" xmlns="http://camel.apache.org/schema/spring">
 		<route>
 			<from uri="cxf:bean:routerEndpoint" />
@@ -64,10 +69,4 @@
 			<to uri="cxf:bean:serviceEndpoint" />			
 		</route>
 	</camelContext>	
-	
-	<bean id="removeRequestOutHeaderProcessor"
-		class="org.apache.camel.component.cxf.wsa.WSAddressingTest$RemoveRequestOutHeaderProcessor" />
-		
-	<bean id="loggingOutInterceptor" class="org.apache.cxf.interceptor.LoggingOutInterceptor" />
-	<bean id="logInbound" class="org.apache.cxf.interceptor.LoggingInInterceptor" />
 </beans>

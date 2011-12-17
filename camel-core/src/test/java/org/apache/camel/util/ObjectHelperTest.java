@@ -27,6 +27,7 @@ import java.util.List;
 import junit.framework.TestCase;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
+import org.apache.camel.component.bean.MyStaticClass;
 import org.apache.camel.impl.DefaultMessage;
 
 /**
@@ -152,6 +153,19 @@ public class ObjectHelperTest extends TestCase {
         assertEquals("a", it.next());
         assertEquals("b", it.next());
         assertEquals("c", it.next());
+    }
+
+    public void testCreateIteratorWithStringAndCommaInParanthesesSeparator() {
+        String s = "bean:foo?method=bar('A','B','C')";
+        Iterator<String> it = CastUtils.cast(ObjectHelper.createIterator(s, ","));
+        assertEquals("bean:foo?method=bar('A','B','C')", it.next());
+    }
+
+    public void testCreateIteratorWithStringAndCommaInParanthesesSeparatorTwo() {
+        String s = "bean:foo?method=bar('A','B','C'),bean:bar?method=cool('A','Hello,World')";
+        Iterator<String> it = CastUtils.cast(ObjectHelper.createIterator(s, ","));
+        assertEquals("bean:foo?method=bar('A','B','C')", it.next());
+        assertEquals("bean:bar?method=cool('A','Hello,World')", it.next());
     }
 
     public void testBefore() {
@@ -297,6 +311,11 @@ public class ObjectHelperTest extends TestCase {
         assertEquals("CamelFileName", ObjectHelper.lookupConstantFieldValue(Exchange.class, "FILE_NAME"));
         assertEquals(null, ObjectHelper.lookupConstantFieldValue(Exchange.class, "XXX"));
         assertEquals(null, ObjectHelper.lookupConstantFieldValue(null, "FILE_NAME"));
+    }
+
+    public void testHasDefaultPublicNoArgConstructor() {
+        assertTrue(ObjectHelper.hasDefaultPublicNoArgConstructor(ObjectHelperTest.class));
+        assertFalse(ObjectHelper.hasDefaultPublicNoArgConstructor(MyStaticClass.class));
     }
 
 }

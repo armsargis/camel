@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.ErrorListener;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
 import javax.xml.transform.Templates;
@@ -31,7 +32,12 @@ import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.URIResolver;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXSource;
+import javax.xml.transform.stax.StAXSource;
 import javax.xml.transform.stream.StreamSource;
+
+import org.w3c.dom.Node;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.ExpectedBodyTypeException;
@@ -43,6 +49,9 @@ import org.apache.camel.converter.jaxp.XmlErrorListener;
 import org.apache.camel.support.SynchronizationAdapter;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.FileUtil;
+import org.apache.camel.util.IOHelper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.camel.util.ObjectHelper.notNull;
 
@@ -50,12 +59,13 @@ import static org.apache.camel.util.ObjectHelper.notNull;
  * Creates a <a href="http://camel.apache.org/processor.html">Processor</a>
  * which performs an XSLT transformation of the IN message body.
  * <p/>
- * Will by defult output the result as a String. You can chose which kind of output
+ * Will by default output the result as a String. You can chose which kind of output
  * you want using the <tt>outputXXX</tt> methods.
  *
  * @version 
  */
 public class XsltBuilder implements Processor {
+    private static final Logger LOG = LoggerFactory.getLogger(XsltBuilder.class);
     private Map<String, Object> parameters = new HashMap<String, Object>();
     private XmlConverter converter = new XmlConverter();
     private Templates template;
@@ -63,6 +73,8 @@ public class XsltBuilder implements Processor {
     private boolean failOnNullBody = true;
     private URIResolver uriResolver;
     private boolean deleteOutputFile;
+    private ErrorListener errorListener = new XsltErrorListener();
+    private boolean allowStAX;
 
     public XsltBuilder() {
     }
@@ -88,7 +100,6 @@ public class XsltBuilder implements Processor {
         Transformer transformer = getTemplate().newTransformer();
         configureTransformer(transformer, exchange);
         transformer.setErrorListener(new DefaultTransformErrorHandler());
-        Source source = getSource(exchange);
         ResultHandler resultHandler = resultHandlerFactory.createResult(exchange);
         Result result = resultHandler.getResult();
 
@@ -96,8 +107,26 @@ public class XsltBuilder implements Processor {
         Message out = exchange.getOut();
         out.copyFrom(exchange.getIn());
 
-        transformer.transform(source, result);
-        resultHandler.setBody(out);
+        // the underlying input stream, which we need to close to avoid locking files or other resources
+        InputStream is = null;
+        try {
+            Source source;
+            // only convert to input stream if really needed
+            if (isInputStreamNeeded(exchange)) {
+                is = exchange.getIn().getBody(InputStream.class);
+                source = getSource(exchange, is);
+            } else {
+                Object body = exchange.getIn().getBody();
+                source = getSource(exchange, body);
+            }
+            LOG.trace("Using {} as source", source);
+            transformer.transform(source, result);
+            LOG.trace("Transform complete with result {}", result);
+            resultHandler.setBody(out);
+        } finally {
+            // IOHelper can handle if is is null
+            IOHelper.close(is);
+        }
     }
 
     // Builder methods
@@ -200,6 +229,16 @@ public class XsltBuilder implements Processor {
         return this;
     }
 
+    /**
+     * Enables to allow using StAX.
+     * <p/>
+     * When enabled StAX is preferred as the first choice as {@link Source}.
+     */
+    public XsltBuilder allowStAX() {
+        setAllowStAX(true);
+        return this;
+    }
+
     // Properties
     // -------------------------------------------------------------------------
 
@@ -235,6 +274,14 @@ public class XsltBuilder implements Processor {
         this.resultHandlerFactory = resultHandlerFactory;
     }
 
+    public boolean isAllowStAX() {
+        return allowStAX;
+    }
+
+    public void setAllowStAX(boolean allowStAX) {
+        this.allowStAX = allowStAX;
+    }
+
     /**
      * Sets the XSLT transformer from a Source
      *
@@ -243,6 +290,7 @@ public class XsltBuilder implements Processor {
      */
     public void setTransformerSource(Source source) throws TransformerConfigurationException {
         TransformerFactory factory = converter.getTransformerFactory();
+        factory.setErrorListener(errorListener);
         if (getUriResolver() != null) {
             factory.setURIResolver(getUriResolver());
         }
@@ -307,15 +355,79 @@ public class XsltBuilder implements Processor {
         this.deleteOutputFile = deleteOutputFile;
     }
 
+    public ErrorListener getErrorListener() {
+        return errorListener;
+    }
+
+    public void setErrorListener(ErrorListener errorListener) {
+        this.errorListener = errorListener;
+    }
+
     // Implementation methods
     // -------------------------------------------------------------------------
 
     /**
-     * Converts the inbound body to a {@link Source}
+     * Checks whether we need an {@link InputStream} to access the message body.
+     * <p/>
+     * Depending on the content in the message body, we may not need to convert
+     * to {@link InputStream}.
+     *
+     * @param exchange the current exchange
+     * @return <tt>true</tt> to convert to {@link InputStream} beforehand converting to {@link Source} afterwards.
      */
-    protected Source getSource(Exchange exchange) {
-        Message in = exchange.getIn();
-        Source source = in.getBody(Source.class);
+    protected boolean isInputStreamNeeded(Exchange exchange) {
+        Object body = exchange.getIn().getBody();
+        if (body == null) {
+            return false;
+        }
+
+        if (body instanceof Source) {
+            return false;
+        } else if (body instanceof String) {
+            return false;
+        } else if (body instanceof byte[]) {
+            return false;
+        } else if (body instanceof Node) {
+            return false;
+        }
+
+        // yes an input stream is needed
+        return true;
+    }
+
+    /**
+     * Converts the inbound body to a {@link Source}, if the body is <b>not</b> already a {@link Source}.
+     * <p/>
+     * This implementation will prefer to source in the following order:
+     * <ul>
+     *   <li>StAX - Is StAX is allowed</li>
+     *   <li>SAX - SAX as 2nd choice</li>
+     *   <li>Stream - Stream as 3rd choice</li>
+     *   <li>DOM - DOM as 4th choice</li>
+     * </ul>
+     */
+    protected Source getSource(Exchange exchange, Object body) {
+        // body may already be a source
+        if (body instanceof Source) {
+            return (Source) body;
+        }
+
+        Source source = null;
+        if (isAllowStAX()) {
+            source = exchange.getContext().getTypeConverter().convertTo(StAXSource.class, exchange, body);
+        }
+        if (source == null) {
+            // then try SAX
+            source = exchange.getContext().getTypeConverter().convertTo(SAXSource.class, exchange, body);
+        }
+        if (source == null) {
+            // then try stream
+            source = exchange.getContext().getTypeConverter().convertTo(StreamSource.class, exchange, body);
+        }
+        if (source == null) {
+            // and fallback to DOM
+            source = exchange.getContext().getTypeConverter().convertTo(DOMSource.class, exchange, body);
+        }
         if (source == null) {
             if (isFailOnNullBody()) {
                 throw new ExpectedBodyTypeException(exchange, Source.class);
@@ -357,6 +469,7 @@ public class XsltBuilder implements Processor {
             String key = entry.getKey();
             Object value = entry.getValue();
             if (value != null) {
+                LOG.trace("Transformer set parameter {} -> {}", key, value);
                 transformer.setParameter(key, value);
             }
         }

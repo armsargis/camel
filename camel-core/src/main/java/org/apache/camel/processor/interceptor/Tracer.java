@@ -17,6 +17,7 @@
 package org.apache.camel.processor.interceptor;
 
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
@@ -26,10 +27,10 @@ import org.apache.camel.Processor;
 import org.apache.camel.Service;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.model.RouteDefinitionHelper;
-import org.apache.camel.processor.CamelLogger;
+import org.apache.camel.processor.CamelLogProcessor;
 import org.apache.camel.spi.ExchangeFormatter;
 import org.apache.camel.spi.InterceptStrategy;
-import org.slf4j.LoggerFactory;
+import org.apache.camel.util.CamelLogger;
 
 /**
  * An interceptor strategy for tracing routes
@@ -51,10 +52,17 @@ public class Tracer implements InterceptStrategy, Service {
     private String destinationUri;
     private Endpoint destination;
     private boolean useJpa;
-    private CamelLogger logger;
+    private CamelLogProcessor logger;
     private TraceInterceptorFactory traceInterceptorFactory = new DefaultTraceInterceptorFactory();
-    private TraceEventHandler traceHandler;
+    private CopyOnWriteArrayList<TraceEventHandler> traceHandlers;
     private String jpaTraceEventMessageClassName = JPA_TRACE_EVENT_MESSAGE;
+    private boolean jmxTraceNotifications;
+    private int traceBodySize = 10000;
+    
+    public Tracer() {
+        traceHandlers = new CopyOnWriteArrayList<TraceEventHandler>();
+        traceHandlers.add(new DefaultTraceEventHandler(this));
+    }
 
     /**
      * Creates a new tracer.
@@ -93,10 +101,9 @@ public class Tracer implements InterceptStrategy, Service {
      * @param formatter the exchange formatter
      * @return the logger to use
      */
-    public synchronized CamelLogger getLogger(ExchangeFormatter formatter) {
+    public synchronized CamelLogProcessor getLogger(ExchangeFormatter formatter) {
         if (logger == null) {
-            logger = new CamelLogger(LoggerFactory.getLogger(getLogName()), formatter);
-            logger.setLevel(getLogLevel());
+            logger = new CamelLogProcessor(new CamelLogger(getLogName(), getLogLevel()), formatter);
         }
         return logger;
     }
@@ -165,7 +172,7 @@ public class Tracer implements InterceptStrategy, Service {
         this.logLevel = logLevel;
         // update logger if its in use
         if (logger != null) {
-            logger.setLevel(logLevel);
+            logger.getLogger().setLevel(logLevel);
         }
     }
 
@@ -203,7 +210,7 @@ public class Tracer implements InterceptStrategy, Service {
         this.logName = logName;
         // update logger if its in use
         if (logger != null) {
-            logger.setLogName(logName);
+            logger.getLogger().setLogName(logName);
         }
     }
 
@@ -275,8 +282,21 @@ public class Tracer implements InterceptStrategy, Service {
         this.traceInterceptorFactory = traceInterceptorFactory;
     }
 
+    /**
+     * 
+     * @return the first trace event handler
+     */
+    @Deprecated
     public TraceEventHandler getTraceHandler() {
-        return traceHandler;
+        return traceHandlers.get(0);
+    }
+    
+    /**
+     * 
+     * @return list of tracehandlers
+     */
+    public List<TraceEventHandler> getTraceHandlers() {
+        return traceHandlers;
     }
 
     /**
@@ -288,8 +308,26 @@ public class Tracer implements InterceptStrategy, Service {
      * The TraceHandler should only be set before any routes are created, hence this
      * method is not thread safe.
      */
+    @Deprecated
     public void setTraceHandler(TraceEventHandler traceHandler) {
-        this.traceHandler = traceHandler;
+        this.traceHandlers.clear();
+        this.traceHandlers.add(traceHandler);
+    }
+    
+    /**
+     * Add the given tracehandler
+     * @param traceHandler
+     */
+    public void addTraceHandler(TraceEventHandler traceHandler) {
+        this.traceHandlers.add(traceHandler);
+    }
+    
+    /**
+     * Remove the given tracehandler
+     * @param traceHandler
+     */
+    public void removeTraceHandler(TraceEventHandler traceHandler) {
+        this.traceHandlers.add(traceHandler);
     }
 
     public String getJpaTraceEventMessageClassName() {
@@ -305,6 +343,23 @@ public class Tracer implements InterceptStrategy, Service {
      */
     public void setJpaTraceEventMessageClassName(String jpaTraceEventMessageClassName) {
         this.jpaTraceEventMessageClassName = jpaTraceEventMessageClassName;
+    }
+
+
+    public boolean isJmxTraceNotifications() {
+        return jmxTraceNotifications;
+    }
+
+    public void setJmxTraceNotifications(boolean jmxTraceNotifications) {
+        this.jmxTraceNotifications = jmxTraceNotifications;
+    }
+
+    public int getTraceBodySize() {
+        return traceBodySize;
+    }
+
+    public void setTraceBodySize(int traceBodySize) {
+        this.traceBodySize = traceBodySize;
     }
 
     @Override

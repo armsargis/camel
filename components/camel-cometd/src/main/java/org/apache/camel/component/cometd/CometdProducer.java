@@ -20,6 +20,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.impl.DefaultProducer;
 import org.cometd.bayeux.server.BayeuxServer;
 import org.cometd.bayeux.server.ServerChannel;
+import org.cometd.bayeux.server.ServerMessage;
 import org.cometd.bayeux.server.ServerSession;
 import org.cometd.server.AbstractService;
 import org.cometd.server.BayeuxServerImpl;
@@ -45,8 +46,12 @@ public class CometdProducer extends DefaultProducer implements CometdProducerCon
     public void start() throws Exception {
         super.start();
         // must connect first
+
         endpoint.connect(this);
-        service = new ProducerService(getBayeux(), endpoint.getPath(), this);
+        // should probably look into synchronization for this.
+        if (service == null) {
+            service = new ProducerService(getBayeux(), new CometdBinding(bayeux), endpoint.getPath(), this);
+        }
     }
 
     @Override
@@ -67,6 +72,10 @@ public class CometdProducer extends DefaultProducer implements CometdProducerCon
         return bayeux;
     }
 
+    protected ProducerService getProducerService() {
+        return service;
+    }
+
     public void setBayeux(BayeuxServerImpl bayeux) {
         this.bayeux = bayeux;
     }
@@ -74,10 +83,13 @@ public class CometdProducer extends DefaultProducer implements CometdProducerCon
     public static class ProducerService extends AbstractService {
 
         private final CometdProducer producer;
+        private final CometdBinding binding;
 
-        public ProducerService(BayeuxServer bayeux, String channel, CometdProducer producer) {
+        public ProducerService(BayeuxServer bayeux, CometdBinding cometdBinding, String channel,
+                               CometdProducer producer) {
             super(bayeux, channel);
             this.producer = producer;
+            this.binding = cometdBinding;
         }
 
         public void process(final Exchange exchange) {
@@ -88,14 +100,16 @@ public class CometdProducer extends DefaultProducer implements CometdProducerCon
 
             if (channel != null) {
                 logDelivery(exchange, channel);
-                channel.publish(serverSession, exchange.getIn().getBody(), null);
+                ServerMessage.Mutable mutable = binding.createCometdMessage(channel, serverSession,
+                                                                            exchange.getIn());
+                channel.publish(serverSession, mutable);
             }
         }
 
         private void logDelivery(Exchange exchange, ServerChannel channel) {
             if (LOG.isTraceEnabled()) {
                 LOG.trace(String.format("Delivering to clients %s path: %s exchange: %s",
-                        channel.getSubscribers(), channel, exchange));
+                                        channel.getSubscribers(), channel, exchange));
             }
         }
     }

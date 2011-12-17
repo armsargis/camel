@@ -104,8 +104,9 @@ public interface Exchange {
     String DISABLE_HTTP_STREAM_CACHE = "CamelDisableHttpStreamCache";
     String DUPLICATE_MESSAGE         = "CamelDuplicateMessage";
 
-    String ERRORHANDLER_HANDLED = "CamelErrorHandlerHandled";
-    String EXCEPTION_CAUGHT     = "CamelExceptionCaught";
+    String EXCEPTION_CAUGHT           = "CamelExceptionCaught";
+    String EVALUATE_EXPRESSION_RESULT = "CamelEvaluateExpressionResult";
+    String ERRORHANDLER_HANDLED       = "CamelErrorHandlerHandled";
 
     String FAILURE_HANDLED      = "CamelFailureHandled";
     String FAILURE_ENDPOINT     = "CamelFailureEndpoint";
@@ -158,6 +159,7 @@ public interface Exchange {
     String REDELIVERY_COUNTER      = "CamelRedeliveryCounter";
     String REDELIVERY_MAX_COUNTER  = "CamelRedeliveryMaxCounter";
     String REDELIVERY_EXHAUSTED    = "CamelRedeliveryExhausted";
+    String REDELIVERY_DELAY        = "CamelRedeliveryDelay";
     String ROLLBACK_ONLY           = "CamelRollbackOnly";
     String ROLLBACK_ONLY_LAST      = "CamelRollbackOnlyLast";
     String ROUTE_STOP              = "CamelRouteStop";
@@ -181,7 +183,8 @@ public interface Exchange {
     String TRACE_EVENT_EXCHANGE  = "CamelTraceEventExchange";
     String TRANSFER_ENCODING     = "Transfer-Encoding";
 
-    String UNIT_OF_WORK_EXHAUSTED = "CamelUnitOfWorkExhausted";
+    String UNIT_OF_WORK_EXHAUSTED    = "CamelUnitOfWorkExhausted";
+    String UNIT_OF_WORK_PROCESS_SYNC = "CamelUnitOfWorkProcessSync";
 
     String XSLT_FILE_NAME = "CamelXsltFileName";
 

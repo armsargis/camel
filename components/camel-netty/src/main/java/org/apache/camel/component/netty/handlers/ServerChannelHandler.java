@@ -23,8 +23,9 @@ import org.apache.camel.component.netty.NettyConsumer;
 import org.apache.camel.component.netty.NettyHelper;
 import org.apache.camel.component.netty.NettyPayloadHelper;
 import org.apache.camel.converter.IOConverter;
-import org.apache.camel.processor.CamelLogger;
+import org.apache.camel.util.CamelLogger;
 import org.apache.camel.util.ExchangeHelper;
+import org.apache.camel.util.IOHelper;
 import org.jboss.netty.channel.ChannelHandler;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.ChannelStateEvent;
@@ -84,7 +85,7 @@ public class ServerChannelHandler extends SimpleChannelUpstreamHandler {
         }
         // set the exchange charset property for converting
         if (consumer.getConfiguration().getCharsetName() != null) {
-            exchange.setProperty(Exchange.CHARSET_NAME, IOConverter.normalizeCharset(consumer.getConfiguration().getCharsetName()));
+            exchange.setProperty(Exchange.CHARSET_NAME, IOHelper.normalizeCharset(consumer.getConfiguration().getCharsetName()));
         }
 
         try {

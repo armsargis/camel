@@ -28,7 +28,7 @@ import java.util.Properties;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.Message;
-import org.apache.camel.component.ResourceBasedEndpoint;
+import org.apache.camel.component.ResourceEndpoint;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
@@ -42,7 +42,7 @@ import org.apache.velocity.runtime.log.CommonsLogLogChute;
 /**
  * @version 
  */
-public class VelocityEndpoint extends ResourceBasedEndpoint {
+public class VelocityEndpoint extends ResourceEndpoint {
     private VelocityEngine velocityEngine;
     private boolean loaderCache = true;
     private String encoding;
@@ -98,7 +98,15 @@ public class VelocityEndpoint extends ResourceBasedEndpoint {
             properties.setProperty(CommonsLogLogChute.LOGCHUTE_COMMONS_LOG_NAME, VelocityEndpoint.class.getName());
 
             log.debug("Initializing VelocityEngine with properties {}", properties);
-            velocityEngine.init(properties);
+            // help the velocityEngine to load the CamelVelocityClasspathResourceLoader 
+            ClassLoader old = Thread.currentThread().getContextClassLoader();
+            try {
+                ClassLoader delegate = new CamelVelocityDelegateClassLoader(old);
+                Thread.currentThread().setContextClassLoader(delegate);
+                velocityEngine.init(properties);
+            } finally {
+                Thread.currentThread().setContextClassLoader(old);
+            }
         }
         return velocityEngine;
     }
@@ -139,7 +147,7 @@ public class VelocityEndpoint extends ResourceBasedEndpoint {
     public VelocityEndpoint findOrCreateEndpoint(String uri, String newResourceUri) {
         String newUri = uri.replace(getResourceUri(), newResourceUri);
         log.debug("Getting endpoint with URI: {}", newUri);
-        return (VelocityEndpoint) getCamelContext().getEndpoint(newUri);
+        return getCamelContext().getEndpoint(newUri, VelocityEndpoint.class);
     }
 
     @SuppressWarnings("unchecked")

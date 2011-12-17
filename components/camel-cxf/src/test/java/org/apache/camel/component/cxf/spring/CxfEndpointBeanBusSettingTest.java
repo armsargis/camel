@@ -41,36 +41,23 @@ public class CxfEndpointBeanBusSettingTest extends AbstractSpringBeanTestSupport
     public void testBusInjectedBySpring() throws Exception {
         CamelContext camelContext = (CamelContext) ctx.getBean("camel");
         
-        CxfEndpoint endpoint = (CxfEndpoint)camelContext.getEndpoint("cxf:bean:routerEndpoint");
+        CxfEndpoint endpoint = camelContext.getEndpoint("cxf:bean:routerEndpoint", CxfEndpoint.class);
         assertEquals("Get a wrong endpoint uri", "cxf://bean:routerEndpoint", endpoint.getEndpointUri());       
         Bus cxf1 = endpoint.getBus();
         
         assertEquals(cxf1, ctx.getBean("cxf1"));
-        assertTrue(cxf1.getOutInterceptors().size() >= 1);
-        assertTrue(cxf1.getInInterceptors().size() == 0);
-        LoggingOutInterceptor log1 = getInterceptor(cxf1.getOutInterceptors(), LoggingOutInterceptor.class);
-        assertNotNull(log1);
+        assertEquals(cxf1, endpoint.getBus());
+        assertEquals("barf", endpoint.getBus().getProperty("foo"));
         
-        endpoint = (CxfEndpoint)camelContext.getEndpoint("cxf:bean:serviceEndpoint");
+        endpoint = camelContext.getEndpoint("cxf:bean:serviceEndpoint", CxfEndpoint.class);
         assertEquals("Get a wrong endpoint uri", "cxf://bean:serviceEndpoint", endpoint.getEndpointUri());
         Bus cxf2 = endpoint.getBus();
         
         assertEquals(cxf2, ctx.getBean("cxf2"));
-        assertTrue(cxf2.getInInterceptors().size() >= 1);
-        assertTrue(cxf2.getOutInterceptors().size() == 0);
-        LoggingInInterceptor log2 = getInterceptor(cxf2.getInInterceptors(), LoggingInInterceptor.class);
-        assertNotNull(log2);
+        assertEquals(cxf2, endpoint.getBus());
+        assertEquals("snarf", endpoint.getBus().getProperty("foo"));
+        
     }
     
-    
-    @SuppressWarnings("unchecked")
-    private <T> T getInterceptor(List<Interceptor<? extends Message>> list, Class<T> clz) {
-        for (Interceptor<? extends Message> i : list) {
-            if (clz.isInstance(i)) {
-                return (T)i;
-            }
-        }
-        return null;
-    }
 
 }

@@ -52,8 +52,9 @@ public class JpaConsumer extends ScheduledPollConsumer implements BatchConsumer,
     private String query;
     private String namedQuery;
     private String nativeQuery;
-    private Class resultClass;
+    private Class<?> resultClass;
     private int maxMessagesPerPoll;
+    private boolean transacted;
     private volatile ShutdownRunningTask shutdownRunningTask;
     private volatile int pendingExchanges;
 
@@ -77,13 +78,17 @@ public class JpaConsumer extends ScheduledPollConsumer implements BatchConsumer,
         shutdownRunningTask = null;
         pendingExchanges = 0;
 
-        Object messagePolled = template.execute(new JpaCallback() {
+        Object messagePolled = template.execute(new JpaCallback<Object>() {
             public Object doInJpa(EntityManager entityManager) throws PersistenceException {
                 Queue<DataHolder> answer = new LinkedList<DataHolder>();
 
                 Query query = getQueryFactory().createQuery(entityManager);
                 configureParameters(query);
+                LOG.trace("Created query {}", query);
+
                 List<Object> results = CastUtils.cast(query.getResultList());
+                LOG.trace("Got result list from query {}", results);
+
                 for (Object result : results) {
                     DataHolder holder = new DataHolder();
                     holder.manager = entityManager;
@@ -92,13 +97,29 @@ public class JpaConsumer extends ScheduledPollConsumer implements BatchConsumer,
                     answer.add(holder);
                 }
 
-                int messagePolled;
+                PersistenceException cause = null;
+                int messagePolled = 0;
                 try {
                     messagePolled = processBatch(CastUtils.cast(answer));
                 } catch (Exception e) {
-                    throw new PersistenceException(e);
+                    if (e instanceof PersistenceException) {
+                        cause = (PersistenceException) e;
+                    } else {
+                        cause = new PersistenceException(e);
+                    }
                 }
 
+                if (cause != null) {
+                    if (!isTransacted()) {
+                        LOG.warn("Error processing last message due: {}. Will commit all previous successful processed message, and ignore this last failure.", cause.getMessage(), cause);
+                    } else {
+                        // rollback all by throwning exception
+                        throw cause;
+                    }
+                }
+
+                // commit
+                LOG.debug("Flushing EntityManager");
                 entityManager.flush();
                 return messagePolled;
             }
@@ -138,11 +159,12 @@ public class JpaConsumer extends ScheduledPollConsumer implements BatchConsumer,
             if (lockEntity(result, entityManager)) {
                 // process the current exchange
                 LOG.debug("Processing exchange: {}", exchange);
-                try {
-                    getProcessor().process(exchange);
-                } catch (Exception e) {
-                    throw new PersistenceException(e);
+                getProcessor().process(exchange);
+                if (exchange.getException() != null) {
+                    // if we failed then throw exception
+                    throw exchange.getException();
                 }
+
                 getDeleteHandler().deleteObject(entityManager, result);
             }
         }
@@ -158,12 +180,24 @@ public class JpaConsumer extends ScheduledPollConsumer implements BatchConsumer,
     }
 
     public int getPendingExchangesSize() {
+        int answer;
         // only return the real pending size in case we are configured to complete all tasks
         if (ShutdownRunningTask.CompleteAllTasks == shutdownRunningTask) {
-            return pendingExchanges;
+            answer = pendingExchanges;
         } else {
-            return 0;
+            answer = 0;
         }
+
+        if (answer == 0 && isPolling()) {
+            // force at least one pending exchange if we are polling as there is a little gap
+            // in the processBatch method and until an exchange gets enlisted as in-flight
+            // which happens later, so we need to signal back to the shutdown strategy that
+            // there is a pending exchange. When we are no longer polling, then we will return 0
+            log.trace("Currently polling so returning 1 as pending exchanges");
+            answer = 1;
+        }
+
+        return answer;
     }
 
     public void prepareShutdown() {
@@ -242,13 +276,28 @@ public class JpaConsumer extends ScheduledPollConsumer implements BatchConsumer,
         this.query = query;
     }
     
-    public Class getResultClass() {
+    public Class<?> getResultClass() {
         return resultClass;
     }
 
-    public void setResultClass(Class resultClass) {
+    public void setResultClass(Class<?> resultClass) {
         this.resultClass = resultClass;
-    }    
+    }
+
+    public boolean isTransacted() {
+        return transacted;
+    }
+
+    /**
+     * Sets whether to run in transacted mode or not.
+     * <p/>
+     * This option is default <tt>false</tt>. When <tt>false</tt> then all the good messages
+     * will commit, and the first failed message will rollback.
+     * However when <tt>true</tt>, then all messages will rollback, if just one message failed.
+     */
+    public void setTransacted(boolean transacted) {
+        this.transacted = transacted;
+    }
 
     // Implementation methods
     // -------------------------------------------------------------------------
@@ -272,6 +321,11 @@ public class JpaConsumer extends ScheduledPollConsumer implements BatchConsumer,
         } catch (Exception e) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Failed to achieve lock on entity: " + entity + ". Reason: " + e, e);
+            }
+            //TODO: Find if possible an alternative way to handle results of native queries.
+            //Result of native queries are Arrays and cannot be locked by all JPA Providers.
+            if (entity.getClass().isArray()) {
+                return true;
             }
             return false;
         }

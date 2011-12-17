@@ -26,17 +26,25 @@ import org.apache.camel.Component;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
+import org.apache.camel.Service;
+import org.apache.camel.component.cxf.CxfEndpointUtils;
 import org.apache.camel.impl.DefaultEndpoint;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.spi.HeaderFilterStrategyAware;
+import org.apache.camel.util.ObjectHelper;
+import org.apache.cxf.Bus;
+import org.apache.cxf.BusFactory;
+import org.apache.cxf.feature.LoggingFeature;
 import org.apache.cxf.helpers.CastUtils;
 import org.apache.cxf.jaxrs.JAXRSServerFactoryBean;
 import org.apache.cxf.jaxrs.client.JAXRSClientFactoryBean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrategyAware {
+public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrategyAware, Service {
     private static final Logger LOG = LoggerFactory.getLogger(CxfRsEndpoint.class);
+
+    protected Bus bus;
 
     private Map<String, String> parameters;
     private List<Class<?>> resourceClasses;
@@ -46,9 +54,14 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
     private String address;
     private boolean throwExceptionOnFailure = true;
     private int maxClientCacheSize = 10;
+    private boolean loggingFeatureEnabled;
+    private int loggingSizeLimit;
     
-    private AtomicBoolean bindingInitialized = new AtomicBoolean(false);
+    private AtomicBoolean getBusHasBeenCalled = new AtomicBoolean(false);
 
+    private boolean isSetDefaultBus;
+
+    @Deprecated
     public CxfRsEndpoint(String endpointUri, CamelContext camelContext) {
         super(endpointUri, camelContext);
         setAddress(endpointUri);
@@ -86,18 +99,11 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
     }
 
     public HeaderFilterStrategy getHeaderFilterStrategy() {
-        if (headerFilterStrategy == null) {
-            headerFilterStrategy = new CxfRsHeaderFilterStrategy();
-            LOG.debug("Create default header filter strategy {}", headerFilterStrategy);
-        }
         return headerFilterStrategy;
     }
 
     public void setHeaderFilterStrategy(HeaderFilterStrategy strategy) {
         headerFilterStrategy = strategy;
-        if (binding instanceof HeaderFilterStrategyAware) {
-            ((HeaderFilterStrategyAware) binding).setHeaderFilterStrategy(headerFilterStrategy);
-        }
     }
 
     public Consumer createConsumer(Processor processor) throws Exception {
@@ -114,19 +120,9 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
 
     public void setBinding(CxfRsBinding binding) {
         this.binding = binding;
-        bindingInitialized.set(false);
     }
 
-    public synchronized CxfRsBinding getBinding() {
-        if (binding == null) {
-            binding = new DefaultCxfRsBinding();
-            LOG.debug("Create default CXF Binding {}", binding);
-        }
-
-        if (!bindingInitialized.getAndSet(true) && binding instanceof HeaderFilterStrategyAware) {
-            ((HeaderFilterStrategyAware) binding).setHeaderFilterStrategy(getHeaderFilterStrategy());
-        }
-
+    public CxfRsBinding getBinding() {
         return binding;
     }
     
@@ -155,6 +151,13 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
         if (getResourceClasses() != null) {
             cfb.setResourceClass(getResourceClasses().get(0));
         }
+        if (isLoggingFeatureEnabled()) {
+            if (getLoggingSizeLimit() > 0) {
+                cfb.getFeatures().add(new LoggingFeature(getLoggingSizeLimit()));
+            } else {
+                cfb.getFeatures().add(new LoggingFeature());
+            }
+        }
         cfb.setThreadSafe(true);
     }
     
@@ -165,10 +168,30 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
     protected JAXRSClientFactoryBean newJAXRSClientFactoryBean() {
         return new JAXRSClientFactoryBean();
     }
+    
+    protected String resolvePropertyPlaceholders(String str) {
+        try {
+            if (getCamelContext() != null) {
+                return getCamelContext().resolvePropertyPlaceholders(str);
+            } else {
+                return str;
+            }
+        } catch (Exception ex) {
+            throw ObjectHelper.wrapRuntimeCamelException(ex);
+        }
+    }
+
 
     public JAXRSServerFactoryBean createJAXRSServerFactoryBean() {
         JAXRSServerFactoryBean answer = newJAXRSServerFactoryBean();
         setupJAXRSServerFactoryBean(answer);
+        if (isLoggingFeatureEnabled()) {
+            if (getLoggingSizeLimit() > 0) {
+                answer.getFeatures().add(new LoggingFeature(getLoggingSizeLimit()));
+            } else {
+                answer.getFeatures().add(new LoggingFeature());
+            }
+        }
         return answer;
     }
     
@@ -180,6 +203,13 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
     public JAXRSClientFactoryBean createJAXRSClientFactoryBean(String address) {
         JAXRSClientFactoryBean answer = newJAXRSClientFactoryBean();
         setupJAXRSClientFactoryBean(answer, address);
+        if (isLoggingFeatureEnabled()) {
+            if (getLoggingSizeLimit() > 0) {
+                answer.getFeatures().add(new LoggingFeature(getLoggingSizeLimit()));
+            } else {
+                answer.getFeatures().add(new LoggingFeature());
+            }
+        }
         return answer;
     }
 
@@ -200,7 +230,23 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
     }
 
     public String getAddress() {
-        return address;
+        return resolvePropertyPlaceholders(address);
+    }
+
+    public boolean isLoggingFeatureEnabled() {
+        return loggingFeatureEnabled;
+    }
+
+    public void setLoggingFeatureEnabled(boolean loggingFeatureEnabled) {
+        this.loggingFeatureEnabled = loggingFeatureEnabled;
+    }
+
+    public int getLoggingSizeLimit() {
+        return loggingSizeLimit;
+    }
+
+    public void setLoggingSizeLimit(int loggingSizeLimit) {
+        this.loggingSizeLimit = loggingSizeLimit;
     }
 
     public boolean isThrowExceptionOnFailure() {
@@ -223,5 +269,48 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
      */
     public int getMaxClientCacheSize() {
         return maxClientCacheSize;
+    }
+    
+    public void setBus(Bus bus) {
+        this.bus = bus;
+    }
+
+    public Bus getBus() {
+        if (bus == null) {
+            bus = CxfEndpointUtils.createBus(getCamelContext());
+            LOG.debug("Using DefaultBus {}", bus);
+        }
+
+        if (!getBusHasBeenCalled.getAndSet(true) && isSetDefaultBus) {
+            BusFactory.setDefaultBus(bus);
+            LOG.debug("Set bus {} as thread default bus", bus);
+        }
+        return bus;
+    }
+    
+    public void setSetDefaultBus(boolean isSetDefaultBus) {
+        this.isSetDefaultBus = isSetDefaultBus;
+    }
+
+    public boolean isSetDefaultBus() {
+        return isSetDefaultBus;
+    }
+    
+    @Override
+    protected void doStart() throws Exception {
+        if (headerFilterStrategy == null) {
+            headerFilterStrategy = new CxfRsHeaderFilterStrategy();
+        }
+        if (binding == null) {
+            binding = new DefaultCxfRsBinding();
+        }
+        if (binding instanceof HeaderFilterStrategyAware) {
+            ((HeaderFilterStrategyAware) binding).setHeaderFilterStrategy(getHeaderFilterStrategy());
+        }
+    }
+
+    @Override
+    protected void doStop() throws Exception {
+        // noop
     }
 }

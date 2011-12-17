@@ -37,10 +37,12 @@ import org.apache.camel.NoSuchEndpointException;
 import org.apache.camel.Producer;
 import org.apache.camel.component.bean.BeanInvocation;
 import org.apache.camel.component.properties.PropertiesComponent;
-import org.apache.camel.impl.ExpressionAdapter;
 import org.apache.camel.language.bean.BeanLanguage;
 import org.apache.camel.model.language.MethodCallExpression;
 import org.apache.camel.spi.Language;
+import org.apache.camel.support.ExpressionAdapter;
+import org.apache.camel.support.TokenPairExpressionIterator;
+import org.apache.camel.support.TokenXMLPairExpressionIterator;
 import org.apache.camel.util.ExchangeHelper;
 import org.apache.camel.util.FileUtil;
 import org.apache.camel.util.IOHelper;
@@ -1024,6 +1026,41 @@ public final class ExpressionBuilder {
     }
 
     /**
+     * Returns an {@link TokenPairExpressionIterator} expression
+     */
+    public static Expression tokenizePairExpression(String startToken, String endToken, boolean includeTokens) {
+        return new TokenPairExpressionIterator(startToken, endToken, includeTokens);
+    }
+
+    /**
+     * Returns an {@link TokenXMLPairExpressionIterator} expression
+     */
+    public static Expression tokenizeXMLExpression(String tagName, String inheritNamespaceTagName) {
+        ObjectHelper.notEmpty(tagName, "tagName");
+
+        // must be XML tokens
+        if (!tagName.startsWith("<")) {
+            tagName = "<" + tagName;
+        }
+        if (!tagName.endsWith(">")) {
+            tagName = tagName + ">";
+        }
+
+        String endToken = "</" + tagName.substring(1);
+
+        if (inheritNamespaceTagName != null) {
+            if (!inheritNamespaceTagName.startsWith("<")) {
+                inheritNamespaceTagName = "<" + inheritNamespaceTagName;
+            }
+            if (!inheritNamespaceTagName.endsWith(">")) {
+                inheritNamespaceTagName = inheritNamespaceTagName + ">";
+            }
+        }
+
+        return new TokenXMLPairExpressionIterator(tagName, endToken, inheritNamespaceTagName);
+    }
+
+    /**
      * Returns a tokenize expression which will tokenize the string with the
      * given regex
      */
@@ -1512,7 +1549,7 @@ public final class ExpressionBuilder {
                                 .mandatoryConvertTo(PropertiesComponent.class, component);
                         // enclose key with {{ }} to force parsing
                         String[] paths = locations.split(",");
-                        return pc.parseUri(PropertiesComponent.PREFIX_TOKEN + key + PropertiesComponent.SUFFIX_TOKEN, paths);
+                        return pc.parseUri(pc.getPrefixToken() + key + pc.getSuffixToken(), paths);
                     } else {
                         // the properties component is mandatory if no locations provided
                         Component component = exchange.getContext().hasComponent("properties");
@@ -1523,7 +1560,7 @@ public final class ExpressionBuilder {
                         PropertiesComponent pc = exchange.getContext().getTypeConverter()
                                 .mandatoryConvertTo(PropertiesComponent.class, component);
                         // enclose key with {{ }} to force parsing
-                        return pc.parseUri(PropertiesComponent.PREFIX_TOKEN + key + PropertiesComponent.SUFFIX_TOKEN);
+                        return pc.parseUri(pc.getPrefixToken() + key + pc.getSuffixToken());
                     }
                 } catch (Exception e) {
                     throw ObjectHelper.wrapRuntimeCamelException(e);

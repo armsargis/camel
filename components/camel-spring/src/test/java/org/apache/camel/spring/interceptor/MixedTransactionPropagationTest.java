@@ -49,15 +49,6 @@ public class MixedTransactionPropagationTest extends SpringTestSupport {
 
         final DataSource ds = getMandatoryBean(DataSource.class, "dataSource");
         jdbc = new JdbcTemplate(ds);
-        jdbc.execute("create table books (title varchar(50))");
-        jdbc.update("insert into books (title) values (?)", new Object[] {"Camel in Action"});
-    }
-
-    @Override
-    protected void tearDown() throws Exception {
-        super.tearDown();
-        jdbc.execute("drop table books");
-        this.enableJMX();
     }
 
     public void testOkay() throws Exception {

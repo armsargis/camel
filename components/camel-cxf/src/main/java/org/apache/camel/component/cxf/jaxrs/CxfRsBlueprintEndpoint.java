@@ -17,6 +17,7 @@
 package org.apache.camel.component.cxf.jaxrs;
 
 import org.apache.camel.CamelContext;
+import org.apache.camel.Component;
 import org.apache.camel.blueprint.BlueprintCamelContext;
 import org.apache.camel.component.cxf.blueprint.BlueprintSupport;
 import org.apache.camel.component.cxf.blueprint.RsClientBlueprintBean;
@@ -32,10 +33,25 @@ public class CxfRsBlueprintEndpoint extends CxfRsEndpoint {
     private BlueprintContainer blueprintContainer;
     private BundleContext bundleContext;
     private BlueprintCamelContext blueprintCamelContext;
-
-    public CxfRsBlueprintEndpoint(CamelContext camelContext, AbstractJAXRSFactoryBean bean) {
-        super(bean.getAddress(), camelContext);
+    
+    @Deprecated 
+    /**
+     * It will be removed in Camel 3.0
+     * @param comp
+     * @param bean
+     */
+    public CxfRsBlueprintEndpoint(Component comp, AbstractJAXRSFactoryBean bean) {
+        super(bean.getAddress(), comp);
         this.bean = bean;
+        BlueprintSupport support = (BlueprintSupport)bean;
+        setBlueprintContainer(support.getBlueprintContainer());
+        setBundleContext(support.getBundleContext());
+    }
+
+    public CxfRsBlueprintEndpoint(Component comp, String uri, AbstractJAXRSFactoryBean bean) {
+        super(uri, comp);
+        this.bean = bean;
+        setAddress(bean.getAddress());
         BlueprintSupport support = (BlueprintSupport)bean;
         setBlueprintContainer(support.getBlueprintContainer());
         setBundleContext(support.getBundleContext());
@@ -68,13 +84,13 @@ public class CxfRsBlueprintEndpoint extends CxfRsEndpoint {
     @Override
     protected JAXRSServerFactoryBean newJAXRSServerFactoryBean() {
         checkBeanType(bean, JAXRSServerFactoryBean.class);
-        return ((RsServerBlueprintBean)bean).copy();
+        return (RsServerBlueprintBean)bean;
     }
     
     @Override
     protected JAXRSClientFactoryBean newJAXRSClientFactoryBean() {
         checkBeanType(bean, JAXRSClientFactoryBean.class);
-        return ((RsClientBlueprintBean)bean).copy();
+        return (RsClientBlueprintBean)bean;
     }
     
 

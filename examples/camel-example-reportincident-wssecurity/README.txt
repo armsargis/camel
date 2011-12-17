@@ -33,7 +33,7 @@ To run the example on Apache ServiceMix 4.x or Apache Karaf 2.x
  They are required by the following bundle : org.apache.servicemix.bundles/org.apache.servicemix.bundles.saaj-impl/1.3.2_1
   
   2) Add features required
-  features:addUrl mvn:org.apache.camel.karaf/apache-camel/2.5-SNAPSHOT/xml/features
+  features:addUrl mvn:org.apache.camel.karaf/apache-camel/${version}/xml/features
   features:install http
   features:install camel
   features:install camel-cxf
@@ -107,7 +107,7 @@ To run the example on Apache ServiceMix 4.x or Apache Karaf 2.x
  Check through a POP request that a message has been published in the mailbox of someone (email address : incident@mycompany.com)
 
 This example is documented at
-  http://camel.apache.org/tutorial-example-reportincident-wssecurity.html
+  http://camel.apache.org/tutorial-osgi-camel-part1.html
 
 If you hit any problems please let us know on the Camel Forums
   http://camel.apache.org/discussion-forums.html

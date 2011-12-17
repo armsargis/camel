@@ -22,10 +22,10 @@ import java.util.List;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
+import org.apache.camel.api.management.ManagedAttribute;
+import org.apache.camel.api.management.ManagedOperation;
+import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.spi.IdempotentRepository;
-import org.apache.camel.spi.management.ManagedAttribute;
-import org.apache.camel.spi.management.ManagedOperation;
-import org.apache.camel.spi.management.ManagedResource;
 import org.apache.camel.support.ServiceSupport;
 import org.springframework.orm.jpa.JpaTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
@@ -71,12 +71,11 @@ public class JpaMessageIdRepository extends ServiceSupport implements Idempotent
     }
 
     @ManagedOperation(description = "Adds the key to the store")
-    @SuppressWarnings("unchecked")
     public boolean add(final String messageId) {
         // Run this in single transaction.
-        Boolean rc = (Boolean)transactionTemplate.execute(new TransactionCallback() {
-            public Object doInTransaction(TransactionStatus arg0) {
-                List list = jpaTemplate.find(QUERY_STRING, processorName, messageId);
+        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus arg0) {
+                List<?> list = jpaTemplate.find(QUERY_STRING, processorName, messageId);
                 if (list.isEmpty()) {
                     MessageProcessed processed = new MessageProcessed();
                     processed.setProcessorName(processorName);
@@ -94,12 +93,11 @@ public class JpaMessageIdRepository extends ServiceSupport implements Idempotent
     }
 
     @ManagedOperation(description = "Does the store contain the given key")
-    @SuppressWarnings("unchecked")
     public boolean contains(final String messageId) {
         // Run this in single transaction.
-        Boolean rc = (Boolean)transactionTemplate.execute(new TransactionCallback() {
-            public Object doInTransaction(TransactionStatus arg0) {
-                List list = jpaTemplate.find(QUERY_STRING, processorName, messageId);
+        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus arg0) {
+                List<?> list = jpaTemplate.find(QUERY_STRING, processorName, messageId);
                 if (list.isEmpty()) {
                     return Boolean.FALSE;
                 } else {
@@ -111,11 +109,10 @@ public class JpaMessageIdRepository extends ServiceSupport implements Idempotent
     }
 
     @ManagedOperation(description = "Remove the key from the store")
-    @SuppressWarnings("unchecked")
     public boolean remove(final String messageId) {
-        Boolean rc = (Boolean)transactionTemplate.execute(new TransactionCallback() {
-            public Object doInTransaction(TransactionStatus arg0) {
-                List list = jpaTemplate.find(QUERY_STRING, processorName, messageId);
+        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus arg0) {
+                List<?> list = jpaTemplate.find(QUERY_STRING, processorName, messageId);
                 if (list.isEmpty()) {
                     return Boolean.FALSE;
                 } else {

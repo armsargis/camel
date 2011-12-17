@@ -17,20 +17,10 @@
 
 package org.apache.camel.component.cxf;
 
-import java.lang.reflect.Proxy;
-import java.util.List;
-import java.util.Map;
-
-import javax.xml.ws.handler.Handler;
-
 import org.apache.camel.blueprint.BlueprintCamelContext;
 import org.apache.camel.component.cxf.common.message.CxfConstants;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.cxf.BusFactory;
-import org.apache.cxf.endpoint.Client;
-import org.apache.cxf.frontend.ClientFactoryBean;
-import org.apache.cxf.frontend.ClientProxy;
-import org.apache.cxf.frontend.ClientProxyFactoryBean;
 import org.apache.cxf.frontend.ServerFactoryBean;
 import org.apache.cxf.jaxws.JaxWsServerFactoryBean;
 import org.osgi.framework.BundleContext;
@@ -47,7 +37,7 @@ public class CxfBlueprintEndpoint extends CxfEndpoint {
     private BlueprintCamelContext blueprintCamelContext;
 
     public CxfBlueprintEndpoint(String address, BundleContext context) {
-        super(address);
+        super(address, (CxfComponent)null);
         bundleContext = context;
     }
 
@@ -66,82 +56,11 @@ public class CxfBlueprintEndpoint extends CxfEndpoint {
     // Package private methods
     // -------------------------------------------------------------------------
 
-    /**
-     * Create a CXF client object
-     */
-    Client createClient() throws Exception {
-
-        // get service class
-        if (getDataFormat().equals(DataFormat.POJO)) {
-            ObjectHelper.notNull(getServiceClass(), CxfConstants.SERVICE_CLASS);
-        }
-
-        if (getWsdlURL() == null && getServiceClass() == null) {
-            // no WSDL and serviceClass specified, set our default serviceClass
-            setServiceClass(org.apache.camel.component.cxf.DefaultSEI.class.getName());
-            setDefaultOperationNamespace(CxfConstants.DISPATCH_NAMESPACE);
-            setDefaultOperationName(CxfConstants.DISPATCH_DEFAULT_OPERATION_NAMESPACE);
-            if (getDataFormat().equals(DataFormat.PAYLOAD)) {
-                setSkipPayloadMessagePartCheck(true);
-            }
-        }
-
-        Class<?> cls = null;
-        if (getServiceClass() != null) {
-            //Fool CXF classes to load their settings and bindings from the CXF bundle
-            cls = getServiceClass();
-            // create client factory bean
-            ClientProxyFactoryBean factoryBean = createClientFactoryBean(cls);
-            // setup client factory bean
-            setupClientFactoryBean(factoryBean, cls);
-            return ((ClientProxy) Proxy.getInvocationHandler(factoryBean.create())).getClient();
-        } else {
-            checkName(getPortName(), "endpoint/port name");
-            checkName(getServiceName(), "service name");
-
-            ClientFactoryBean factoryBean = createClientFactoryBean();
-            // setup client factory bean
-            setupClientFactoryBean(factoryBean);
-            return factoryBean.create();
-        }
-    }
 
     protected void checkName(Object value, String name) {
         if (ObjectHelper.isEmpty(value)) {
             LOG.warn("The " + name + " of " + this.getEndpointUri() + " is empty, cxf will try to load the first one in wsdl for you.");
         }
-    }
-
-    /**
-     * Create a CXF server factory bean
-     */
-    ServerFactoryBean createServerFactoryBean() throws Exception {
-
-        Class<?> cls = null;
-        if (getDataFormat() == DataFormat.POJO || getServiceClass() != null) {
-            // get service class
-            ObjectHelper.notNull(getServiceClass(), CxfConstants.SERVICE_CLASS);
-            cls = getServiceClass();
-        }
-
-        // create server factory bean
-        // Shouldn't use CxfEndpointUtils.getServerFactoryBean(cls) as it is for
-        // CxfSoapComponent
-        ServerFactoryBean answer = null;
-
-        if (cls == null) {
-            checkName(getPortName(), " endpoint/port name");
-            checkName(getServiceName(), " service name");
-            answer = new ServerFactoryBean(new WSDLServiceFactoryBean());
-        } else if (CxfEndpointUtils.hasWebServiceAnnotation(cls)) {
-            answer = new JaxWsServerFactoryBean();
-        } else {
-            answer = new ServerFactoryBean();
-        }
-        // setup server factory bean
-        setupServerFactoryBean(answer, cls);
-
-        return answer;
     }
 
     public BlueprintContainer getBlueprintContainer() {

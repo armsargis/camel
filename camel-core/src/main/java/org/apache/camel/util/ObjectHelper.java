@@ -22,6 +22,7 @@ import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -59,6 +60,7 @@ import org.slf4j.LoggerFactory;
  */
 public final class ObjectHelper {
     private static final transient Logger LOG = LoggerFactory.getLogger(ObjectHelper.class);
+    private static final String DEFAULT_DELIMITER = ",";
 
     /**
      * Utility classes should not have a public constructor.
@@ -119,7 +121,7 @@ public final class ObjectHelper {
      * types between the left and right values. This allows you to equal test eg String and Integer as
      * Camel will be able to coerce the types
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public static int typeCoerceCompare(TypeConverter converter, Object leftValue, Object rightValue) {
 
         // if both values is numeric then compare using numeric
@@ -225,7 +227,7 @@ public final class ObjectHelper {
      * @param b  the second object
      * @param ignoreCase  ignore case for string comparison
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public static int compare(Object a, Object b, boolean ignoreCase) {
         if (a == b) {
             return 0;
@@ -427,14 +429,14 @@ public final class ObjectHelper {
      */
     public static boolean contains(Object collectionOrArray, Object value) {
         if (collectionOrArray instanceof Collection) {
-            Collection collection = (Collection)collectionOrArray;
+            Collection<?> collection = (Collection<?>)collectionOrArray;
             return collection.contains(value);
         } else if (collectionOrArray instanceof String && value instanceof String) {
             String str = (String)collectionOrArray;
             String subStr = (String)value;
             return str.contains(subStr);
         } else {
-            Iterator iter = createIterator(collectionOrArray);
+            Iterator<Object> iter = createIterator(collectionOrArray);
             while (iter.hasNext()) {
                 if (equal(value, iter.next())) {
                     return true;
@@ -446,8 +448,9 @@ public final class ObjectHelper {
 
     /**
      * Creates an iterator over the value if the value is a collection, an
-     * Object[] or a primitive type array; otherwise to simplify the caller's
-     * code, we just create a singleton collection iterator over a single value
+     * Object[], a String with values separated by comma,
+     * or a primitive type array; otherwise to simplify the caller's code,
+     * we just create a singleton collection iterator over a single value
      * <p/>
      * Will default use comma for String separating String values.
      *
@@ -455,12 +458,13 @@ public final class ObjectHelper {
      * @return the iterator
      */
     public static Iterator<Object> createIterator(Object value) {
-        return createIterator(value, ",");
+        return createIterator(value, DEFAULT_DELIMITER);
     }
 
     /**
      * Creates an iterator over the value if the value is a collection, an
-     * Object[] or a primitive type array; otherwise to simplify the caller's
+     * Object[], a String with values separated by the given delimiter,
+     * or a primitive type array; otherwise to simplify the caller's
      * code, we just create a singleton collection iterator over a single value
      *
      * @param value  the value
@@ -477,9 +481,9 @@ public final class ObjectHelper {
         if (value == null) {
             return Collections.emptyList().iterator();
         } else if (value instanceof Iterator) {
-            return (Iterator)value;
+            return (Iterator<Object>)value;
         } else if (value instanceof Iterable) {
-            return ((Iterable)value).iterator();
+            return ((Iterable<Object>)value).iterator();
         } else if (value.getClass().isArray()) {
             // TODO we should handle primitive array types?
             List<Object> list = Arrays.asList((Object[])value);
@@ -511,6 +515,21 @@ public final class ObjectHelper {
             if (delimiter != null && s.contains(delimiter)) {
                 // use a scanner if it contains the delimiter
                 Scanner scanner = new Scanner((String)value);
+
+                if (DEFAULT_DELIMITER.equals(delimiter)) {
+                    // we use the default delimiter which is a comma, then cater for bean expressions with OGNL
+                    // which may have balanced parentheses pairs as well.
+                    // if the value contains parentheses we need to balance those, to avoid iterating
+                    // in the middle of parentheses pair, so use this regular expression (a bit hard to read)
+                    // the regexp will split by comma, but honor parentheses pair that may include commas
+                    // as well, eg if value = "bean=foo?method=killer(a,b),bean=bar?method=great(a,b)"
+                    // then the regexp will split that into two:
+                    // -> bean=foo?method=killer(a,b)
+                    // -> bean=bar?method=great(a,b)
+                    // http://stackoverflow.com/questions/1516090/splitting-a-title-into-separate-parts
+                    delimiter = ",(?!(?:[^\\(,]|[^\\)],[^\\)])+\\))";
+                }
+
                 scanner.useDelimiter(delimiter);
                 return CastUtils.cast(scanner);
             } else {
@@ -546,7 +565,7 @@ public final class ObjectHelper {
      * @return <tt>true</tt> if the first element is a boolean and its value
      *         is true or if the list is non empty
      */
-    public static boolean matches(List list) {
+    public static boolean matches(List<?> list) {
         if (!list.isEmpty()) {
             Object value = list.get(0);
             if (value instanceof Boolean) {
@@ -1053,7 +1072,7 @@ public final class ObjectHelper {
         if (toType == boolean.class) {
             return (T)cast(Boolean.class, value);
         } else if (toType.isPrimitive()) {
-            Class newType = convertPrimitiveTypeToWrapperType(toType);
+            Class<?> newType = convertPrimitiveTypeToWrapperType(toType);
             if (newType != toType) {
                 return (T)cast(newType, value);
             }
@@ -1093,6 +1112,19 @@ public final class ObjectHelper {
         } catch (IllegalAccessException e) {
             throw new RuntimeCamelException(e);
         }
+    }
+
+    /**
+     * Does the given class have a default public no-arg constructor.
+     */
+    public static boolean hasDefaultPublicNoArgConstructor(Class<?> type) {
+        // getConstructors() returns only public constructors
+        for (Constructor<?> ctr : type.getConstructors()) {
+            if (ctr.getParameterTypes().length == 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1143,7 +1175,7 @@ public final class ObjectHelper {
             return list.getLength() > 0;
         } else if (value instanceof Collection) {
             // is it an empty collection
-            Collection col = (Collection) value;
+            Collection<?> col = (Collection<?>) value;
             return col.size() > 0;
         }
         return value != null;
@@ -1301,7 +1333,7 @@ public final class ObjectHelper {
      * @param name   the name of the field to lookup
      * @return the value of the constant field, or <tt>null</tt> if not found
      */
-    public static String lookupConstantFieldValue(Class clazz, String name) {
+    public static String lookupConstantFieldValue(Class<?> clazz, String name) {
         if (clazz == null) {
             return null;
         }

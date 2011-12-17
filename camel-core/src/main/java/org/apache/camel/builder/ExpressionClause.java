@@ -424,6 +424,52 @@ public class ExpressionClause<T> extends ExpressionDefinition {
     }
 
     /**
+     * Evaluates a token pair expression on the message body.
+     * <p/>
+     * Tokens is not included.
+     *
+     * @param startToken the start token
+     * @param endToken   the end token
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenizePair(String startToken, String endToken) {
+        return tokenizePair(startToken, endToken, false);
+    }
+
+    /**
+     * Evaluates a token pair expression on the message body
+     *
+     * @param startToken the start token
+     * @param endToken   the end token
+     * @param includeTokens whether to include tokens
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenizePair(String startToken, String endToken, boolean includeTokens) {
+        return delegate.tokenizePair(startToken, endToken, includeTokens);
+    }
+
+    /**
+     * Evaluates a XML token expression on the message body with XML content
+     *
+     * @param tagName the the tag name of the child nodes to tokenize
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenizeXML(String tagName) {
+        return tokenizeXML(tagName, null);
+    }
+
+    /**
+     * Evaluates a token pair expression on the message body with XML content
+     *
+     * @param tagName the the tag name of the child nodes to tokenize
+     * @param inheritNamespaceTagName  parent or root tag name that contains namespace(s) to inherit
+     * @return the builder to continue processing the DSL
+     */
+    public T tokenizeXML(String tagName, String inheritNamespaceTagName) {
+        return delegate.tokenizeXMLPair(tagName, inheritNamespaceTagName);
+    }
+
+    /**
      * Evaluates an <a href="http://camel.apache.org/xpath.html">XPath
      * expression</a>
      * 
@@ -589,22 +635,6 @@ public class ExpressionClause<T> extends ExpressionDefinition {
 
     // Properties
     // -------------------------------------------------------------------------
-
-
-    @Override
-    public String getLanguage() {
-        return delegate.getLanguage();
-    }
-
-    @Override
-    public String getExpression() {
-        return delegate.getExpression();
-    }
-
-    @Override
-    public void setExpression(String expression) {
-        delegate.setExpression(expression);
-    }
 
     @Override
     public Expression getExpressionValue() {

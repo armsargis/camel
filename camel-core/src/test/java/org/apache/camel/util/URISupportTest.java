@@ -24,7 +24,7 @@ import java.util.Map;
 import org.apache.camel.ContextTestSupport;
 
 /**
- * @version 
+ * @version
  */
 public class URISupportTest extends ContextTestSupport {
 
@@ -106,6 +106,13 @@ public class URISupportTest extends ContextTestSupport {
         assertEquals("http://camel.apache.org?foo=123", s);
     }
 
+    public void testCreateURIWithQueryHasOneFragment() throws Exception {
+        URI uri = new URI("smtp://localhost#fragmentOne");
+        URI resultUri = URISupport.createURIWithQuery(uri, null);
+        assertNotNull(resultUri);
+        assertEquals("smtp://localhost#fragmentOne", resultUri.toString());
+    }
+
     public void testNormalizeEndpointWithEqualSignInParameter() throws Exception {
         String out = URISupport.normalizeUri("jms:queue:foo?selector=somekey='somevalue'&foo=bar");
         assertNotNull(out);
@@ -149,6 +156,12 @@ public class URISupportTest extends ContextTestSupport {
 
         String out2 = URISupport.normalizeUri("smtp://localhost?to=foo&to=bar&from=me&from=you");
         assertEquals("smtp://localhost?from=me&from=you&to=foo&to=bar", out2);
+    }
+
+    public void testSanitizeUriWithUserInfo() {
+        String uri = "jt400://GEORGE:HARRISON@LIVERPOOL/QSYS.LIB/BEATLES.LIB/PENNYLANE.DTAQ";
+        String expected = "jt400://GEORGE:******@LIVERPOOL/QSYS.LIB/BEATLES.LIB/PENNYLANE.DTAQ";
+        assertEquals(expected, URISupport.sanitizeUri(uri));
     }
 
 }

@@ -26,8 +26,8 @@ import org.apache.camel.spring.SpringTestSupport;
 public abstract class TracingTestBase extends SpringTestSupport {
 
     protected List<StringBuilder> getTracedMessages() {
-        Tracer tracer = (Tracer) this.applicationContext.getBean("tracer");
-        TraceHandlerTestHandler handler = (TraceHandlerTestHandler) tracer.getTraceHandler();
+        Tracer tracer = this.applicationContext.getBean("tracer", Tracer.class);
+        TraceHandlerTestHandler handler = (TraceHandlerTestHandler) tracer.getTraceHandlers().get(0);
         return handler.getEventMessages();
     }
 

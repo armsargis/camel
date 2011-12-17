@@ -17,25 +17,29 @@
 
 package org.apache.camel.component.cxf.jaxrs;
 
-import org.apache.camel.CamelContext;
-import org.apache.camel.component.cxf.spring.SpringJAXRSClientFactoryBean;
-import org.apache.camel.component.cxf.spring.SpringJAXRSServerFactoryBean;
-import org.apache.camel.spring.SpringCamelContext;
-import org.apache.cxf.configuration.spring.ConfigurerImpl;
+import org.apache.camel.Component;
 import org.apache.cxf.jaxrs.AbstractJAXRSFactoryBean;
 import org.apache.cxf.jaxrs.JAXRSServerFactoryBean;
 import org.apache.cxf.jaxrs.client.JAXRSClientFactoryBean;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.support.AbstractApplicationContext;
 
 public class CxfRsSpringEndpoint extends CxfRsEndpoint implements BeanIdAware {
     private AbstractJAXRSFactoryBean bean;
-    private ApplicationContext applicationContext;
     private String beanId;
-    private ConfigurerImpl configurer;
     
-    public CxfRsSpringEndpoint(CamelContext context, AbstractJAXRSFactoryBean bean) throws Exception {
-        super(bean.getAddress(), context);        
+    @Deprecated 
+    /**
+     * It will be removed in Camel 3.0
+     * @param comp
+     * @param bean
+     */
+    public CxfRsSpringEndpoint(Component component, AbstractJAXRSFactoryBean bean) throws Exception {
+        super(bean.getAddress(), component);        
+        init(bean);
+    }
+    
+    public CxfRsSpringEndpoint(Component component, String uri, AbstractJAXRSFactoryBean bean) throws Exception {
+        super(uri, component);
+        setAddress(bean.getAddress());
         init(bean);
     }
     
@@ -44,35 +48,15 @@ public class CxfRsSpringEndpoint extends CxfRsEndpoint implements BeanIdAware {
         if (bean instanceof BeanIdAware) {
             setBeanId(((BeanIdAware)bean).getBeanId());
         }
-        applicationContext = ((SpringCamelContext)getCamelContext()).getApplicationContext();
-        // create configurer
-        configurer = new ConfigurerImpl(applicationContext);
     }
-    
-    void configure(Object beanInstance) {
-        // check the ApplicationContext states first , and call the refresh if necessary
-        if (applicationContext instanceof AbstractApplicationContext) {
-            AbstractApplicationContext context = (AbstractApplicationContext) applicationContext;
-            if (!context.isActive()) {
-                context.refresh();
-            }
-        }
-        configurer.configureBean(beanId, beanInstance);
-    }
-    
-    
     
     @Override
     protected void setupJAXRSServerFactoryBean(JAXRSServerFactoryBean sfb) {
-        checkBeanType(bean, JAXRSServerFactoryBean.class);
-        configure(sfb);
-        
+        // Do nothing here
     }
     
     @Override
     protected void setupJAXRSClientFactoryBean(JAXRSClientFactoryBean cfb, String address) {
-        checkBeanType(bean, JAXRSClientFactoryBean.class);
-        configure(cfb);      
         cfb.setAddress(address);
         // Need to enable the option of ThreadSafe
         cfb.setThreadSafe(true);
@@ -80,12 +64,14 @@ public class CxfRsSpringEndpoint extends CxfRsEndpoint implements BeanIdAware {
     
     @Override
     protected JAXRSServerFactoryBean newJAXRSServerFactoryBean() {
-        return new SpringJAXRSServerFactoryBean();
+        checkBeanType(bean, JAXRSServerFactoryBean.class);
+        return (JAXRSServerFactoryBean)bean;
     }
     
     @Override
     protected JAXRSClientFactoryBean newJAXRSClientFactoryBean() {
-        return new SpringJAXRSClientFactoryBean();
+        checkBeanType(bean, JAXRSClientFactoryBean.class);
+        return (JAXRSClientFactoryBean)bean;
     }
     
     public String getBeanId() {

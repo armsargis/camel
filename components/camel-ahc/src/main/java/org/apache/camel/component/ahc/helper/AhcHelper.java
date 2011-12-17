@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
@@ -84,7 +85,7 @@ public final class AhcHelper {
             int index = contentType.indexOf("charset=");
             if (index > 0) {
                 String charset = contentType.substring(index + 8);
-                exchange.setProperty(Exchange.CHARSET_NAME, IOConverter.normalizeCharset(charset));
+                exchange.setProperty(Exchange.CHARSET_NAME, IOHelper.normalizeCharset(charset));
             }
         }
     }
@@ -96,8 +97,9 @@ public final class AhcHelper {
      * @param endpoint the endpoint
      * @return the URL to invoke
      * @throws java.net.URISyntaxException is thrown if the URL is invalid
+     * @throws UnsupportedEncodingException 
      */
-    public static String createURL(Exchange exchange, AhcEndpoint endpoint) throws URISyntaxException {
+    public static String createURL(Exchange exchange, AhcEndpoint endpoint) throws URISyntaxException, UnsupportedEncodingException {
         String url = doCreateURL(exchange, endpoint);
         return URISupport.normalizeUri(url);
     }

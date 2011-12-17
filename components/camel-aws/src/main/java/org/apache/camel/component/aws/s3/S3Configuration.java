@@ -32,6 +32,8 @@ public class S3Configuration implements Cloneable {
     private String region;
     private boolean deleteAfterRead = true;
     private String amazonS3Endpoint;
+    private String policy;
+    private String storageClass;
     
     public void setAmazonS3Endpoint(String amazonS3Endpoint) {
         this.amazonS3Endpoint = amazonS3Endpoint;
@@ -87,5 +89,21 @@ public class S3Configuration implements Cloneable {
 
     public void setDeleteAfterRead(boolean deleteAfterRead) {
         this.deleteAfterRead = deleteAfterRead;
+    }
+    
+    public String getPolicy() {
+        return policy;
+    }
+
+    public void setPolicy(String policy) {
+        this.policy = policy;
+    }
+
+    public String getStorageClass() {
+        return storageClass;
+    }
+
+    public void setStorageClass(String storageClass) {
+        this.storageClass = storageClass;
     }
 }

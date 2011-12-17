@@ -20,18 +20,32 @@ import org.apache.camel.Expression;
 import org.apache.camel.IsSingleton;
 import org.apache.camel.Predicate;
 import org.apache.camel.builder.ExpressionBuilder;
-import org.apache.camel.builder.PredicateBuilder;
 import org.apache.camel.spi.Language;
+import org.apache.camel.util.ExpressionToPredicateAdapter;
 import org.apache.camel.util.ObjectHelper;
 
 /**
  * A language for tokenizer expressions.
+ * <p/>
+ * This tokenizer language can operator in the following modes:
+ * <ul>
+ *     <li>default - using a single tokenizer</li>
+ *     <li>pair - using both start and end tokens</li>
+ *     <li>xml - using both start and end tokens in XML mode, support inheriting namespaces</li>
+ * </ul>
+ * The default mode supports the <tt>headerName</tt> and <tt>regex</tt> options.
+ * Where as the pair mode only supports <tt>token</tt> and <tt>endToken</tt>.
+ * And the <tt>xml</tt> mode supports the <tt>inheritNamespaceTagName</tt> option.
  */
 public class TokenizeLanguage implements Language, IsSingleton {
 
     private String token;
+    private String endToken;
+    private String inheritNamespaceTagName;
     private String headerName;
     private boolean regex;
+    private boolean xml;
+    private boolean includeTokens;
 
     public static Expression tokenize(String token) {
         return tokenize(token, false);
@@ -56,8 +70,25 @@ public class TokenizeLanguage implements Language, IsSingleton {
         return language.createExpression(null);
     }
 
+    public static Expression tokenizePair(String startToken, String endToken, boolean includeTokens) {
+        TokenizeLanguage language = new TokenizeLanguage();
+        language.setToken(startToken);
+        language.setEndToken(endToken);
+        language.setIncludeTokens(includeTokens);
+        return language.createExpression(null);
+    }
+
+    public static Expression tokenizeXML(String tagName, String inheritNamespaceTagName) {
+        TokenizeLanguage language = new TokenizeLanguage();
+        language.setToken(tagName);
+        language.setInheritNamespaceTagName(inheritNamespaceTagName);
+        language.setXml(true);
+        language.setIncludeTokens(true);
+        return language.createExpression(null);
+    }
+
     public Predicate createPredicate(String expression) {
-        return PredicateBuilder.toPredicate(createExpression(expression));
+        return ExpressionToPredicateAdapter.toPredicate(createExpression(expression));
     }
 
     /**
@@ -65,6 +96,14 @@ public class TokenizeLanguage implements Language, IsSingleton {
      */
     public Expression createExpression() {
         ObjectHelper.notNull(token, "token");
+
+        if (isXml()) {
+            return ExpressionBuilder.tokenizeXMLExpression(token, inheritNamespaceTagName);
+        } else if (endToken != null) {
+            return ExpressionBuilder.tokenizePairExpression(token, endToken, includeTokens);
+        }
+
+        // use the regular tokenizer
         Expression exp = headerName == null ? ExpressionBuilder.bodyExpression() : ExpressionBuilder.headerExpression(headerName);
         if (regex) {
             return ExpressionBuilder.regexTokenizeExpression(exp, token);
@@ -88,6 +127,14 @@ public class TokenizeLanguage implements Language, IsSingleton {
         this.token = token;
     }
 
+    public String getEndToken() {
+        return endToken;
+    }
+
+    public void setEndToken(String endToken) {
+        this.endToken = endToken;
+    }
+
     public String getHeaderName() {
         return headerName;
     }
@@ -102,6 +149,30 @@ public class TokenizeLanguage implements Language, IsSingleton {
 
     public void setRegex(boolean regex) {
         this.regex = regex;
+    }
+
+    public String getInheritNamespaceTagName() {
+        return inheritNamespaceTagName;
+    }
+
+    public void setInheritNamespaceTagName(String inheritNamespaceTagName) {
+        this.inheritNamespaceTagName = inheritNamespaceTagName;
+    }
+
+    public boolean isXml() {
+        return xml;
+    }
+
+    public void setXml(boolean xml) {
+        this.xml = xml;
+    }
+
+    public boolean isIncludeTokens() {
+        return includeTokens;
+    }
+
+    public void setIncludeTokens(boolean includeTokens) {
+        this.includeTokens = includeTokens;
     }
 
     public boolean isSingleton() {

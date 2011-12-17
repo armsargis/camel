@@ -54,9 +54,9 @@ public class CxfRsComponent extends HeaderFilterStrategyComponent {
             AbstractJAXRSFactoryBean bean = CamelContextHelper.mandatoryLookup(getCamelContext(), beanId, 
                 AbstractJAXRSFactoryBean.class);
             if (bean instanceof BlueprintSupport) {
-                answer = new CxfRsBlueprintEndpoint(this.getCamelContext(), bean);
+                answer = new CxfRsBlueprintEndpoint(this, remaining, bean);
             } else {
-                answer = new CxfRsSpringEndpoint(this.getCamelContext(), bean);
+                answer = new CxfRsSpringEndpoint(this, remaining, bean);
             }
             // Apply Spring bean properties (including # notation referenced bean).  Note that the
             // Spring bean properties values can be overridden by property defined in URI query.
@@ -72,6 +72,7 @@ public class CxfRsComponent extends HeaderFilterStrategyComponent {
             // endpoint URI does not specify a bean
             answer = new CxfRsEndpoint(remaining, this);
         }
+        setProperties(answer, parameters);
         Map<String, String> params = CastUtils.cast(parameters);
         answer.setParameters(params);
         setEndpointHeaderFilterStrategy(answer);

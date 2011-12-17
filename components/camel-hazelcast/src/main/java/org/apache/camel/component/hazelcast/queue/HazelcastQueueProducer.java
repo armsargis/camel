@@ -18,7 +18,7 @@ package org.apache.camel.component.hazelcast.queue;
 
 import java.util.Map;
 
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IQueue;
 
 import org.apache.camel.Endpoint;
@@ -34,10 +34,12 @@ public class HazelcastQueueProducer extends DefaultProducer {
 
     private IQueue<Object> queue;
     private HazelcastComponentHelper helper = new HazelcastComponentHelper();
+    private HazelcastInstance hazelcastInstance;
 
-    public HazelcastQueueProducer(Endpoint endpoint, String queueName) {
+    public HazelcastQueueProducer(HazelcastInstance hazelcastInstance, Endpoint endpoint, String queueName) {
         super(endpoint);
-        this.queue = Hazelcast.getQueue(queueName);
+        this.hazelcastInstance = hazelcastInstance;
+        this.queue = hazelcastInstance.getQueue(queueName);
     }
 
     public void process(Exchange exchange) throws Exception {
@@ -57,6 +59,8 @@ public class HazelcastQueueProducer extends DefaultProducer {
 
         switch (operation) {
 
+        case -1:
+        //If no operation is specified use ADD.
         case HazelcastConstants.ADD_OPERATION:
             this.add(exchange);
             break;

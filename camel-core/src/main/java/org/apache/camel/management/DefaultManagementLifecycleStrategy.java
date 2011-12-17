@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import javax.management.JMException;
 import javax.management.MalformedObjectNameException;
@@ -34,13 +35,15 @@ import org.apache.camel.Channel;
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
 import org.apache.camel.Endpoint;
+import org.apache.camel.ErrorHandlerFactory;
 import org.apache.camel.ManagementStatisticsLevel;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.Route;
 import org.apache.camel.Service;
+import org.apache.camel.TimerListener;
 import org.apache.camel.VetoCamelContextStartException;
-import org.apache.camel.builder.ErrorHandlerBuilder;
+import org.apache.camel.api.management.PerformanceCounter;
 import org.apache.camel.impl.ConsumerCache;
 import org.apache.camel.impl.DefaultCamelContextNameStrategy;
 import org.apache.camel.impl.EndpointRegistry;
@@ -72,9 +75,11 @@ import org.apache.camel.spi.ManagementObjectStrategy;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.spi.UnitOfWork;
-import org.apache.camel.spi.management.PerformanceCounter;
+import org.apache.camel.support.ServiceSupport;
+import org.apache.camel.support.TimerListenerManager;
 import org.apache.camel.util.KeyValueHolder;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.ServiceHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,15 +91,17 @@ import org.slf4j.LoggerFactory;
  * @version 
  */
 @SuppressWarnings("deprecation")
-public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Service, CamelContextAware {
+public class DefaultManagementLifecycleStrategy extends ServiceSupport implements LifecycleStrategy, CamelContextAware {
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultManagementLifecycleStrategy.class);
     private final Map<Processor, KeyValueHolder<ProcessorDefinition, InstrumentationProcessor>> wrappedProcessors =
             new HashMap<Processor, KeyValueHolder<ProcessorDefinition, InstrumentationProcessor>>();
     private final List<PreRegisterService> preServices = new ArrayList<PreRegisterService>();
+    private final TimerListenerManager timerListenerManager = new TimerListenerManager();
     private CamelContext camelContext;
     private volatile boolean initialized;
     private final Set<String> knowRouteIds = new HashSet<String>();
+    private Map<Object, ManagedTracer> managedTracers = new HashMap<Object, ManagedTracer>();
 
     public DefaultManagementLifecycleStrategy() {
     }
@@ -165,7 +172,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         context.setManagementName(managementName);
 
         try {
-            getManagementStrategy().manageObject(mc);
+            manageObject(mc);
         } catch (Exception e) {
             // must rethrow to allow CamelContext fallback to non JMX agent to allow
             // Camel to continue to run
@@ -190,7 +197,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
                 // prefer to use the default naming strategy to compute the next free name
                 name = ((DefaultCamelContextNameStrategy) strategy).getNextName();
             } else {
-                // if explict name then use a counter prefix
+                // if explicit name then use a counter prefix
                 name = managementName + "-" + counter++;
             }
             ObjectName on = getManagementStrategy().getManagementNamingStrategy().getObjectNameForCamelContext(name);
@@ -240,7 +247,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
             Object mc = getManagementObjectStrategy().getManagedObjectForCamelContext(context);
             // the context could have been removed already
             if (getManagementStrategy().isManaged(mc, null)) {
-                getManagementStrategy().unmanageObject(mc);
+                unmanageObject(mc);
             }
         } catch (Exception e) {
             LOG.warn("Could not unregister CamelContext MBean", e);
@@ -258,7 +265,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         }
         try {
             Object mc = getManagementObjectStrategy().getManagedObjectForComponent(camelContext, component, name);
-            getManagementStrategy().manageObject(mc);
+            manageObject(mc);
         } catch (Exception e) {
             LOG.warn("Could not register Component MBean", e);
         }
@@ -271,7 +278,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         }
         try {
             Object mc = getManagementObjectStrategy().getManagedObjectForComponent(camelContext, component, name);
-            getManagementStrategy().unmanageObject(mc);
+            unmanageObject(mc);
         } catch (Exception e) {
             LOG.warn("Could not unregister Component MBean", e);
         }
@@ -304,7 +311,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
                 // endpoint should not be managed
                 return;
             }
-            getManagementStrategy().manageObject(me);
+            manageObject(me);
         } catch (Exception e) {
             LOG.warn("Could not register Endpoint MBean for uri: " + endpoint.getEndpointUri(), e);
         }
@@ -318,7 +325,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
 
         try {
             Object me = getManagementObjectStrategy().getManagedObjectForEndpoint(camelContext, endpoint);
-            getManagementStrategy().unmanageObject(me);
+            unmanageObject(me);
         } catch (Exception e) {
             LOG.warn("Could not unregister Endpoint MBean for uri: " + endpoint.getEndpointUri(), e);
         }
@@ -354,7 +361,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         }
 
         try {
-            getManagementStrategy().manageObject(managedObject);
+            manageObject(managedObject);
         } catch (Exception e) {
             LOG.warn("Could not register service: " + service + " as Service MBean.", e);
         }
@@ -369,7 +376,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         Object managedObject = getManagedObjectForService(context, service, route);
         if (managedObject != null) {
             try {
-                getManagementStrategy().unmanageObject(managedObject);
+                unmanageObject(managedObject);
             } catch (Exception e) {
                 LOG.warn("Could not unregister service: " + service + " as Service MBean.", e);
             }
@@ -389,9 +396,14 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
             return ((ManagementAware) service).getManagedObject(service);
         } else if (service instanceof Tracer) {
             // special for tracer
-            ManagedTracer mt = new ManagedTracer(context, (Tracer) service);
-            mt.init(getManagementStrategy());
-            return mt;
+            Object mo = this.managedTracers.get(service);
+            if (mo == null) {
+                ManagedTracer mt = new ManagedTracer(context, (Tracer) service);
+                mt.init(getManagementStrategy());
+                this.managedTracers.put(service, mt);
+                mo = mt;
+            }
+            return mo;
         } else if (service instanceof EventNotifier) {
             answer = getManagementObjectStrategy().getManagedObjectForEventNotifier(context, (EventNotifier) service);
         } else if (service instanceof Producer) {
@@ -488,7 +500,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
             }
 
             try {
-                getManagementStrategy().manageObject(mr);
+                manageObject(mr);
             } catch (JMException e) {
                 LOG.warn("Could not register Route MBean", e);
             } catch (Exception e) {
@@ -513,14 +525,14 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
             }
 
             try {
-                getManagementStrategy().unmanageObject(mr);
+                unmanageObject(mr);
             } catch (Exception e) {
                 LOG.warn("Could not unregister Route MBean", e);
             }
         }
     }
 
-    public void onErrorHandlerAdd(RouteContext routeContext, Processor errorHandler, ErrorHandlerBuilder errorHandlerBuilder) {
+    public void onErrorHandlerAdd(RouteContext routeContext, Processor errorHandler, ErrorHandlerFactory errorHandlerBuilder) {
         if (!shouldRegister(errorHandler, null)) {
             // avoid registering if not needed
             return;
@@ -535,7 +547,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         }
 
         try {
-            getManagementStrategy().manageObject(me);
+            manageObject(me);
         } catch (Exception e) {
             LOG.warn("Could not register error handler builder: " + errorHandlerBuilder + " as ErrorHandler MBean.", e);
         }
@@ -558,7 +570,7 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         }
 
         try {
-            getManagementStrategy().manageObject(mtp);
+            manageObject(mtp);
         } catch (Exception e) {
             LOG.warn("Could not register thread pool: " + threadPool + " as ThreadPool MBean.", e);
         }
@@ -662,14 +674,32 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         return camelContext.getManagementStrategy().getManagementObjectStrategy();
     }
 
-    public void start() throws Exception {
-        ObjectHelper.notNull(camelContext, "CamelContext");
+    /**
+     * Strategy for managing the object
+     *
+     * @param me the managed object
+     * @throws Exception is thrown if error registering the object for management
+     */
+    protected void manageObject(Object me) throws Exception {
+        getManagementStrategy().manageObject(me);
+        if (timerListenerManager != null && me instanceof TimerListener) {
+            TimerListener timer = (TimerListener) me;
+            timerListenerManager.addTimerListener(timer);
+        }
     }
 
-    public void stop() throws Exception {
-        initialized = false;
-        knowRouteIds.clear();
-        preServices.clear();
+    /**
+     * Un-manages the object.
+     *
+     * @param me the managed object
+     * @throws Exception is thrown if error unregistering the managed object
+     */
+    protected void unmanageObject(Object me) throws Exception {
+        if (timerListenerManager != null && me instanceof TimerListener) {
+            TimerListener timer = (TimerListener) me;
+            timerListenerManager.removeTimerListener(timer);
+        }
+        getManagementStrategy().unmanageObject(me);
     }
 
     /**
@@ -679,7 +709,6 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
      * This allows us to only register mbeans accordingly. For example by default any
      * dynamic endpoints is not registered. This avoids to register excessive mbeans, which
      * most often is not desired.
-     *
      *
      * @param service the object to register
      * @param route   an optional route the mbean is associated with, can be <tt>null</tt>
@@ -717,6 +746,29 @@ public class DefaultManagementLifecycleStrategy implements LifecycleStrategy, Se
         }
 
         return false;
+    }
+
+    @Override
+    protected void doStart() throws Exception {
+        ObjectHelper.notNull(camelContext, "CamelContext");
+
+        boolean enabled = camelContext.getManagementStrategy().getStatisticsLevel() != ManagementStatisticsLevel.Off;
+        if (enabled) {
+            LOG.info("StatisticsLevel at {} so enabling load performance statistics", camelContext.getManagementStrategy().getStatisticsLevel());
+            ScheduledExecutorService executorService = camelContext.getExecutorServiceManager().newSingleThreadScheduledExecutor(this, "ManagementLoadTask");
+            timerListenerManager.setExecutorService(executorService);
+            // must use 1 sec interval as the load statistics is based on 1 sec calculations
+            timerListenerManager.setInterval(1000);
+            ServiceHelper.startService(timerListenerManager);
+        }
+    }
+
+    @Override
+    protected void doStop() throws Exception {
+        initialized = false;
+        knowRouteIds.clear();
+        preServices.clear();
+        ServiceHelper.stopService(timerListenerManager);
     }
 
     /**

@@ -329,6 +329,11 @@ public class HttpProducer extends DefaultProducer {
 
         // is a query string provided in the endpoint URI or in a header (header overrules endpoint)
         String queryString = exchange.getIn().getHeader(Exchange.HTTP_QUERY, String.class);
+        // We should user the query string from the HTTP_URI header
+        if (queryString == null) {
+            queryString = uri.getQuery();
+        }
+        
         if (queryString == null) {
             queryString = getEndpoint().getHttpUri().getRawQuery();
         }
@@ -337,7 +342,7 @@ public class HttpProducer extends DefaultProducer {
             throw new IllegalArgumentException("Invalid uri: " + uri
                     + ". If you are forwarding/bridging http endpoints, then enable the bridgeEndpoint option on the endpoint: " + getEndpoint());
         }
-
+        
         StringBuilder builder = new StringBuilder(uri.getScheme()).append("://").append(uri.getHost());
 
         if (uri.getPort() != -1) {
@@ -352,6 +357,9 @@ public class HttpProducer extends DefaultProducer {
             builder.append('?');
             builder.append(queryString);
         }
+        
+        LOG.debug(" The uri used by http request is " + builder.toString());
+       
 
         HttpRequestBase httpRequest = methodToUse.createMethod(builder.toString());
 
@@ -406,7 +414,7 @@ public class HttpProducer extends DefaultProducer {
                         // so we only do an instanceof check and accept String if the body is really a String
                         // do not fallback to use the default charset as it can influence the request
                         // (for example application/x-www-form-urlencoded forms being sent)
-                        String charset = IOConverter.getCharsetName(exchange, false);
+                        String charset = IOHelper.getCharsetName(exchange, false);
                         StringEntity entity = new StringEntity((String) data, charset);
                         entity.setContentType(contentType);
                         answer = entity;

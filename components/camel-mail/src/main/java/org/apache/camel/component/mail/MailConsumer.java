@@ -40,7 +40,6 @@ import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 /**
  * A {@link org.apache.camel.Consumer Consumer} which consumes messages from JavaMail using a
@@ -51,14 +50,14 @@ public class MailConsumer extends ScheduledPollConsumer implements BatchConsumer
     public static final long DEFAULT_CONSUMER_DELAY = 60 * 1000L;
     private static final transient Logger LOG = LoggerFactory.getLogger(MailConsumer.class);
 
-    private final JavaMailSenderImpl sender;
+    private final JavaMailSender sender;
     private Folder folder;
     private Store store;
     private int maxMessagesPerPoll;
     private volatile ShutdownRunningTask shutdownRunningTask;
     private volatile int pendingExchanges;
 
-    public MailConsumer(MailEndpoint endpoint, Processor processor, JavaMailSenderImpl sender) {
+    public MailConsumer(MailEndpoint endpoint, Processor processor, JavaMailSender sender) {
         super(endpoint, processor);
         this.sender = sender;
     }
@@ -137,6 +136,19 @@ public class MailConsumer extends ScheduledPollConsumer implements BatchConsumer
             }
         }
 
+        // should we disconnect, the header can override the configuration
+        boolean disconnect = getEndpoint().getConfiguration().isDisconnect();
+        if (disconnect) {
+            LOG.debug("Disconnecting from {}", getEndpoint().getConfiguration().getMailStoreLogInformation());
+            try {
+                store.close();
+            } catch (Exception e) {
+                LOG.debug("Could not disconnect from {}: " + getEndpoint().getConfiguration().getMailStoreLogInformation(), e);
+            }
+            store = null;
+            folder = null;
+        }
+
         return polledMessages;
     }
 
@@ -198,12 +210,24 @@ public class MailConsumer extends ScheduledPollConsumer implements BatchConsumer
     }
 
     public int getPendingExchangesSize() {
+        int answer;
         // only return the real pending size in case we are configured to complete all tasks
         if (ShutdownRunningTask.CompleteAllTasks == shutdownRunningTask) {
-            return pendingExchanges;
+            answer = pendingExchanges;
         } else {
-            return 0;
+            answer = 0;
         }
+
+        if (answer == 0 && isPolling()) {
+            // force at least one pending exchange if we are polling as there is a little gap
+            // in the processBatch method and until an exchange gets enlisted as in-flight
+            // which happens later, so we need to signal back to the shutdown strategy that
+            // there is a pending exchange. When we are no longer polling, then we will return 0
+            log.trace("Currently polling so returning 1 as pending exchanges");
+            answer = 1;
+        }
+
+        return answer;
     }
 
     public void prepareShutdown() {
@@ -356,7 +380,7 @@ public class MailConsumer extends ScheduledPollConsumer implements BatchConsumer
                 buffer.append(header.getName()).append("=").append(header.getValue()).append("\n");
             }
             if (buffer.length() > 0) {
-                LOG.debug("Generating UID from the following:\n" + buffer);
+                LOG.trace("Generating UID from the following:\n {}", buffer);
                 uid = UUID.nameUUIDFromBytes(buffer.toString().getBytes()).toString();
             }
         } catch (MessagingException e) {

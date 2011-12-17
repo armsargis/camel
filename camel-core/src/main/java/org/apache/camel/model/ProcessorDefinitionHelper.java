@@ -219,7 +219,7 @@ public final class ProcessorDefinitionHelper {
      * The various {@link ExecutorServiceAwareDefinition} should use this helper method to ensure they support
      * configured executor services in the same coherent way.
      *
-     * @param routeContext   the rout context
+     * @param routeContext   the route context
      * @param name           name which is appended to the thread name, when the {@link java.util.concurrent.ExecutorService}
      *                       is created based on a {@link org.apache.camel.spi.ThreadPoolProfile}.
      * @param definition     the node definition which may leverage executor service.
@@ -289,13 +289,7 @@ public final class ProcessorDefinitionHelper {
                 // then create a thread pool assuming the ref is a thread pool profile id
                 ThreadPoolProfile profile = manager.getThreadPoolProfile(definition.getExecutorServiceRef());
                 if (profile != null) {
-                    // okay we need to grab the pool size from the ref
-                    Integer poolSize = profile.getPoolSize();
-                    if (poolSize == null) {
-                        // fallback and use the default pool size, if none was set on the profile
-                        poolSize = manager.getDefaultThreadPoolProfile().getPoolSize();
-                    }
-                    answer = manager.newScheduledThreadPool(definition, name, poolSize);
+                    answer = manager.newScheduledThreadPool(definition, name, profile);
                 }
             }
             if (answer == null) {
