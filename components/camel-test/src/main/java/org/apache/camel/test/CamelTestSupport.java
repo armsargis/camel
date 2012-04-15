@@ -37,6 +37,7 @@ import org.apache.camel.Service;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.impl.BreakpointSupport;
+import org.apache.camel.impl.DefaultCamelBeanPostProcessor;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.DefaultDebugger;
 import org.apache.camel.impl.InterceptSendToMockEndpointStrategy;
@@ -45,7 +46,6 @@ import org.apache.camel.management.JmxSystemPropertyKeys;
 import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.spi.Language;
-import org.apache.camel.spring.CamelBeanPostProcessor;
 import org.apache.camel.util.StopWatch;
 import org.apache.camel.util.TimeUtils;
 
@@ -54,7 +54,10 @@ import org.apache.camel.util.TimeUtils;
  * along with a {@link org.apache.camel.ProducerTemplate} for use in the test case
  *
  * @version 
+ * @deprecated Support for JUnit 3.x is slated for removal in Camel 3.x. You are encouraged to move to
+ *             JUnit 4.x based tests.  See {@link org.apache.camel.test.junit4.CamelTestSupport}.
  */
+@Deprecated
 public abstract class CamelTestSupport extends TestSupport {
     
     protected volatile ModelCamelContext context;
@@ -232,13 +235,12 @@ public abstract class CamelTestSupport extends TestSupport {
 
     /**
      * Whether or not type converters should be lazy loaded (notice core converters is always loaded)
-     * <p/>
-     * We enabled lazy by default as it would speedup unit testing.
      *
-     * @return <tt>true</tt> by default.
+     * @return <tt>false</tt> by default.
      */
+    @Deprecated
     protected boolean isLazyLoadingTypeConverter() {
-        return true;
+        return false;
     }
 
     /**
@@ -246,9 +248,10 @@ public abstract class CamelTestSupport extends TestSupport {
      * Note that using Spring Test or Guice is a more powerful approach.
      */
     protected void postProcessTest() throws Exception {
-        CamelBeanPostProcessor processor = new CamelBeanPostProcessor();
-        processor.setCamelContext(context);
-        processor.postProcessBeforeInitialization(this, "this");
+        // use the default bean post processor from camel-core
+        DefaultCamelBeanPostProcessor processor = new DefaultCamelBeanPostProcessor(context);
+        processor.postProcessBeforeInitialization(this, getClass().getName());
+        processor.postProcessAfterInitialization(this, getClass().getName());
     }
 
     protected void stopCamelContext() throws Exception {
@@ -286,7 +289,6 @@ public abstract class CamelTestSupport extends TestSupport {
         return new JndiRegistry(createJndiContext());
     }
 
-    @SuppressWarnings("unchecked")
     protected Context createJndiContext() throws Exception {
         Properties properties = new Properties();
 
@@ -299,7 +301,7 @@ public abstract class CamelTestSupport extends TestSupport {
             // set the default initial factory
             properties.put("java.naming.factory.initial", "org.apache.camel.util.jndi.CamelInitialContextFactory");
         }
-        return new InitialContext(new Hashtable(properties));
+        return new InitialContext(new Hashtable<Object, Object>(properties));
     }
 
     /**
@@ -504,7 +506,7 @@ public abstract class CamelTestSupport extends TestSupport {
      * @param id           the id of the definition
      * @param shortName    the short name of the definition
      */
-    protected void debugBefore(Exchange exchange, Processor processor, ProcessorDefinition definition,
+    protected void debugBefore(Exchange exchange, Processor processor, ProcessorDefinition<?> definition,
                                String id, String shortName) {
     }
 
@@ -518,7 +520,7 @@ public abstract class CamelTestSupport extends TestSupport {
      * @param shortName    the short name of the definition
      * @param timeTaken    time taken to process the processor in millis
      */
-    protected void debugAfter(Exchange exchange, Processor processor, ProcessorDefinition definition,
+    protected void debugAfter(Exchange exchange, Processor processor, ProcessorDefinition<?> definition,
                               String id, String shortName, long timeTaken) {
     }
 
@@ -528,12 +530,12 @@ public abstract class CamelTestSupport extends TestSupport {
     private class DebugBreakpoint extends BreakpointSupport {
 
         @Override
-        public void beforeProcess(Exchange exchange, Processor processor, ProcessorDefinition definition) {
+        public void beforeProcess(Exchange exchange, Processor processor, ProcessorDefinition<?> definition) {
             CamelTestSupport.this.debugBefore(exchange, processor, definition, definition.getId(), definition.getShortName());
         }
 
         @Override
-        public void afterProcess(Exchange exchange, Processor processor, ProcessorDefinition definition, long timeTaken) {
+        public void afterProcess(Exchange exchange, Processor processor, ProcessorDefinition<?> definition, long timeTaken) {
             CamelTestSupport.this.debugAfter(exchange, processor, definition, definition.getId(), definition.getShortName(), timeTaken);
         }
     }

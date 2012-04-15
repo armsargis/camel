@@ -24,6 +24,7 @@ import javax.jms.TemporaryQueue;
 
 import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
+import org.apache.camel.component.jms.DefaultSpringErrorHandler;
 import org.springframework.jms.listener.AbstractMessageListenerContainer;
 import org.springframework.jms.listener.DefaultMessageListenerContainer;
 import org.springframework.jms.support.destination.DestinationResolver;
@@ -38,7 +39,7 @@ public class TemporaryQueueReplyManager extends ReplyManagerSupport {
     public String registerReply(ReplyManager replyManager, Exchange exchange, AsyncCallback callback,
                                 String originalCorrelationId, String correlationId, long requestTimeout) {
         // add to correlation map
-        TemporaryQueueReplyHandler handler = new TemporaryQueueReplyHandler(this, exchange, callback, originalCorrelationId, requestTimeout);
+        TemporaryQueueReplyHandler handler = new TemporaryQueueReplyHandler(this, exchange, callback, originalCorrelationId, correlationId, requestTimeout);
         correlation.put(correlationId, handler, requestTimeout);
         return correlationId;
     }
@@ -66,9 +67,8 @@ public class TemporaryQueueReplyManager extends ReplyManagerSupport {
         } else {
             // we could not correlate the received reply message to a matching request and therefore
             // we cannot continue routing the unknown message
-            String text = "Reply received for unknown correlationID [" + correlationID + "] -> " + message;
-            log.warn(text);
-            throw new UnknownReplyMessageException(text, message, correlationID);
+            // log a warn and then ignore the message
+            log.warn("Reply received for unknown correlationID [{}]. The message will be ignored: {}", correlationID, message);
         }
     }
 
@@ -113,7 +113,9 @@ public class TemporaryQueueReplyManager extends ReplyManagerSupport {
         }
         if (endpoint.getErrorHandler() != null) {
             answer.setErrorHandler(endpoint.getErrorHandler());
-        }        
+        } else {
+            answer.setErrorHandler(new DefaultSpringErrorHandler(TemporaryQueueReplyManager.class, endpoint.getErrorHandlerLoggingLevel(), endpoint.isErrorHandlerLogStackTrace()));
+        }
         if (endpoint.getReceiveTimeout() >= 0) {
             answer.setReceiveTimeout(endpoint.getReceiveTimeout());
         }

@@ -21,11 +21,11 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.spring.SpringCamelContext;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.context.ApplicationContext;
 
 public class MainTest extends Assert {
+
     @Test
     public void  testOptions() throws Exception {
         CamelContext context = createCamelContext(new String[] {"-cc", "org.apache.camel.spring.javaconfig.config.ContextConfig"});
@@ -40,36 +40,28 @@ public class MainTest extends Assert {
         context.start();
         runTests(context);
         context.stop();
-        
     }
         
     private CamelContext createCamelContext(String[] options) throws Exception {
         Main main = new Main();        
         main.parseArguments(options);
         ApplicationContext applicationContext = main.createDefaultApplicationContext();
-        CamelContext  context = SpringCamelContext.springCamelContext(applicationContext);
+        CamelContext context = SpringCamelContext.springCamelContext(applicationContext);
         return context;        
     }
-       
-    
+
     private void runTests(CamelContext context) throws Exception {
         MockEndpoint resultEndpoint = context.getEndpoint("mock:result", MockEndpoint.class);
         ProducerTemplate template = context.createProducerTemplate();
         
         String expectedBody = "<matched/>";
-
         resultEndpoint.expectedBodiesReceived(expectedBody);
-
         template.sendBodyAndHeader("direct:start", expectedBody, "foo", "bar");
-
         resultEndpoint.assertIsSatisfied();
         
         resultEndpoint.reset();
-        
         resultEndpoint.expectedMessageCount(0);
-
         template.sendBodyAndHeader("direct:start", "<notMatched/>", "foo", "notMatchedHeaderValue");
-
         resultEndpoint.assertIsSatisfied();
     }
 

@@ -28,6 +28,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
 import org.apache.camel.Exchange;
+import org.apache.camel.Message;
 import org.apache.camel.MultipleConsumersSupport;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
@@ -38,6 +39,8 @@ import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.impl.DefaultEndpoint;
 import org.apache.camel.processor.MulticastProcessor;
 import org.apache.camel.spi.BrowsableEndpoint;
+import org.apache.camel.util.EndpointHelper;
+import org.apache.camel.util.MessageHelper;
 import org.apache.camel.util.ServiceHelper;
 
 /**
@@ -72,6 +75,11 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         this.queue = queue;
         this.size = queue.remainingCapacity();
         this.concurrentConsumers = concurrentConsumers;
+    }
+
+    @Override
+    public SedaComponent getComponent() {
+        return (SedaComponent) super.getComponent();
     }
 
     public Producer createProducer() throws Exception {
@@ -125,7 +133,7 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
             }
             // create multicast processor
             multicastStarted = false;
-            consumerMulticastProcessor = new MulticastProcessor(getCamelContext(), processors, null, true, multicastExecutor, false, false, 0, null, false);
+            consumerMulticastProcessor = new MulticastProcessor(getCamelContext(), processors, null, true, multicastExecutor, false, false, false, 0, null, false);
         } else {
             // not needed
             consumerMulticastProcessor = null;
@@ -169,7 +177,6 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         return concurrentConsumers;
     }
 
-    @ManagedAttribute
     public WaitForTaskToComplete getWaitForTaskToComplete() {
         return waitForTaskToComplete;
     }
@@ -234,6 +241,74 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         return new HashSet<SedaProducer>(producers);
     }
 
+    @ManagedOperation(description = "Current number of Exchanges in Queue")
+    public long queueSize() {
+        return getExchanges().size();
+    }
+
+    @ManagedOperation(description = "Get Exchange from queue by index")
+    public String browseExchange(Integer index) {
+        List<Exchange> exchanges = getExchanges();
+        if (index >= exchanges.size()) {
+            return null;
+        }
+        Exchange exchange = exchanges.get(index);
+        if (exchange == null) {
+            return null;
+        }
+        // must use java type with JMX such as java.lang.String
+        return exchange.toString();
+    }
+
+    @ManagedOperation(description = "Get message body from queue by index")
+    public String browseMessageBody(Integer index) {
+        List<Exchange> exchanges = getExchanges();
+        if (index >= exchanges.size()) {
+            return null;
+        }
+        Exchange exchange = exchanges.get(index);
+        if (exchange == null) {
+            return null;
+        }
+
+        // must use java type with JMX such as java.lang.String
+        String body;
+        if (exchange.hasOut()) {
+            body = exchange.getOut().getBody(String.class);
+        } else {
+            body = exchange.getIn().getBody(String.class);
+        }
+
+        return body;
+    }
+
+    @ManagedOperation(description = "Get message as XML from queue by index")
+    public String browseMessageAsXml(Integer index, Boolean includeBody) {
+        List<Exchange> exchanges = getExchanges();
+        if (index >= exchanges.size()) {
+            return null;
+        }
+        Exchange exchange = exchanges.get(index);
+        if (exchange == null) {
+            return null;
+        }
+
+        Message msg = exchange.hasOut() ? exchange.getOut() : exchange.getIn();
+        String xml = MessageHelper.dumpAsXml(msg, includeBody);
+
+        return xml;
+    }
+
+    @ManagedOperation(description = "Gets all the messages as XML from the queue")
+    public String browseAllMessagesAsXml(Boolean includeBody) {
+        return browseRangeMessagesAsXml(0, Integer.MAX_VALUE, includeBody);
+    }
+
+    @ManagedOperation(description = "Gets the range of messages as XML from the queue")
+    public String browseRangeMessagesAsXml(Integer fromIndex, Integer toIndex, Boolean includeBody) {
+        return EndpointHelper.browseRangeMessagesAsXml(this, fromIndex, toIndex, includeBody);
+    }
+
     void onStarted(SedaProducer producer) {
         producers.add(producer);
     }
@@ -256,4 +331,17 @@ public class SedaEndpoint extends DefaultEndpoint implements BrowsableEndpoint, 
         }
     }
 
+    @Override
+    protected void doShutdown() throws Exception {
+        // notify component we are shutting down this endpoint
+        if (getComponent() != null) {
+            getComponent().onShutdownEndpoint(this);
+        }
+        // shutdown thread pool if it was in use
+        if (multicastExecutor != null) {
+            getCamelContext().getExecutorServiceManager().shutdownNow(multicastExecutor);
+            multicastExecutor = null;
+        }
+        super.doShutdown();
+    }
 }

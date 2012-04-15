@@ -25,6 +25,7 @@ import javax.jms.Session;
 
 import org.apache.camel.AsyncCallback;
 import org.apache.camel.Exchange;
+import org.apache.camel.component.jms.DefaultSpringErrorHandler;
 import org.apache.camel.component.jms.ReplyToType;
 import org.springframework.jms.listener.AbstractMessageListenerContainer;
 import org.springframework.jms.listener.DefaultMessageListenerContainer;
@@ -44,7 +45,7 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
                                 String originalCorrelationId, String correlationId, long requestTimeout) {
         // add to correlation map
         PersistentQueueReplyHandler handler = new PersistentQueueReplyHandler(replyManager, exchange, callback,
-                originalCorrelationId, requestTimeout, dynamicMessageSelector);
+                originalCorrelationId, correlationId, requestTimeout);
         correlation.put(correlationId, handler, requestTimeout);
         return correlationId;
     }
@@ -76,9 +77,8 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
         } else {
             // we could not correlate the received reply message to a matching request and therefore
             // we cannot continue routing the unknown message
-            String text = "Reply received for unknown correlationID [" + correlationID + "] -> " + message;
-            log.warn(text);
-            throw new UnknownReplyMessageException(text, message, correlationID);
+            // log a warn and then ignore the message
+            log.warn("Reply received for unknown correlationID [{}]. The message will be ignored: {}", correlationID, message);
         }
     }
 
@@ -148,6 +148,12 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
         } else {
             throw new IllegalArgumentException("ReplyToType " + type + " is not supported for persistent reply queues");
         }
+        
+        String replyToCacheLevelName = endpoint.getConfiguration().getReplyToCacheLevelName();
+        if (replyToCacheLevelName != null) {
+            answer.setCacheLevelName(replyToCacheLevelName);
+            log.debug("Setting the replyCacheLevel to be " + replyToCacheLevelName);
+        }
 
         DestinationResolver resolver = endpoint.getDestinationResolver();
         if (resolver == null) {
@@ -178,6 +184,8 @@ public class PersistentQueueReplyManager extends ReplyManagerSupport {
         }
         if (endpoint.getErrorHandler() != null) {
             answer.setErrorHandler(endpoint.getErrorHandler());
+        } else {
+            answer.setErrorHandler(new DefaultSpringErrorHandler(PersistentQueueReplyManager.class, endpoint.getErrorHandlerLoggingLevel(), endpoint.isErrorHandlerLogStackTrace()));
         }
         if (endpoint.getReceiveTimeout() >= 0) {
             answer.setReceiveTimeout(endpoint.getReceiveTimeout());

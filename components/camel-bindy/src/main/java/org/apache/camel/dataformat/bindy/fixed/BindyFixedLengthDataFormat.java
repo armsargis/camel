@@ -67,7 +67,7 @@ public class BindyFixedLengthDataFormat implements DataFormat {
         // the body is not a prepared list so help a bit here and create one for us
         if (exchange.getContext().getTypeConverter().convertTo(List.class, body) == null) {
             models = new ArrayList<Map<String, Object>>();
-            Iterator it = ObjectHelper.createIterator(body);
+            Iterator<?> it = ObjectHelper.createIterator(body);
             while (it.hasNext()) {
                 Object model = it.next();
                 String name = model.getClass().getName();
@@ -102,7 +102,7 @@ public class BindyFixedLengthDataFormat implements DataFormat {
         // Pojos of the model
         Map<String, Object> model;
 
-        InputStreamReader in = new InputStreamReader(inputStream);
+        InputStreamReader in = new InputStreamReader(inputStream, IOHelper.getCharsetName(exchange));
 
         // Scanner is used to read big file
         Scanner scanner = new Scanner(in);

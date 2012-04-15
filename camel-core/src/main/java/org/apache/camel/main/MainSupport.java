@@ -353,10 +353,6 @@ public abstract class MainSupport extends ServiceSupport {
         return answer;
     }
 
-    /**
-     * Returns a {@link org.apache.camel.ProducerTemplate} from the Spring {@link org.springframework.context.ApplicationContext} instances
-     * or lazily creates a new one dynamically
-     */
     public ProducerTemplate getCamelTemplate() throws Exception {
         if (camelTemplate == null) {
             camelTemplate = findOrCreateCamelTemplate();
@@ -410,7 +406,7 @@ public abstract class MainSupport extends ServiceSupport {
             }
             RouteDotGenerator generator = new RouteDotGenerator(outputDir);
             LOG.info("Generating DOT file for routes: " + outputDir + " for: " + camelContext + " with name: " + name);
-            generator.drawRoutes((ModelCamelContext)camelContext);
+            generator.drawRoutes(camelContext);
         }
     }
 

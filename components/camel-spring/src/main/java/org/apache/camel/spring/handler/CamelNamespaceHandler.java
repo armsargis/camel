@@ -124,8 +124,12 @@ public class CamelNamespaceHandler extends NamespaceHandlerSupport {
 
         // camel context
         boolean osgi = false;
-        Class cl = CamelContextFactoryBean.class;
+        Class<?> cl = CamelContextFactoryBean.class;
+        // These code will try to detected if we are in the OSGi environment.
+        // If so, camel will use the OSGi version of CamelContenxtFactoryBean to create the camel context.
         try {
+            // Try to load the BundleActivator first
+            Class.forName("org.osgi.framework.BundleActivator");
             Class<?> c = Class.forName("org.apache.camel.osgi.Activator");
             Method mth = c.getDeclaredMethod("getBundle");
             Object bundle = mth.invoke(null);
@@ -139,9 +143,7 @@ public class CamelNamespaceHandler extends NamespaceHandlerSupport {
         }
         if (osgi) {
             LOG.info("OSGi environment detected.");
-        } else {
-            LOG.info("OSGi environment not detected.");
-        }
+        } 
         LOG.debug("Using {} as CamelContextBeanDefinitionParser", cl.getCanonicalName());
         registerParser("camelContext", new CamelContextBeanDefinitionParser(cl));
     }
@@ -176,7 +178,7 @@ public class CamelNamespaceHandler extends NamespaceHandlerSupport {
 
     protected JAXBContext createJaxbContext() throws JAXBException {
         StringBuilder packages = new StringBuilder();
-        for (Class cl : getJaxbPackages()) {
+        for (Class<?> cl : getJaxbPackages()) {
             if (packages.length() > 0) {
                 packages.append(":");
             }
@@ -185,8 +187,8 @@ public class CamelNamespaceHandler extends NamespaceHandlerSupport {
         return JAXBContext.newInstance(packages.toString(), getClass().getClassLoader());
     }
 
-    protected Set<Class> getJaxbPackages() {
-        Set<Class> classes = new HashSet<Class>();
+    protected Set<Class<?>> getJaxbPackages() {
+        Set<Class<?>> classes = new HashSet<Class<?>>();
         classes.add(org.apache.camel.spring.CamelContextFactoryBean.class);
         classes.add(CamelJMXAgentDefinition.class);
         classes.add(org.apache.camel.ExchangePattern.class);
@@ -273,7 +275,7 @@ public class CamelNamespaceHandler extends NamespaceHandlerSupport {
 
     protected class CamelContextBeanDefinitionParser extends BeanDefinitionParser {
 
-        public CamelContextBeanDefinitionParser(Class type) {
+        public CamelContextBeanDefinitionParser(Class<?> type) {
             super(type, false);
         }
 

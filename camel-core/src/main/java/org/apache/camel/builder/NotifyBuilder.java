@@ -19,7 +19,6 @@ package org.apache.camel.builder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EventObject;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -102,7 +101,7 @@ public class NotifyBuilder {
      *
      * @param endpointUri uri of endpoint or pattern (see the EndpointHelper javadoc)
      * @return the builder
-     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(String, String)
+     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(org.apache.camel.CamelContext, String, String)
      */
     public NotifyBuilder from(final String endpointUri) {
         stack.add(new EventPredicateSupport() {
@@ -116,7 +115,7 @@ public class NotifyBuilder {
             @Override
             public boolean onExchange(Exchange exchange) {
                 // filter non matching exchanges
-                return EndpointHelper.matchEndpoint(exchange.getFromEndpoint().getEndpointUri(), endpointUri);
+                return EndpointHelper.matchEndpoint(context, exchange.getFromEndpoint().getEndpointUri(), endpointUri);
             }
 
             public boolean matches() {
@@ -138,7 +137,7 @@ public class NotifyBuilder {
      *
      * @param routeId id of route or pattern (see the EndpointHelper javadoc)
      * @return the builder
-     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(String, String)
+     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(org.apache.camel.CamelContext, String, String)
      */
     public NotifyBuilder fromRoute(final String routeId) {
         stack.add(new EventPredicateSupport() {
@@ -283,7 +282,7 @@ public class NotifyBuilder {
      *
      * @param endpointUri uri of endpoint or pattern (see the EndpointHelper javadoc)
      * @return the builder
-     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(String, String)
+     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(org.apache.camel.CamelContext, String, String)
      */
     public NotifyBuilder wereSentTo(final String endpointUri) {
         // insert in start of stack but after the previous wereSentTo
@@ -305,7 +304,7 @@ public class NotifyBuilder {
 
             @Override
             public boolean onExchangeSent(Exchange exchange, Endpoint endpoint, long timeTaken) {
-                if (EndpointHelper.matchEndpoint(endpoint.getEndpointUri(), endpointUri)) {
+                if (EndpointHelper.matchEndpoint(context, endpoint.getEndpointUri(), endpointUri)) {
                     sentTo = true;
                 }
                 return onExchange(exchange);
@@ -1059,7 +1058,7 @@ public class NotifyBuilder {
         return doWhenBodies(bodyList, false, true);
     }
 
-    private NotifyBuilder doWhenBodies(final List bodies, final boolean received, final boolean exact) {
+    private NotifyBuilder doWhenBodies(final List<?> bodies, final boolean received, final boolean exact) {
         stack.add(new EventPredicateSupport() {
             private boolean matches;
             private int current;
@@ -1256,11 +1255,11 @@ public class NotifyBuilder {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        for (Iterator<EventPredicateHolder> it = predicates.iterator(); it.hasNext();) {
+        for (EventPredicateHolder eventPredicateHolder : predicates) {
             if (sb.length() > 0) {
                 sb.append(".");
             }
-            sb.append(it.next().toString());
+            sb.append(eventPredicateHolder.toString());
         }
         // a crude way of skipping the first invisible operation
         return ObjectHelper.after(sb.toString(), "().");
@@ -1609,11 +1608,11 @@ public class NotifyBuilder {
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            for (Iterator<EventPredicate> it = predicates.iterator(); it.hasNext();) {
+            for (EventPredicate eventPredicate : predicates) {
                 if (sb.length() > 0) {
                     sb.append(".");
                 }
-                sb.append(it.next().toString());
+                sb.append(eventPredicate.toString());
             }
             return sb.toString();
         }

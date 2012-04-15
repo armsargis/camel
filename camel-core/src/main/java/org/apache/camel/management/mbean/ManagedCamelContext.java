@@ -18,18 +18,24 @@ package org.apache.camel.management.mbean;
 
 import java.io.InputStream;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
+import javax.management.MBeanServer;
+import javax.management.MBeanServerInvocationHandler;
 import javax.management.ObjectName;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
 import org.apache.camel.ProducerTemplate;
-import org.apache.camel.ServiceStatus;
 import org.apache.camel.TimerListener;
 import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.api.management.mbean.ManagedCamelContextMBean;
+import org.apache.camel.api.management.mbean.ManagedProcessorMBean;
+import org.apache.camel.api.management.mbean.ManagedRouteMBean;
 import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.ModelHelper;
 import org.apache.camel.model.RouteDefinition;
@@ -65,13 +71,7 @@ public class ManagedCamelContext implements TimerListener, ManagedCamelContextMB
     }
 
     public String getState() {
-        // must use String type to be sure remote JMX can read the attribute without requiring Camel classes.
-        ServiceStatus status = context.getStatus();
-        // if no status exists then its stopped
-        if (status == null) {
-            status = ServiceStatus.Stopped;
-        }
-        return status.name();
+        return context.getStatus().name();
     }
 
     public String getUptime() {
@@ -234,6 +234,59 @@ public class ManagedCamelContext implements TimerListener, ManagedCamelContextMB
         context.addRouteDefinitions(def.getRoutes());
     }
 
+    @Override
+    public String dumpRoutesStatsAsXml(boolean fullStats, boolean includeProcessors) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<camelContextStat").append(String.format(" id=\"%s\"", getCamelId())).append(">\n");
+
+        MBeanServer server = getContext().getManagementStrategy().getManagementAgent().getMBeanServer();
+        if (server != null) {
+            // gather all the routes for this CamelContext, which requires JMX
+            ObjectName query = ObjectName.getInstance("org.apache.camel:context=*/" + getContext().getManagementName() + ",type=routes,*");
+            Set<ObjectName> routes = server.queryNames(query, null);
+
+            Set<ManagedProcessorMBean> processors = new LinkedHashSet<ManagedProcessorMBean>();
+            if (includeProcessors) {
+                // gather all the processors for this CamelContext, which requires JMX
+                query = ObjectName.getInstance("org.apache.camel:context=*/" + getContext().getManagementName() + ",type=processors,*");
+                Set<ObjectName> names = server.queryNames(query, null);
+                for (ObjectName on : names) {
+                    ManagedProcessorMBean processor = MBeanServerInvocationHandler.newProxyInstance(server, on, ManagedProcessorMBean.class, true);
+                    processors.add(processor);
+                }
+            }
+            
+            // loop the routes, and append the processor stats if needed
+            sb.append("  <routeStats>\n");
+            for (ObjectName on : routes) {
+                ManagedRouteMBean route = MBeanServerInvocationHandler.newProxyInstance(server, on, ManagedRouteMBean.class, true);
+                sb.append("    <routeStat").append(String.format(" id=\"%s\"", route.getRouteId()));
+                // use substring as we only want the attributes
+                String stat = route.dumpStatsAsXml(fullStats);
+                sb.append(" ").append(stat.substring(7, stat.length() - 2)).append(">\n");
+
+                // add processor details if needed
+                if (includeProcessors) {
+                    sb.append("      <processorStats>\n");
+                    for (ManagedProcessorMBean processor : processors) {
+                        // the processor must belong to this route
+                        if (route.getRouteId().equals(processor.getRouteId())) {
+                            sb.append("        <processorStat").append(String.format(" id=\"%s\"", processor.getProcessorId()));
+                            // use substring as we only want the attributes
+                            sb.append(" ").append(processor.dumpStatsAsXml(fullStats).substring(7)).append("\n");
+                        }
+                    }
+                    sb.append("      </processorStats>\n");
+                }
+                sb.append("    </routeStat>\n");
+            }
+            sb.append("  </routeStats>\n");
+        }
+
+        sb.append("</camelContextStat>");
+        return sb.toString();
+    }
+
     public boolean createEndpoint(String uri) throws Exception {
         if (context.hasEndpoint(uri) != null) {
             // endpoint already exists
@@ -259,11 +312,7 @@ public class ManagedCamelContext implements TimerListener, ManagedCamelContextMB
     public int removeEndpoints(String pattern) throws Exception {
         // endpoints is always removed from JMX if removed from context
         Collection<Endpoint> removed = context.removeEndpoints(pattern);
-        if (removed == null) {
-            return 0;
-        } else {
-            return removed.size();
-        }
+        return removed.size();
     }
 
 }

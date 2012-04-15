@@ -22,7 +22,6 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -36,7 +35,6 @@ import javax.xml.ws.BindingProvider;
 import javax.xml.ws.Endpoint;
 import javax.xml.ws.Holder;
 
-import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 import org.apache.camel.CamelContext;
@@ -511,7 +509,7 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
 
         org.apache.camel.Message out = exchange.getOut();
         MessageContentsList result = (MessageContentsList)out.getBody();
-        Map<String, Object> responseContext = CastUtils.cast((Map)out.getHeader(Client.RESPONSE_CONTEXT));
+        Map<String, Object> responseContext = CastUtils.cast((Map<?, ?>)out.getHeader(Client.RESPONSE_CONTEXT));
         assertNotNull(responseContext);
         assertTrue("Expected the out of band header to propagate but it didn't", 
                    result.get(0) != null && ((Me)result.get(0)).getFirstName().equals("pass"));
@@ -536,7 +534,7 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
         MessageContentsList result = (MessageContentsList)out.getBody();
         assertTrue("Expected the out of band header to propagate but it didn't", 
                    result.get(0) != null && ((Me)result.get(0)).getFirstName().equals("pass"));
-        Map<String, Object> responseContext = CastUtils.cast((Map)out.getHeader(Client.RESPONSE_CONTEXT));
+        Map<String, Object> responseContext = CastUtils.cast((Map<?, ?>)out.getHeader(Client.RESPONSE_CONTEXT));
         assertNotNull(responseContext);
         validateReturnedOutOfBandHeader(responseContext);
     }
@@ -565,7 +563,7 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
         MessageContentsList result = (MessageContentsList)out.getBody();
         assertTrue("Expected the out of band header to propagate but it didn't", 
                    result.get(0) != null && ((Me)result.get(0)).getFirstName().equals("pass"));
-        Map<String, Object> responseContext = CastUtils.cast((Map)out.getHeader(Client.RESPONSE_CONTEXT));
+        Map<String, Object> responseContext = CastUtils.cast((Map<?, ?>)out.getHeader(Client.RESPONSE_CONTEXT));
         assertNotNull(responseContext);
         validateReturnedOutOfBandHeader(responseContext);
     }
@@ -592,7 +590,7 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
     
     protected static void validateReturnedOutOfBandHeader(Map<String, Object> responseContext, boolean expect) {
         OutofBandHeader hdrToTest = null;
-        List oobHdr = (List)responseContext.get(Header.HEADER_LIST);
+        List<Header> oobHdr = CastUtils.cast((List<?>)responseContext.get(Header.HEADER_LIST));
         if (!expect) {
             if (oobHdr == null || (oobHdr != null && oobHdr.size() == 0)) {
                 return;
@@ -606,22 +604,15 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
         assertTrue("HeaderHolder list expected to conain 1 object received " + oobHdr.size(),
                    oobHdr.size() == 1);
 
-        if (oobHdr != null & oobHdr instanceof List) {
-            Iterator iter = oobHdr.iterator();
-            while (iter.hasNext()) {
-                Object hdr = iter.next();
-                if (hdr instanceof Header) {
-                    Header hdr1 = (Header)hdr;
-                    if (hdr1.getObject() instanceof Node) {
-                        try {
-                            JAXBElement job = (JAXBElement)JAXBContext
-                                .newInstance(org.apache.cxf.outofband.header.ObjectFactory.class)
-                                .createUnmarshaller().unmarshal((Node)hdr1.getObject());
-                            hdrToTest = (OutofBandHeader)job.getValue();
-                        } catch (JAXBException ex) {
-                            ex.printStackTrace();
-                        }
-                    }
+        for (Header hdr1 : oobHdr) {
+            if (hdr1.getObject() instanceof Node) {
+                try {
+                    JAXBElement<?> job = (JAXBElement<?>)JAXBContext
+                        .newInstance(org.apache.cxf.outofband.header.ObjectFactory.class)
+                        .createUnmarshaller().unmarshal((Node)hdr1.getObject());
+                    hdrToTest = (OutofBandHeader)job.getValue();
+                } catch (JAXBException ex) {
+                    ex.printStackTrace();
                 }
             }
         }
@@ -656,7 +647,7 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
     
     protected static void validateReturnedOutOfBandHeaderWithInsertion(Map<String, Object> responseContext, boolean expect) {
         List<OutofBandHeader> hdrToTest = new ArrayList<OutofBandHeader>();
-        List oobHdr = (List)responseContext.get(Header.HEADER_LIST);
+        List<Header> oobHdr = CastUtils.cast((List<?>)responseContext.get(Header.HEADER_LIST));
         if (!expect) {
             if (oobHdr == null || (oobHdr != null && oobHdr.size() == 0)) {
                 return;
@@ -670,22 +661,15 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
         assertTrue("HeaderHolder list expected to conain 2 object received " + oobHdr.size(),
                    oobHdr.size() == 2);
         
-        if (oobHdr != null & oobHdr instanceof List) {
-            Iterator iter = oobHdr.iterator();
-            while (iter.hasNext()) {
-                Object hdr = iter.next();
-                if (hdr instanceof Header) {
-                    Header hdr1 = (Header)hdr;
-                    if (hdr1.getObject() instanceof Node) {
-                        try {
-                            JAXBElement job = (JAXBElement)JAXBContext
-                                .newInstance(org.apache.cxf.outofband.header.ObjectFactory.class)
-                                .createUnmarshaller().unmarshal((Node)hdr1.getObject());
-                            hdrToTest.add((OutofBandHeader)job.getValue());
-                        } catch (JAXBException ex) {
-                            ex.printStackTrace();
-                        }
-                    }
+        for (Header hdr1 : oobHdr) {
+            if (hdr1.getObject() instanceof Node) {
+                try {
+                    JAXBElement<?> job = (JAXBElement<?>)JAXBContext
+                        .newInstance(org.apache.cxf.outofband.header.ObjectFactory.class)
+                        .createUnmarshaller().unmarshal((Node)hdr1.getObject());
+                    hdrToTest.add((OutofBandHeader)job.getValue());
+                } catch (JAXBException ex) {
+                    ex.printStackTrace();
                 }
             }
         }
@@ -710,9 +694,8 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
 
     public static class InsertRequestOutHeaderProcessor implements Processor {
 
-        @SuppressWarnings("unchecked")
         public void process(Exchange exchange) throws Exception {
-            List<SoapHeader> soapHeaders = (List)exchange.getIn().getHeader(Header.HEADER_LIST);
+            List<SoapHeader> soapHeaders = CastUtils.cast((List<?>)exchange.getIn().getHeader(Header.HEADER_LIST));
    
             // Insert a new header
             String xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><outofbandHeader "
@@ -735,9 +718,8 @@ public class CxfMessageHeadersRelayTest extends AbstractJUnit4SpringContextTests
     
     public static class InsertResponseOutHeaderProcessor implements Processor {
 
-        @SuppressWarnings("unchecked")
         public void process(Exchange exchange) throws Exception {
-            List<SoapHeader> soapHeaders = (List)exchange.getIn().getHeader(Header.HEADER_LIST);
+            List<SoapHeader> soapHeaders = CastUtils.cast((List<?>)exchange.getIn().getHeader(Header.HEADER_LIST));
 
             // Insert a new header
             String xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><outofbandHeader "

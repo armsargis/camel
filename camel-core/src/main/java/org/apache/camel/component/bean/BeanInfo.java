@@ -71,6 +71,7 @@ public class BeanInfo {
     // shared state with details of operations introspected from the bean, created during the constructor
     private Map<String, List<MethodInfo>> operations = new HashMap<String, List<MethodInfo>>();
     private List<MethodInfo> operationsWithBody = new ArrayList<MethodInfo>();
+    private List<MethodInfo> operationsWithNoBody = new ArrayList<MethodInfo>();
     private List<MethodInfo> operationsWithCustomAnnotation = new ArrayList<MethodInfo>();
     private List<MethodInfo> operationsWithHandlerAnnotation = new ArrayList<MethodInfo>();
     private Map<Method, MethodInfo> methodMap = new HashMap<Method, MethodInfo>();
@@ -93,12 +94,28 @@ public class BeanInfo {
         this(camelContext, type, createParameterMappingStrategy(camelContext));
     }
 
+    public BeanInfo(CamelContext camelContext, Method explicitMethod) {
+        this(camelContext, explicitMethod.getDeclaringClass(), explicitMethod, createParameterMappingStrategy(camelContext));
+    }
+
     public BeanInfo(CamelContext camelContext, Class<?> type, ParameterMappingStrategy strategy) {
+        this(camelContext, type, null, strategy);
+    }
+
+    public BeanInfo(CamelContext camelContext, Class<?> type, Method explicitMethod, ParameterMappingStrategy strategy) {
         this.camelContext = camelContext;
         this.type = type;
         this.strategy = strategy;
 
-        introspect(getType());
+        if (explicitMethod != null) {
+            // must be a valid method
+            if (!isValidMethod(type, explicitMethod)) {
+                throw new IllegalArgumentException("The method " + explicitMethod + " is not valid (for example the method must be public)");
+            }
+            introspect(getType(), explicitMethod);
+        } else {
+            introspect(getType());
+        }
 
         // if there are only 1 method with 1 operation then select it as a default/fallback method
         MethodInfo method = null;
@@ -114,6 +131,7 @@ public class BeanInfo {
         // to keep this code thread safe
         operations = Collections.unmodifiableMap(operations);
         operationsWithBody = Collections.unmodifiableList(operationsWithBody);
+        operationsWithNoBody = Collections.unmodifiableList(operationsWithNoBody);
         operationsWithCustomAnnotation = Collections.unmodifiableList(operationsWithCustomAnnotation);
         operationsWithHandlerAnnotation = Collections.unmodifiableList(operationsWithHandlerAnnotation);
         methodMap = Collections.unmodifiableMap(methodMap);
@@ -139,18 +157,28 @@ public class BeanInfo {
         return answer;
     }
 
-    public MethodInvocation createInvocation(Method method, Object pojo, Exchange exchange) {
-        MethodInfo methodInfo = introspect(type, method);
-        if (methodInfo != null) {
-            return methodInfo.createMethodInvocation(pojo, exchange);
-        }
-        return null;
-    }
-
-    @SuppressWarnings("unchecked")
     public MethodInvocation createInvocation(Object pojo, Exchange exchange)
         throws AmbiguousMethodCallException, MethodNotFoundException {
+        return createInvocation(pojo, exchange, null);
+    }
+
+    private MethodInvocation createInvocation(Object pojo, Exchange exchange, Method explicitMethod)
+        throws AmbiguousMethodCallException, MethodNotFoundException {
         MethodInfo methodInfo = null;
+        
+        // find the explicit method to invoke
+        if (explicitMethod != null) {
+            Iterator<List<MethodInfo>> it = operations.values().iterator();
+            while (it.hasNext()) {
+                List<MethodInfo> infos = it.next();
+                for (MethodInfo info : infos) {
+                    if (explicitMethod.equals(info.getMethod())) {
+                        return info.createMethodInvocation(pojo, exchange);
+                    }
+                }
+            }
+            throw new MethodNotFoundException(exchange, pojo, explicitMethod.getName());
+        }
 
         String methodName = exchange.getIn().getHeader(Exchange.BEAN_METHOD_NAME, String.class);
         if (methodName != null) {
@@ -166,7 +194,7 @@ public class BeanInfo {
             if ("class".equals(name) || "getClass".equals(name)) {
                 try {
                     Method method = pojo.getClass().getMethod("getClass");
-                    methodInfo = new MethodInfo(exchange.getContext(), pojo.getClass(), method, Collections.EMPTY_LIST, Collections.EMPTY_LIST, false, false);
+                    methodInfo = new MethodInfo(exchange.getContext(), pojo.getClass(), method, Collections.<ParameterInfo>emptyList(), Collections.<ParameterInfo>emptyList(), false, false);
                 } catch (NoSuchMethodException e) {
                     throw new MethodNotFoundException(exchange, pojo, "getClass");
                 }
@@ -178,7 +206,7 @@ public class BeanInfo {
                 } else if (methods != null) {
                     // there are more methods with that name so we cannot decide which to use
 
-                    // but first lets try to choose a method and see if that comply with the name
+                    // but first let's try to choose a method and see if that complies with the name
                     // must use the method name which may have qualifiers
                     methodInfo = chooseMethod(pojo, exchange, methodName);
 
@@ -213,7 +241,7 @@ public class BeanInfo {
      *
      * @param clazz the class
      */
-    protected void introspect(Class<?> clazz) {
+    private void introspect(Class<?> clazz) {
         // get the target clazz as it could potentially have been enhanced by CGLIB etc.
         clazz = getTargetClass(clazz);
         ObjectHelper.notNull(clazz, "clazz", this);
@@ -253,7 +281,7 @@ public class BeanInfo {
      * @param method the method
      * @return the method info, is newer <tt>null</tt>
      */
-    protected MethodInfo introspect(Class<?> clazz, Method method) {
+    private MethodInfo introspect(Class<?> clazz, Method method) {
         LOG.trace("Introspecting class: {}, method: {}", clazz, method);
         String opName = method.getName();
 
@@ -265,7 +293,6 @@ public class BeanInfo {
         MethodInfo existingMethodInfo = overridesExistingMethod(methodInfo);
         if (existingMethodInfo != null) {
             LOG.trace("This method is already overridden in a subclass, so the method from the sub class is preferred: {}", existingMethodInfo);
-
             return existingMethodInfo;
         }
 
@@ -286,6 +313,8 @@ public class BeanInfo {
             operationsWithCustomAnnotation.add(methodInfo);
         } else if (methodInfo.hasBodyParameter()) {
             operationsWithBody.add(methodInfo);
+        } else {
+            operationsWithNoBody.add(methodInfo);
         }
 
         if (methodInfo.hasHandlerAnnotation()) {
@@ -353,7 +382,7 @@ public class BeanInfo {
                         // use exchange
                         expression = ExpressionBuilder.exchangeExpression();
                     } else {
-                        // lets assume its the body and it must be mandatory convertable to the parameter type
+                        // assume it's the body and it must be mandatory convertible to the parameter type
                         // but we allow null bodies in case the message really contains a null body
                         expression = ExpressionBuilder.mandatoryBodyExpression(parameterType, true);
                     }
@@ -367,7 +396,7 @@ public class BeanInfo {
             LOG.trace("Parameter #{} has parameter info: ", i, parameterInfo);
         }
 
-        // now lets add the method to the repository
+        // now let's add the method to the repository
         return new MethodInfo(camelContext, clazz, method, parameters, bodyParameters, hasCustomAnnotation, hasHandlerAnnotation);
     }
 
@@ -393,21 +422,20 @@ public class BeanInfo {
         for (Class<?> i : c.getInterfaces()) {
             collectParameterAnnotations(i, m, a);
         }
-        if (!c.isInterface() && c.getSuperclass() != Object.class) {
+        if (!c.isInterface() && c.getSuperclass() != null) {
             collectParameterAnnotations(c.getSuperclass(), m, a);
         }
-
     }
 
     /**
-     * Lets try choose one of the available methods to invoke if we can match
+     * Choose one of the available methods to invoke if we can match
      * the message body to the body parameter
      *
      * @param pojo the bean to invoke a method on
      * @param exchange the message exchange
      * @param name an optional name of the method that must match, use <tt>null</tt> to indicate all methods
      * @return the method to invoke or null if no definitive method could be matched
-     * @throws AmbiguousMethodCallException is thrown if cannot chose method due to ambiguous
+     * @throws AmbiguousMethodCallException is thrown if cannot choose method due to ambiguity
      */
     protected MethodInfo chooseMethod(Object pojo, Exchange exchange, String name) throws AmbiguousMethodCallException {
         // @Handler should be select first
@@ -418,6 +446,7 @@ public class BeanInfo {
         // must use defensive copy, to avoid altering the shared lists
         // and we want to remove unwanted operations from these local lists
         final List<MethodInfo> localOperationsWithBody = new ArrayList<MethodInfo>(operationsWithBody);
+        final List<MethodInfo> localOperationsWithNoBody = new ArrayList<MethodInfo>(operationsWithNoBody);
         final List<MethodInfo> localOperationsWithCustomAnnotation = new ArrayList<MethodInfo>(operationsWithCustomAnnotation);
         final List<MethodInfo> localOperationsWithHandlerAnnotation = new ArrayList<MethodInfo>(operationsWithHandlerAnnotation);
 
@@ -426,11 +455,13 @@ public class BeanInfo {
             removeNonMatchingMethods(localOperationsWithHandlerAnnotation, name);
             removeNonMatchingMethods(localOperationsWithCustomAnnotation, name);
             removeNonMatchingMethods(localOperationsWithBody, name);
+            removeNonMatchingMethods(localOperationsWithNoBody, name);
         } else {
             // remove all getter/setter as we do not want to consider these methods
             removeAllSetterOrGetterMethods(localOperationsWithHandlerAnnotation);
             removeAllSetterOrGetterMethods(localOperationsWithCustomAnnotation);
             removeAllSetterOrGetterMethods(localOperationsWithBody);
+            removeAllSetterOrGetterMethods(localOperationsWithNoBody);
         }
 
         if (localOperationsWithHandlerAnnotation.size() > 1) {
@@ -444,6 +475,13 @@ public class BeanInfo {
         } else if (localOperationsWithCustomAnnotation.size() == 1) {
             // if there is one method with an annotation then use that one
             return localOperationsWithCustomAnnotation.get(0);
+        }
+
+        // named method and with no parameters
+        boolean noParameters = name != null && name.endsWith("()");
+        if (noParameters && localOperationsWithNoBody.size() == 1) {
+            // if there was a method name configured and it has no parameters, then use the method with no body (eg no parameters)
+            return localOperationsWithNoBody.get(0);
         } else if (localOperationsWithBody.size() == 1) {
             // if there is one method with body then use that one
             return localOperationsWithBody.get(0);
@@ -470,7 +508,7 @@ public class BeanInfo {
     private MethodInfo chooseMethodWithMatchingBody(Exchange exchange, Collection<MethodInfo> operationList,
                                                     List<MethodInfo> operationsWithCustomAnnotation)
         throws AmbiguousMethodCallException {
-        // lets see if we can find a method who's body param type matches the message body
+        // see if we can find a method whose body param type matches the message body
         Message in = exchange.getIn();
         Object body = in.getBody();
         if (body != null) {
@@ -525,7 +563,7 @@ public class BeanInfo {
         } else if (possibles.isEmpty()) {
             LOG.trace("No possible methods so now trying to convert body to parameter types");
 
-            // lets try converting
+            // let's try converting
             Object newBody = null;
             MethodInfo matched = null;
             int matchCounter = 0;
@@ -555,7 +593,7 @@ public class BeanInfo {
                 return matched;
             }
         } else {
-            // if we only have a single method with custom annotations, lets use that one
+            // if we only have a single method with custom annotations, let's use that one
             if (possibleWithCustomAnnotation.size() == 1) {
                 MethodInfo answer = possibleWithCustomAnnotation.get(0);
                 LOG.trace("There are only one method with annotations so we choose it: {}", answer);
@@ -621,7 +659,7 @@ public class BeanInfo {
 
     private MethodInfo chooseMethodWithCustomAnnotations(Exchange exchange, Collection<MethodInfo> possibles)
         throws AmbiguousMethodCallException {
-        // if we have only one method with custom annotations lets choose that
+        // if we have only one method with custom annotations let's choose that
         MethodInfo chosen = null;
         for (MethodInfo possible : possibles) {
             if (possible.hasCustomAnnotation()) {

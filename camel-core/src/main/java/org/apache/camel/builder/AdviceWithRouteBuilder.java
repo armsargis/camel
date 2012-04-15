@@ -80,12 +80,27 @@ public abstract class AdviceWithRouteBuilder extends RouteBuilder {
     /**
      * Mock all endpoints matching the given pattern.
      *
-     * @param pattern the pattern.
+     * @param pattern the pattern(s).
      * @throws Exception can be thrown if error occurred
-     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(String, String)
+     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(org.apache.camel.CamelContext, String, String)
      */
-    public void mockEndpoints(String pattern) throws Exception {
-        getContext().addRegisterEndpointCallback(new InterceptSendToMockEndpointStrategy(pattern));
+    public void mockEndpoints(String... pattern) throws Exception {
+        for (String s : pattern) {
+            getContext().addRegisterEndpointCallback(new InterceptSendToMockEndpointStrategy(s));
+        }
+    }
+
+    /**
+     * Mock all endpoints matching the given pattern, and <b>skips</b> sending to the original endpoint (detour messages).
+     *
+     * @param pattern the pattern(s).
+     * @throws Exception can be thrown if error occurred
+     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(org.apache.camel.CamelContext, String, String)
+     */
+    public void mockEndpointsAndSkip(String... pattern) throws Exception {
+        for (String s : pattern) {
+            getContext().addRegisterEndpointCallback(new InterceptSendToMockEndpointStrategy(s, true));
+        }
     }
 
     /**
@@ -117,7 +132,7 @@ public abstract class AdviceWithRouteBuilder extends RouteBuilder {
      * @return the builder
      * @see org.apache.camel.util.EndpointHelper#matchPattern(String, String)
      */
-    public <T extends ProcessorDefinition> AdviceWithBuilder weaveById(String pattern) {
+    public <T extends ProcessorDefinition<?>> AdviceWithBuilder<T> weaveById(String pattern) {
         ObjectHelper.notNull(originalRoute, "originalRoute", this);
         return new AdviceWithBuilder<T>(this, pattern, null, null);
     }
@@ -131,7 +146,7 @@ public abstract class AdviceWithRouteBuilder extends RouteBuilder {
      * @return the builder
      * @see org.apache.camel.util.EndpointHelper#matchPattern(String, String)
      */
-    public <T extends ProcessorDefinition> AdviceWithBuilder weaveByToString(String pattern) {
+    public <T extends ProcessorDefinition<?>> AdviceWithBuilder<T> weaveByToString(String pattern) {
         ObjectHelper.notNull(originalRoute, "originalRoute", this);
         return new AdviceWithBuilder<T>(this, null, pattern, null);
     }
@@ -142,7 +157,7 @@ public abstract class AdviceWithRouteBuilder extends RouteBuilder {
      * @param type the processor type
      * @return the builder
      */
-    public <T extends ProcessorDefinition> AdviceWithBuilder weaveByType(Class<T> type) {
+    public <T extends ProcessorDefinition<?>> AdviceWithBuilder<T> weaveByType(Class<T> type) {
         ObjectHelper.notNull(originalRoute, "originalRoute", this);
         return new AdviceWithBuilder<T>(this, null, null, type);
     }
@@ -152,7 +167,7 @@ public abstract class AdviceWithRouteBuilder extends RouteBuilder {
      *
      * @return the builder
      */
-    public <T extends ProcessorDefinition> ProcessorDefinition weaveAddFirst() {
+    public <T extends ProcessorDefinition<?>> ProcessorDefinition<?> weaveAddFirst() {
         ObjectHelper.notNull(originalRoute, "originalRoute", this);
         return new AdviceWithBuilder<T>(this, "*", null, null).selectFirst().before();
     }
@@ -162,7 +177,7 @@ public abstract class AdviceWithRouteBuilder extends RouteBuilder {
      *
      * @return the builder
      */
-    public <T extends ProcessorDefinition> ProcessorDefinition weaveAddLast() {
+    public <T extends ProcessorDefinition<?>> ProcessorDefinition<?> weaveAddLast() {
         ObjectHelper.notNull(originalRoute, "originalRoute", this);
         return new AdviceWithBuilder<T>(this, "*", null, null).selectLast().after();
     }

@@ -172,7 +172,7 @@ public class JmsBinding {
                 throw new RuntimeCamelException(e);
             }
 
-            Enumeration names;
+            Enumeration<?> names;
             try {
                 names = jmsMessage.getPropertyNames();
             } catch (JMSException e) {
@@ -213,7 +213,7 @@ public class JmsBinding {
 
     protected byte[] createByteArrayFromBytesMessage(BytesMessage message) throws JMSException {
         if (message.getBodyLength() > Integer.MAX_VALUE) {
-            LOG.warn("Length of BytesMessage is too long: " + message.getBodyLength());
+            LOG.warn("Length of BytesMessage is too long: {}", message.getBodyLength());
             return null;
         }
         byte[] result = new byte[(int)message.getBodyLength()];
@@ -526,7 +526,7 @@ public class JmsBinding {
         }
         case Map: {
             MapMessage message = session.createMapMessage();
-            Map payload = context.getTypeConverter().convertTo(Map.class, exchange, body);
+            Map<?, ?> payload = context.getTypeConverter().convertTo(Map.class, exchange, body);
             populateMapMessage(message, payload, context);
             return message;
         }
@@ -564,7 +564,7 @@ public class JmsBinding {
      */
     public Map<String, Object> createMapFromMapMessage(MapMessage message) throws JMSException {
         Map<String, Object> answer = new HashMap<String, Object>();
-        Enumeration names = message.getMapNames();
+        Enumeration<?> names = message.getMapNames();
         while (names.hasMoreElements()) {
             String name = names.nextElement().toString();
             Object value = message.getObject(name);

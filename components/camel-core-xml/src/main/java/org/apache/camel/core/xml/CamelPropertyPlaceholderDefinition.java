@@ -36,6 +36,12 @@ public class CamelPropertyPlaceholderDefinition extends IdentifiedType {
     private String location;
 
     @XmlAttribute
+    private Boolean cache;
+
+    @XmlAttribute
+    private Boolean ignoreMissingLocation;
+
+    @XmlAttribute
     private String propertiesResolverRef;
 
     @XmlAttribute
@@ -62,6 +68,14 @@ public class CamelPropertyPlaceholderDefinition extends IdentifiedType {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public Boolean isCache() {
+        return cache;
+    }
+
+    public void setCache(Boolean cache) {
+        this.cache = cache;
     }
 
     public String getPropertiesResolverRef() {
@@ -102,6 +116,14 @@ public class CamelPropertyPlaceholderDefinition extends IdentifiedType {
 
     public void setFallbackToUnaugmentedProperty(Boolean fallbackToUnaugmentedProperty) {
         this.fallbackToUnaugmentedProperty = fallbackToUnaugmentedProperty;
+    }
+
+    public Boolean isIgnoreMissingLocation() {
+        return ignoreMissingLocation;
+    }
+
+    public void setIgnoreMissingLocation(Boolean ignoreMissingLocation) {
+        this.ignoreMissingLocation = ignoreMissingLocation;
     }
 
     public String getPrefixToken() {

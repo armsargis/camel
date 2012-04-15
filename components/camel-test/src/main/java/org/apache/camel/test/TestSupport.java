@@ -47,7 +47,10 @@ import org.slf4j.LoggerFactory;
  * A bunch of useful testing methods
  *
  * @version 
+ * @deprecated Support for JUnit 3.x is slated for removal in Camel 3.x. You are encouraged to move to
+ *             JUnit 4.x based tests.  See {@link org.apache.camel.test.junit4.TestSupport}.
  */
+@Deprecated
 public abstract class TestSupport extends TestCase {
     protected static final String LS = System.getProperty("line.separator");
     private static final Logger LOG = LoggerFactory.getLogger(TestSupport.class);
@@ -423,8 +426,8 @@ public abstract class TestSupport extends TestCase {
     public static void deleteDirectory(File file) {
         if (file.isDirectory()) {
             File[] files = file.listFiles();
-            for (int i = 0; i < files.length; i++) {
-                deleteDirectory(files[i]);
+            for (File child : files) {
+                deleteDirectory(child);
             }
         }
 

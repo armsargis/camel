@@ -31,6 +31,7 @@ import org.jboss.netty.channel.ChannelDownstreamHandler;
 import org.jboss.netty.channel.ChannelUpstreamHandler;
 import org.jboss.netty.handler.codec.frame.DelimiterBasedFrameDecoder;
 import org.jboss.netty.handler.codec.frame.Delimiters;
+import org.jboss.netty.handler.codec.serialization.ClassResolvers;
 import org.jboss.netty.handler.codec.serialization.ObjectDecoder;
 import org.jboss.netty.handler.codec.serialization.ObjectEncoder;
 import org.jboss.netty.handler.codec.string.StringDecoder;
@@ -40,7 +41,6 @@ import org.jboss.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@SuppressWarnings("unchecked")
 public class NettyConfiguration implements Cloneable {
     private static final transient Logger LOG = LoggerFactory.getLogger(NettyConfiguration.class);
 
@@ -68,8 +68,6 @@ public class NettyConfiguration implements Cloneable {
     private long sendBufferSize = 65536;
     private long receiveBufferSize = 65536;
     private int receiveBufferSizePredictor;
-    private int corePoolSize = 10;
-    private int maxPoolSize = 100;
     private int workerCount;
     private String keyStoreFormat;
     private String securityProvider;
@@ -146,7 +144,7 @@ public class NettyConfiguration implements Cloneable {
                 } else {
                     // object serializable is then used
                     encoders.add(new ObjectEncoder());
-                    decoders.add(new ObjectDecoder());
+                    decoders.add(new ObjectDecoder(ClassResolvers.weakCachingResolver(null)));
 
                     LOG.debug("Using object encoders and decoders");
                 }
@@ -385,22 +383,6 @@ public class NettyConfiguration implements Cloneable {
         this.trustStoreFile = trustStoreFile;
     }
 
-    public int getCorePoolSize() {
-        return corePoolSize;
-    }
-
-    public void setCorePoolSize(int corePoolSize) {
-        this.corePoolSize = corePoolSize;
-    }
-
-    public int getMaxPoolSize() {
-        return maxPoolSize;
-    }
-
-    public void setMaxPoolSize(int maxPoolSize) {
-        this.maxPoolSize = maxPoolSize;
-    }
-
     public String getKeyStoreFormat() {
         return keyStoreFormat;
     }
@@ -469,10 +451,10 @@ public class NettyConfiguration implements Cloneable {
         return host + ":" + port;
     }
 
-    private <T> void addToHandlersList(List configured, List handlers, Class<? extends T> handlerType) {
+    private <T> void addToHandlersList(List<T> configured, List<T> handlers, Class<T> handlerType) {
         if (handlers != null) {
             for (int x = 0; x < handlers.size(); x++) {
-                Object handler = handlers.get(x);
+                T handler = handlers.get(x);
                 if (handlerType.isInstance(handler)) {
                     configured.add(handler);
                 }

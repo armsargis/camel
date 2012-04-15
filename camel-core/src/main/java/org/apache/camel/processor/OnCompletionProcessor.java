@@ -45,12 +45,13 @@ public class OnCompletionProcessor extends ServiceSupport implements Processor, 
     private final CamelContext camelContext;
     private final Processor processor;
     private final ExecutorService executorService;
+    private final boolean shutdownExecutorService;
     private final boolean onCompleteOnly;
     private final boolean onFailureOnly;
     private final Predicate onWhen;
     private final boolean useOriginalBody;
 
-    public OnCompletionProcessor(CamelContext camelContext, Processor processor, ExecutorService executorService,
+    public OnCompletionProcessor(CamelContext camelContext, Processor processor, ExecutorService executorService, boolean shutdownExecutorService,
                                  boolean onCompleteOnly, boolean onFailureOnly, Predicate onWhen, boolean useOriginalBody) {
         notNull(camelContext, "camelContext");
         notNull(processor, "processor");
@@ -58,12 +59,14 @@ public class OnCompletionProcessor extends ServiceSupport implements Processor, 
         // wrap processor in UnitOfWork so what we send out runs in a UoW
         this.processor = new UnitOfWorkProcessor(processor);
         this.executorService = executorService;
+        this.shutdownExecutorService = shutdownExecutorService;
         this.onCompleteOnly = onCompleteOnly;
         this.onFailureOnly = onFailureOnly;
         this.onWhen = onWhen;
         this.useOriginalBody = useOriginalBody;
     }
 
+    @Override
     protected void doStart() throws Exception {
         ServiceHelper.startService(processor);
     }
@@ -72,7 +75,15 @@ public class OnCompletionProcessor extends ServiceSupport implements Processor, 
     protected void doStop() throws Exception {
         ServiceHelper.stopService(processor);
     }
-    
+
+    @Override
+    protected void doShutdown() throws Exception {
+        ServiceHelper.stopAndShutdownService(processor);
+        if (shutdownExecutorService) {
+            getCamelContext().getExecutorServiceManager().shutdownNow(executorService);
+        }
+    }
+
     public CamelContext getCamelContext() {
         return camelContext;
     }

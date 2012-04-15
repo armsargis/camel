@@ -28,10 +28,12 @@ import java.util.regex.PatternSyntaxException;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
+import org.apache.camel.Message;
 import org.apache.camel.PollingConsumer;
 import org.apache.camel.Processor;
 import org.apache.camel.ResolveEndpointFailedException;
 import org.apache.camel.Route;
+import org.apache.camel.spi.BrowsableEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,6 +91,8 @@ public final class EndpointHelper {
     /**
      * Matches the endpoint with the given pattern.
      * <p/>
+     * The endpoint will first resolve property placeholders using {@link CamelContext#resolvePropertyPlaceholders(String)}.
+     * <p/>
      * The match rules are applied in this order:
      * <ul>
      *   <li>exact match, returns true</li>
@@ -97,11 +101,20 @@ public final class EndpointHelper {
      *   <li>otherwise returns false</li>
      * </ul>
      *
+     * @param context the Camel context, if <tt>null</tt> then property placeholder resolution is skipped.
      * @param uri     the endpoint uri
      * @param pattern a pattern to match
      * @return <tt>true</tt> if match, <tt>false</tt> otherwise.
      */
-    public static boolean matchEndpoint(String uri, String pattern) {
+    public static boolean matchEndpoint(CamelContext context, String uri, String pattern) {
+        if (context != null) {
+            try {
+                uri = context.resolvePropertyPlaceholders(uri);
+            } catch (Exception e) {
+                throw new ResolveEndpointFailedException(uri, e);
+            }
+        }
+
         // normalize uri so we can do endpoint hits with minor mistakes and parameters is not in the same order
         try {
             uri = URISupport.normalizeUri(uri);
@@ -128,6 +141,17 @@ public final class EndpointHelper {
 
         // and fallback to test with the uri as is
         return matchPattern(uri, pattern);
+    }
+
+    /**
+     * Matches the endpoint with the given pattern.
+     * @see #matchEndpoint(org.apache.camel.CamelContext, String, String)
+     *
+     * @deprecated use {@link #matchEndpoint(org.apache.camel.CamelContext, String, String)} instead.
+     */
+    @Deprecated
+    public static boolean matchEndpoint(String uri, String pattern) {
+        return matchEndpoint(null, uri, pattern);
     }
 
     /**
@@ -320,7 +344,7 @@ public final class EndpointHelper {
      * @return list of lookup results.
      * @throws IllegalArgumentException if any referenced object was not found in registry.
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public static <T> List<T> resolveReferenceListParameter(CamelContext context, String value, Class<T> elementType) {
         if (value == null) {
             return Collections.emptyList();
@@ -336,7 +360,7 @@ public final class EndpointHelper {
                 return Arrays.asList(elementType.cast(bean));
             }
         } else { // more than one list element
-            ArrayList<T> result = new ArrayList<T>(elements.size());
+            List<T> result = new ArrayList<T>(elements.size());
             for (String element : elements) {
                 result.add(resolveReferenceParameter(context, element.trim(), elementType));
             }
@@ -394,4 +418,44 @@ public final class EndpointHelper {
         // not found
         return null;
     }
+
+    /**
+     * Browses the {@link BrowsableEndpoint} within the given range, and returns the messages as a XML payload.
+     *
+     * @param endpoint the browsable endpoint
+     * @param fromIndex  from range
+     * @param toIndex    to range
+     * @param includeBody whether to include the message body in the XML payload
+     * @return XML payload with the messages
+     * @throws IllegalArgumentException if the from and to range is invalid
+     * @see MessageHelper#dumpAsXml(org.apache.camel.Message)
+     */
+    public static String browseRangeMessagesAsXml(BrowsableEndpoint endpoint, Integer fromIndex, Integer toIndex, Boolean includeBody) {
+        if (fromIndex == null) {
+            fromIndex = 0;
+        }
+        if (toIndex == null) {
+            toIndex = Integer.MAX_VALUE;
+        }
+        if (fromIndex > toIndex) {
+            throw new IllegalArgumentException("From index cannot be larger than to index, was: " + fromIndex + " > " + toIndex);
+        }
+
+        List<Exchange> exchanges = endpoint.getExchanges();
+        if (exchanges.size() == 0) {
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<messages>");
+        for (int i = fromIndex; i < exchanges.size() && i <= toIndex; i++) {
+            Exchange exchange = exchanges.get(i);
+            Message msg = exchange.hasOut() ? exchange.getOut() : exchange.getIn();
+            String xml = MessageHelper.dumpAsXml(msg, includeBody);
+            sb.append("\n").append(xml);
+        }
+        sb.append("\n</messages>");
+        return sb.toString();
+    }
+    
 }

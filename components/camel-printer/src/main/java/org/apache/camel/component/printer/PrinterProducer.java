@@ -19,7 +19,6 @@ package org.apache.camel.component.printer;
 import java.io.InputStream;
 
 import javax.print.DocFlavor;
-import javax.print.DocPrintJob;
 import javax.print.PrintException;
 import javax.print.PrintService;
 import javax.print.PrintServiceLookup;
@@ -31,8 +30,6 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.util.ObjectHelper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class PrinterProducer extends DefaultProducer {
     private final PrinterConfiguration config;
@@ -48,13 +45,14 @@ public class PrinterProducer extends DefaultProducer {
     public void process(Exchange exchange) throws Exception {
         Object body = exchange.getIn().getBody();
         InputStream is = exchange.getContext().getTypeConverter().convertTo(InputStream.class, body);
-        print(is);
+        String jobName = exchange.getIn().getHeader(PrinterEndpoint.JOB_NAME, "Camel: lpr", String.class);
+        print(is, jobName);
     }
     
-    private void print(InputStream body) throws PrintException { 
+    private void print(InputStream body, String jobName) throws PrintException { 
         if (printerOperations.getPrintService().isDocFlavorSupported(printerOperations.getFlavor())) {
             PrintDocument printDoc = new PrintDocument(body, printerOperations.getFlavor());        
-            printerOperations.print(printDoc, config.getCopies(), config.isSendToPrinter(), config.getMimeType()); 
+            printerOperations.print(printDoc, config.getCopies(), config.isSendToPrinter(), config.getMimeType(), jobName); 
         }
     }
 
@@ -73,10 +71,6 @@ public class PrinterProducer extends DefaultProducer {
         printRequestAttributeSet.add(config.getInternalSides());
         
         return printRequestAttributeSet;
-    }
-    
-    private DocPrintJob assignPrintJob(PrintService printService) {
-        return printService.createPrintJob(); 
     }
     
     private PrintService assignPrintService() throws PrintException {
@@ -152,7 +146,7 @@ public class PrinterProducer extends DefaultProducer {
         ObjectHelper.notNull(printService, "PrintService", this);
 
         if (printerOperations == null) {
-            printerOperations = new PrinterOperations(printService, assignPrintJob(printService), assignDocFlavor(), assignPrintAttributes());
+            printerOperations = new PrinterOperations(printService, assignDocFlavor(), assignPrintAttributes());
         }
         super.doStart();
     }

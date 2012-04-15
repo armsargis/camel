@@ -43,24 +43,22 @@ public final class MethodInfo {
      * @param out return types
      */
     public MethodInfo(String name, String soapAction, TypeInfo[] in, TypeInfo out) {
-        super();
         this.name = name;
         this.soapAction = soapAction;
         this.in = in;
         this.out = out;
         
         this.inTypeMap = new HashMap<String, TypeInfo>();
-        for (int i = 0; i < in.length; i++) {
-            TypeInfo ti = in[i];
-            if (inTypeMap.containsKey(ti.getTypeName())
-                && (!(ti.getTypeName().equals("javax.xml.ws.Holder")))
-                && (!(inTypeMap.get(ti.getTypeName()).equals(ti.getElName())))) {
+        for (TypeInfo typeInfo : in) {
+            if (inTypeMap.containsKey(typeInfo.getTypeName())
+                && (!(typeInfo.getTypeName().equals("javax.xml.ws.Holder")))
+                && (!(inTypeMap.get(typeInfo.getTypeName()).equals(typeInfo.getElName())))) {
                 throw new RuntimeCamelException("Ambiguous QName mapping. The type [ "
-                                                  + ti.getTypeName()
+                                                  + typeInfo.getTypeName()
                                                   + " ] is already mapped to a QName in this method."
                                                   + " This is not supported.");                   
             }
-            inTypeMap.put(in[i].getTypeName(), in[i]);
+            inTypeMap.put(typeInfo.getTypeName(), typeInfo);
         }
     }
 

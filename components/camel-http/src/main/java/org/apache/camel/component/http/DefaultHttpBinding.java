@@ -81,7 +81,7 @@ public class DefaultHttpBinding implements HttpBinding {
         Map<String, Object> headers = message.getHeaders();
         
         //apply the headerFilterStrategy
-        Enumeration names = request.getHeaderNames();
+        Enumeration<?> names = request.getHeaderNames();
         while (names.hasMoreElements()) {
             String name = (String)names.nextElement();
             String value = request.getHeader(name);
@@ -150,7 +150,7 @@ public class DefaultHttpBinding implements HttpBinding {
     protected void populateRequestParameters(HttpServletRequest request, HttpMessage message) throws Exception {
         //we populate the http request parameters without checking the request method
         Map<String, Object> headers = message.getHeaders();
-        Enumeration names = request.getParameterNames();
+        Enumeration<?> names = request.getParameterNames();
         while (names.hasMoreElements()) {
             String name = (String)names.nextElement();
             // there may be multiple values for the same name
@@ -177,17 +177,19 @@ public class DefaultHttpBinding implements HttpBinding {
             }
             // Push POST form params into the headers to retain compatibility with DefaultHttpBinding
             String body = message.getBody(String.class);
-            for (String param : body.split("&")) {
-                String[] pair = param.split("=", 2);
-                if (pair.length == 2) {
-                    String name = URLDecoder.decode(pair[0], charset);
-                    String value = URLDecoder.decode(pair[1], charset);
-                    if (headerFilterStrategy != null
-                        && !headerFilterStrategy.applyFilterToExternalHeaders(name, value, message.getExchange())) {
-                        HttpHelper.appendHeader(headers, name, value);
+            if (ObjectHelper.isNotEmpty(body)) {
+                for (String param : body.split("&")) {
+                    String[] pair = param.split("=", 2);
+                    if (pair.length == 2) {
+                        String name = URLDecoder.decode(pair[0], charset);
+                        String value = URLDecoder.decode(pair[1], charset);
+                        if (headerFilterStrategy != null
+                                && !headerFilterStrategy.applyFilterToExternalHeaders(name, value, message.getExchange())) {
+                            HttpHelper.appendHeader(headers, name, value);
+                        }
+                    } else {
+                        throw new IllegalArgumentException("Invalid parameter, expected to be a pair but was " + param);
                     }
-                } else {
-                    throw new IllegalArgumentException("Invalid parameter, expected to be a pair but was " + param);
                 }
             }
         }
@@ -195,7 +197,7 @@ public class DefaultHttpBinding implements HttpBinding {
     
     protected void populateAttachments(HttpServletRequest request, HttpMessage message) {
         // check if there is multipart files, if so will put it into DataHandler
-        Enumeration names = request.getAttributeNames();
+        Enumeration<?> names = request.getAttributeNames();
         while (names.hasMoreElements()) {
             String name = (String) names.nextElement();
             Object object = request.getAttribute(name);
@@ -273,7 +275,7 @@ public class DefaultHttpBinding implements HttpBinding {
             String key = entry.getKey();
             Object value = entry.getValue();
             // use an iterator as there can be multiple values. (must not use a delimiter)
-            final Iterator it = ObjectHelper.createIterator(value, null);
+            final Iterator<?> it = ObjectHelper.createIterator(value, null);
             while (it.hasNext()) {
                 String headerValue = exchange.getContext().getTypeConverter().convertTo(String.class, it.next());
                 if (headerValue != null && headerFilterStrategy != null
@@ -318,8 +320,7 @@ public class DefaultHttpBinding implements HttpBinding {
                 // copy directly from input stream to output stream
                 IOHelper.copy(is, os);
             } finally {
-                IOHelper.close(os);
-                IOHelper.close(is);
+                IOHelper.close(os, is);
             }
         } else {
             // not convertable as a stream so try as a String

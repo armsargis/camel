@@ -19,6 +19,7 @@ package org.apache.camel.util;
 import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -69,9 +71,9 @@ public final class ObjectHelper {
     }
 
     /**
-     * A helper method for comparing objects for equality in which it uses type coerce to coerce
-     * types between the left and right values. This allows you to equal test eg String and Integer as
-     * Camel will be able to coerce the types.
+     * A helper method for comparing objects for equality in which it uses type coercion to coerce
+     * types between the left and right values. This allows you test for equality for example with
+     * a String and Integer type as Camel will be able to coerce the types.
      */
     public static boolean typeCoerceEquals(TypeConverter converter, Object leftValue, Object rightValue) {
         // sanity check
@@ -108,18 +110,18 @@ public final class ObjectHelper {
     }
 
     /**
-     * A helper method for comparing objects for equality in which it uses type coerce to coerce
-     * types between the left and right values. This allows you to equal test eg String and Integer as
-     * Camel will be able to coerce the types
+     * A helper method for comparing objects for inequality in which it uses type coercion to coerce
+     * types between the left and right values.  This allows you test for inequality for example with
+     * a String and Integer type as Camel will be able to coerce the types.
      */
     public static boolean typeCoerceNotEquals(TypeConverter converter, Object leftValue, Object rightValue) {
         return !typeCoerceEquals(converter, leftValue, rightValue);
     }
 
     /**
-     * A helper method for comparing objects ordering in which it uses type coerce to coerce
-     * types between the left and right values. This allows you to equal test eg String and Integer as
-     * Camel will be able to coerce the types
+     * A helper method for comparing objects ordering in which it uses type coercion to coerce
+     * types between the left and right values.  This allows you test for ordering for example with
+     * a String and Integer type as Camel will be able to coerce the types.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static int typeCoerceCompare(TypeConverter converter, Object leftValue, Object rightValue) {
@@ -129,6 +131,13 @@ public final class ObjectHelper {
         Long rightNum = converter.convertTo(Long.class, rightValue);
         if (leftNum != null && rightNum != null) {
             return leftNum.compareTo(rightNum);
+        }
+
+        // also try with floating point numbers
+        Double leftDouble = converter.convertTo(Double.class, leftValue);
+        Double rightDouble = converter.convertTo(Double.class, rightValue);
+        if (leftDouble != null && rightDouble != null) {
+            return leftDouble.compareTo(rightDouble);
         }
 
         // prefer to NOT coerce to String so use the type which is not String
@@ -453,6 +462,7 @@ public final class ObjectHelper {
      * we just create a singleton collection iterator over a single value
      * <p/>
      * Will default use comma for String separating String values.
+     * This method does <b>not</b> allow empty values
      *
      * @param value  the value
      * @return the iterator
@@ -466,13 +476,31 @@ public final class ObjectHelper {
      * Object[], a String with values separated by the given delimiter,
      * or a primitive type array; otherwise to simplify the caller's
      * code, we just create a singleton collection iterator over a single value
+     * <p/>
+     * This method does <b>not</b> allow empty values
      *
-     * @param value  the value
-     * @param  delimiter  delimiter for separating String values
+     * @param value      the value
+     * @param delimiter  delimiter for separating String values
+     * @return the iterator
+     */
+    public static Iterator<Object> createIterator(Object value, String delimiter) {
+        return createIterator(value, delimiter, false);
+    }
+
+    /**
+     * Creates an iterator over the value if the value is a collection, an
+     * Object[], a String with values separated by the given delimiter,
+     * or a primitive type array; otherwise to simplify the caller's
+     * code, we just create a singleton collection iterator over a single value
+     *
+     * @param value             the value
+     * @param delimiter         delimiter for separating String values
+     * @param allowEmptyValues  whether to allow empty values
      * @return the iterator
      */
     @SuppressWarnings("unchecked")
-    public static Iterator<Object> createIterator(Object value, String delimiter) {
+    public static Iterator<Object> createIterator(Object value, String delimiter, final boolean allowEmptyValues) {
+
         // if its a message than we want to iterate its body
         if (value instanceof Message) {
             value = ((Message) value).getBody();
@@ -538,8 +566,7 @@ public final class ObjectHelper {
                     int idx = -1;
 
                     public boolean hasNext() {
-                        // empty string should not be regarded as having next
-                        return idx + 1 == 0 && ObjectHelper.isNotEmpty(s);
+                        return idx + 1 == 0 && (allowEmptyValues || ObjectHelper.isNotEmpty(s));
                     }
 
                     public String next() {
@@ -832,6 +859,35 @@ public final class ObjectHelper {
         }
         if (url == null) {
             url = ObjectHelper.class.getClassLoader().getResource(name);
+        }
+
+        return url;
+    }
+
+    /**
+     * Attempts to load the given resources from the given package name using the thread context
+     * class loader or the class loader used to load this class
+     *
+     * @param packageName the name of the package to load its resources
+     * @return the URLs for the resources or null if it could not be loaded
+     */
+    public static Enumeration<URL> loadResourcesAsURL(String packageName) {
+        Enumeration<URL> url = null;
+
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        if (contextClassLoader != null) {
+            try {
+                url = contextClassLoader.getResources(packageName);
+            } catch (IOException e) {
+                // ignore
+            }
+        }
+        if (url == null) {
+            try {
+                url = ObjectHelper.class.getClassLoader().getResources(packageName);
+            } catch (IOException e) {
+                // ignore
+            }
         }
 
         return url;
@@ -1214,7 +1270,7 @@ public final class ObjectHelper {
     }
 
     /**
-     * Cleans the string to pure java identifier so we can use it for loading class names.
+     * Cleans the string to a pure Java identifier so we can use it for loading class names.
      * <p/>
      * Especially from Spring DSL people can have \n \t or other characters that otherwise
      * would result in ClassNotFoundException
@@ -1350,6 +1406,20 @@ public final class ObjectHelper {
         }
 
         return null;
+    }
+
+    /**
+     * Is the given value a numeric NaN type
+     * 
+     * @param value the value
+     * @return <tt>true</tt> if its a {@link Float#NaN} or {@link Double#NaN}.
+     */
+    public static boolean isNaN(Object value) {
+        if (value == null || !(value instanceof Number)) {
+            return false;
+        }
+        // value must be a number
+        return value.equals(Float.NaN) || value.equals(Double.NaN);
     }
 
     private static final class ExceptionIterator implements Iterator<Throwable> {

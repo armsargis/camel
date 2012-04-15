@@ -132,7 +132,7 @@ public class RunMojo extends AbstractExecMojo {
     /**
      * @parameter expression="${project.remoteArtifactRepositories}"
      */
-    private List remoteRepositories;
+    private List<?> remoteRepositories;
 
     /**
      * @component
@@ -447,9 +447,8 @@ public class RunMojo extends AbstractExecMojo {
         boolean foundNonDaemon;
         do {
             foundNonDaemon = false;
-            Collection threads = getActiveThreads(threadGroup);
-            for (Iterator iter = threads.iterator(); iter.hasNext();) {
-                Thread thread = (Thread)iter.next();
+            Collection<Thread> threads = getActiveThreads(threadGroup);
+            for (Thread thread : threads) {
                 if (thread.isDaemon()) {
                     continue;
                 }
@@ -486,15 +485,13 @@ public class RunMojo extends AbstractExecMojo {
             // Interrupt all threads we know about as of this instant (harmless
             // if spuriously went dead (! isAlive())
             // or if something else interrupted it ( isInterrupted() ).
-            for (Iterator iter = threads.iterator(); iter.hasNext();) {
-                Thread thread = (Thread)iter.next();
+            for (Thread thread : threads) {
                 getLog().debug("interrupting thread " + thread);
                 thread.interrupt();
             }
             // Now join with a timeout and call stop() (assuming flags are set
             // right)
-            for (Iterator iter = threads.iterator(); iter.hasNext();) {
-                Thread thread = (Thread)iter.next();
+            for (Thread thread : threads) {
                 if (!thread.isAlive()) {
                     continue; // and, presumably it won't show up in
                     // getActiveThreads() next iteration
@@ -557,8 +554,7 @@ public class RunMojo extends AbstractExecMojo {
     private void setSystemProperties() {
         if (systemProperties != null) {
             originalSystemProperties = System.getProperties();
-            for (int i = 0; i < systemProperties.length; i++) {
-                Property systemProperty = systemProperties[i];
+            for (Property systemProperty : systemProperties) {
                 String value = systemProperty.getValue();
                 System.setProperty(systemProperty.getKey(), value == null ? "" : value);
             }
@@ -577,7 +573,7 @@ public class RunMojo extends AbstractExecMojo {
         this.addRelevantProjectDependenciesToClasspath(classpathURLs);
 
         getLog().info("Classpath = " + classpathURLs);
-        return new URLClassLoader((URL[])classpathURLs.toArray(new URL[classpathURLs.size()]));
+        return new URLClassLoader(classpathURLs.toArray(new URL[classpathURLs.size()]));
     }
 
     /**
@@ -593,9 +589,9 @@ public class RunMojo extends AbstractExecMojo {
         }
 
         try {
-            Iterator iter = this.determineRelevantPluginDependencies().iterator();
+            Iterator<Artifact> iter = this.determineRelevantPluginDependencies().iterator();
             while (iter.hasNext()) {
-                Artifact classPathElement = (Artifact)iter.next();
+                Artifact classPathElement = iter.next();
                 getLog().debug("Adding plugin dependency artifact: " + classPathElement.getArtifactId()
                                    + " to classpath");
                 path.add(classPathElement.getFile().toURI().toURL());
@@ -628,9 +624,9 @@ public class RunMojo extends AbstractExecMojo {
                 // MEXEC-17
                 dependencies.addAll(getAllNonTestScopedDependencies());
 
-                Iterator iter = dependencies.iterator();
+                Iterator<Artifact> iter = dependencies.iterator();
                 while (iter.hasNext()) {
-                    Artifact classPathElement = (Artifact)iter.next();
+                    Artifact classPathElement = iter.next();
                     getLog().debug("Adding project dependency artifact: " + classPathElement.getArtifactId()
                                        + " to classpath");
                     File file = classPathElement.getFile();
@@ -651,8 +647,7 @@ public class RunMojo extends AbstractExecMojo {
     private Collection<Artifact> getAllNonTestScopedDependencies() throws MojoExecutionException {
         List<Artifact> answer = new ArrayList<Artifact>();
 
-        for (Iterator artifacts = getAllDependencies().iterator(); artifacts.hasNext();) {
-            Artifact artifact = (Artifact)artifacts.next();
+        for (Artifact artifact : getAllDependencies()) {
 
             // do not add test artifacts
             if (!artifact.getScope().equals(Artifact.SCOPE_TEST)) {
@@ -666,7 +661,7 @@ public class RunMojo extends AbstractExecMojo {
     private Collection<Artifact> getAllDependencies() throws MojoExecutionException {
         List<Artifact> artifacts = new ArrayList<Artifact>();
 
-        for (Iterator dependencies = project.getDependencies().iterator(); dependencies.hasNext();) {
+        for (Iterator<?> dependencies = project.getDependencies().iterator(); dependencies.hasNext();) {
             Dependency dependency = (Dependency)dependencies.next();
 
             String groupId = dependency.getGroupId();
@@ -698,7 +693,7 @@ public class RunMojo extends AbstractExecMojo {
             }
 
             List<String> exclusions = new ArrayList<String>();
-            for (Iterator j = dependency.getExclusions().iterator(); j.hasNext();) {
+            for (Iterator<?> j = dependency.getExclusions().iterator(); j.hasNext();) {
                 Exclusion e = (Exclusion)j.next();
                 exclusions.add(e.getGroupId() + ":" + e.getArtifactId());
             }
@@ -762,8 +757,7 @@ public class RunMojo extends AbstractExecMojo {
         // this.getExecutableToolAssembly();
 
         Artifact executableTool = null;
-        for (Iterator iter = this.pluginDependencies.iterator(); iter.hasNext();) {
-            Artifact pluginDep = (Artifact)iter.next();
+        for (Artifact pluginDep : this.pluginDependencies) {
             if (this.executableDependency.matches(pluginDep)) {
                 executableTool = pluginDep;
                 break;

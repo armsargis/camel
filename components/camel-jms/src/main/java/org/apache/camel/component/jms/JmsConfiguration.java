@@ -24,6 +24,7 @@ import javax.jms.Message;
 import javax.jms.MessageProducer;
 import javax.jms.Session;
 
+import org.apache.camel.LoggingLevel;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.util.ObjectHelper;
 import org.slf4j.Logger;
@@ -68,7 +69,9 @@ public class JmsConfiguration implements Cloneable {
     // Used to configure the spring Container
     private ExceptionListener exceptionListener;
     private ConsumerType consumerType = ConsumerType.Default;
-    private ErrorHandler errorHandler;    
+    private ErrorHandler errorHandler;
+    private LoggingLevel errorHandlerLoggingLevel = LoggingLevel.WARN;
+    private boolean errorHandlerLogStackTrace = true;
     private boolean autoStartup = true;
     private boolean acceptMessagesWhileStopping;
     private String clientId;
@@ -84,6 +87,7 @@ public class JmsConfiguration implements Cloneable {
     private long recoveryInterval = -1;
     private long receiveTimeout = -1;
     private long requestTimeout = 20000L;
+    private long requestTimeoutCheckerInterval = 1000L;
     private int idleTaskExecutionLimit = 1;
     private int idleConsumerLimit = 1;
     private int maxConcurrentConsumers;
@@ -119,6 +123,7 @@ public class JmsConfiguration implements Cloneable {
     private boolean transferExchange;
     private boolean transferException;
     private boolean testConnectionOnStartup;
+    private boolean asyncStartListener;
     // if the message is a JmsMessage and mapJmsMessage=false, force the 
     // producer to send the javax.jms.Message body to the next JMS destination    
     private boolean forceSendOriginalMessage;
@@ -126,6 +131,8 @@ public class JmsConfiguration implements Cloneable {
     private boolean disableTimeToLive;
     private ReplyToType replyToType;
     private boolean asyncConsumer;
+    // the cacheLevelName of reply manager
+    private String replyToCacheLevelName;
 
     public JmsConfiguration() {
     }
@@ -267,7 +274,7 @@ public class JmsConfiguration implements Cloneable {
                 }
                 super.doSend(producer, message);
                 if (LOG.isTraceEnabled()) {
-                    LOG.trace("Sent JMS message to: " + producer.getDestination() + " with message: " + message);
+                    LOG.trace("Sent JMS message to: {} with message: {}", producer.getDestination(), message);
                 }
             }
         }
@@ -492,7 +499,23 @@ public class JmsConfiguration implements Cloneable {
     public ErrorHandler getErrorHandler() {
         return errorHandler;
     }
-    
+
+    public LoggingLevel getErrorHandlerLoggingLevel() {
+        return errorHandlerLoggingLevel;
+    }
+
+    public void setErrorHandlerLoggingLevel(LoggingLevel errorHandlerLoggingLevel) {
+        this.errorHandlerLoggingLevel = errorHandlerLoggingLevel;
+    }
+
+    public boolean isErrorHandlerLogStackTrace() {
+        return errorHandlerLogStackTrace;
+    }
+
+    public void setErrorHandlerLogStackTrace(boolean errorHandlerLogStackTrace) {
+        this.errorHandlerLogStackTrace = errorHandlerLogStackTrace;
+    }
+
     @Deprecated
     public boolean isSubscriptionDurable() {
         return subscriptionDurable;
@@ -874,6 +897,9 @@ public class JmsConfiguration implements Cloneable {
 
         if (errorHandler != null) {
             container.setErrorHandler(errorHandler);
+        } else {
+            ErrorHandler handler = new DefaultSpringErrorHandler(EndpointMessageListener.class, getErrorHandlerLoggingLevel(), isErrorHandlerLogStackTrace());
+            container.setErrorHandler(handler);
         }
 
         container.setAcceptMessagesWhileStopping(acceptMessagesWhileStopping);
@@ -1035,7 +1061,7 @@ public class JmsConfiguration implements Cloneable {
 
     /**
      * Factory method which which allows derived classes to customize the lazy
-     * transcationManager creation
+     * transaction manager creation
      */
     protected PlatformTransactionManager createTransactionManager() {
         JmsTransactionManager answer = new JmsTransactionManager();
@@ -1084,6 +1110,17 @@ public class JmsConfiguration implements Cloneable {
      */
     public void setRequestTimeout(long requestTimeout) {
         this.requestTimeout = requestTimeout;
+    }
+
+    public long getRequestTimeoutCheckerInterval() {
+        return requestTimeoutCheckerInterval;
+    }
+
+    /**
+     * Sets the interval in milliseconds how often the request timeout checker should run.
+     */
+    public void setRequestTimeoutCheckerInterval(long requestTimeoutCheckerInterval) {
+        this.requestTimeoutCheckerInterval = requestTimeoutCheckerInterval;
     }
 
     public String getReplyTo() {
@@ -1155,6 +1192,14 @@ public class JmsConfiguration implements Cloneable {
         this.transferException = transferException;
     }
 
+    public boolean isAsyncStartListener() {
+        return asyncStartListener;
+    }
+
+    public void setAsyncStartListener(boolean asyncStartListener) {
+        this.asyncStartListener = asyncStartListener;
+    }
+
     public boolean isTestConnectionOnStartup() {
         return testConnectionOnStartup;
     }
@@ -1206,6 +1251,14 @@ public class JmsConfiguration implements Cloneable {
      */
     public void setAsyncConsumer(boolean asyncConsumer) {
         this.asyncConsumer = asyncConsumer;
+    }
+    
+    public void setReplyToCacheLevelName(String name) {
+        this.replyToCacheLevelName = name;
+    }
+    
+    public String getReplyToCacheLevelName() {
+        return replyToCacheLevelName;
     }
 
 }

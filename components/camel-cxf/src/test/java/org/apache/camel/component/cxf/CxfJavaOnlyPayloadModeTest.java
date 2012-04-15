@@ -20,7 +20,6 @@ import org.w3c.dom.Document;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Test;
 
@@ -53,7 +52,7 @@ public class CxfJavaOnlyPayloadModeTest extends CamelTestSupport {
         assertNotNull(output);
 
         // using CxfPayload in payload mode
-        CxfPayload payload = (CxfPayload) output;
+        CxfPayload<?> payload = (CxfPayload<?>) output;
 
         // convert the payload body to string
         String reply = context.getTypeConverter().convertTo(String.class, payload.getBody().get(0));

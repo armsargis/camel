@@ -23,7 +23,6 @@ import org.w3c.dom.Element;
 
 import org.apache.aries.blueprint.ParserContext;
 import org.apache.aries.blueprint.mutable.MutableBeanMetadata;
-import org.apache.camel.component.cxf.CxfBlueprintEndpoint;
 import org.apache.cxf.common.util.StringUtils;
 import org.apache.cxf.configuration.blueprint.AbstractBPBeanDefinitionParser;
 
@@ -43,7 +42,7 @@ public class AbstractBeanDefinitionParser extends AbstractBPBeanDefinitionParser
         return id;
     }
     
-    public MutableBeanMetadata createBeanMetadata(Element element, ParserContext context, Class runtimeClass) {
+    public MutableBeanMetadata createBeanMetadata(Element element, ParserContext context, Class<?> runtimeClass) {
         MutableBeanMetadata answer = context.createMetadata(MutableBeanMetadata.class);
         answer.setRuntimeClass(runtimeClass);
         answer.addProperty("blueprintContainer", createRef(context, "blueprintContainer"));

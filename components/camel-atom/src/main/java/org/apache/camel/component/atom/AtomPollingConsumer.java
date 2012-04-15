@@ -22,8 +22,6 @@ import org.apache.abdera.model.Document;
 import org.apache.abdera.model.Feed;
 import org.apache.camel.Processor;
 import org.apache.camel.component.feed.FeedPollingConsumer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Consumer to poll atom feeds and return the full feed.
@@ -31,7 +29,6 @@ import org.slf4j.LoggerFactory;
  * @version 
  */
 public class AtomPollingConsumer extends FeedPollingConsumer {
-    private static final transient Logger LOG = LoggerFactory.getLogger(AtomPollingConsumer.class);
 
     public AtomPollingConsumer(AtomEndpoint endpoint, Processor processor) {
         super(endpoint, processor);

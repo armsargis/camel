@@ -69,6 +69,7 @@ public class XmppEndpoint extends DefaultEndpoint implements HeaderFilterStrateg
         super(uri, component);
     }
 
+    @Deprecated
     public XmppEndpoint(String endpointUri) {
         super(endpointUri);
     }
@@ -144,7 +145,7 @@ public class XmppEndpoint extends DefaultEndpoint implements HeaderFilterStrateg
                 return true;
             }
         });
-        connection.addPacketWriterListener(new XmppLogger("OUTBOUND"), new PacketFilter() {
+        connection.addPacketSendingListener(new XmppLogger("OUTBOUND"), new PacketFilter() {
             public boolean accept(Packet packet) {
                 return true;
             }

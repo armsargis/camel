@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
@@ -33,12 +32,11 @@ public class HazelcastListConsumerTest extends CamelTestSupport {
 
     @Override
     protected void doPostSetup() throws Exception {
-        HazelcastComponent component = (HazelcastComponent) context().getComponent("hazelcast");
+        HazelcastComponent component = context().getComponent("hazelcast", HazelcastComponent.class);
         HazelcastInstance hazelcastInstance = component.getHazelcastInstance();
         list = hazelcastInstance.getList("mm");
         list.clear();
     }
-
 
     @Test
     public void add() throws InterruptedException {

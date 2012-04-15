@@ -16,15 +16,12 @@
  */
 package org.apache.camel.itest.osgi.jpa;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.itest.osgi.OSGiIntegrationTestSupport;
 import org.apache.camel.spring.SpringCamelContext;
-import org.apache.karaf.testing.Helper;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -32,11 +29,7 @@ import org.ops4j.pax.exam.Inject;
 import org.ops4j.pax.exam.Option;
 import org.ops4j.pax.exam.junit.Configuration;
 import org.ops4j.pax.exam.junit.JUnit4TestRunner;
-import org.ops4j.pax.exam.options.UrlProvisionOption;
-import org.ops4j.store.Store;
-import org.ops4j.store.StoreFactory;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.Constants;
 import org.springframework.orm.jpa.JpaTemplate;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.osgi.context.support.OsgiBundleXmlApplicationContext;
@@ -45,13 +38,9 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.felix;
 import static org.ops4j.pax.exam.CoreOptions.mavenBundle;
 import static org.ops4j.pax.exam.OptionUtils.combine;
 import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.scanFeatures;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.workingDirectory;
-import static org.ops4j.pax.swissbox.tinybundles.core.TinyBundles.newBundle;
 
 @RunWith(JUnit4TestRunner.class)
 public class JpaRouteTest extends OSGiIntegrationTestSupport {
@@ -106,6 +95,7 @@ public class JpaRouteTest extends OSGiIntegrationTestSupport {
         // must type cast with Spring 2.x
         jpaTemplate = applicationContext.getBean("jpaTemplate", JpaTemplate.class);
 
+        @SuppressWarnings("rawtypes")
         List list = jpaTemplate.find(SELECT_ALL_STRING);
         assertEquals(1, list.size());
         
@@ -120,8 +110,9 @@ public class JpaRouteTest extends OSGiIntegrationTestSupport {
         transactionTemplate.setTransactionManager(new JpaTransactionManager(jpaTemplate.getEntityManagerFactory()));
         transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
 
-        transactionTemplate.execute(new TransactionCallback() {
-            public Object doInTransaction(TransactionStatus arg0) {
+        transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus arg0) {
+                @SuppressWarnings("rawtypes")
                 List list = jpaTemplate.find(SELECT_ALL_STRING);
                 for (Object item : list) {
                     jpaTemplate.remove(item);
@@ -135,22 +126,14 @@ public class JpaRouteTest extends OSGiIntegrationTestSupport {
     @Configuration
     public static Option[] configure() throws Exception {
         Option[] options = combine(
-            // Default karaf environment
-            Helper.getDefaultOptions(
-            // this is how you set the default log level when using pax logging (logProfile)
-                Helper.setLogLevel("WARN")),
-                
-            // install the spring.
-            scanFeatures(getKarafFeatureUrl(), "spring"),
-            // using the features to install the camel components             
-            scanFeatures(getCamelKarafFeatureUrl(),                         
-                          "camel-core", "camel-spring", "camel-test", "camel-jpa"),
-            
-            mavenBundle().groupId("org.apache.derby").artifactId("derby").version("10.4.2.0"),
-            workingDirectory("target/paxrunner/"),
 
-            felix(), equinox());
-        
+            getDefaultCamelKarafOptions(),
+            // using the features to install the camel components
+            scanFeatures(getCamelKarafFeatureUrl(), "camel-jpa"),
+
+            // use derby as the database
+            mavenBundle().groupId("org.apache.derby").artifactId("derby").version("10.4.2.0"));
+
         return options;
     }
 }

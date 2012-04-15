@@ -21,13 +21,9 @@ import java.util.Map;
 
 import com.ning.http.client.AsyncHttpClient;
 import com.ning.http.client.AsyncHttpClientConfig;
-import com.ning.http.client.filter.IOExceptionFilter;
-import com.ning.http.client.filter.RequestFilter;
-import com.ning.http.client.filter.ResponseFilter;
 
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.HeaderFilterStrategyComponent;
-import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.IntrospectionSupport;
 import org.apache.camel.util.URISupport;
 import org.apache.camel.util.jsse.SSLContextParameters;
@@ -90,7 +86,7 @@ public class AhcComponent extends HeaderFilterStrategyComponent {
         }
         
         // restructure uri to be based on the parameters left as we don't want to include the Camel internal options
-        URI httpUri = URISupport.createRemainingURI(new URI(addressUri), CastUtils.cast(parameters));
+        URI httpUri = URISupport.createRemainingURI(new URI(addressUri), parameters);
         endpoint.setHttpUri(httpUri);
         
         return endpoint;
@@ -140,48 +136,9 @@ public class AhcComponent extends HeaderFilterStrategyComponent {
      * @return a builder configured with the same options as the supplied config
      */
     static AsyncHttpClientConfig.Builder cloneConfig(AsyncHttpClientConfig clientConfig) {
-        
-        // TODO - Replace with copy based constructor and remove duplicate copy code below when AHC 1.7 is released (CAMEL-4081).
-        AsyncHttpClientConfig.Builder builder =
-            new AsyncHttpClientConfig.Builder();
-        
-        builder.setAllowPoolingConnection(clientConfig.getAllowPoolingConnection());
-        builder.setAsyncHttpClientProviderConfig(clientConfig.getAsyncHttpProviderConfig());
-        builder.setConnectionsPool(clientConfig.getConnectionsPool());
-        builder.setConnectionTimeoutInMs(clientConfig.getConnectionTimeoutInMs());
-        builder.setIdleConnectionInPoolTimeoutInMs(clientConfig.getIdleConnectionInPoolTimeoutInMs());
-        builder.setMaximumConnectionsPerHost(clientConfig.getMaxConnectionPerHost());
-        builder.setMaximumNumberOfRedirects(clientConfig.getMaxRedirects());
-        builder.setMaximumConnectionsTotal(clientConfig.getMaxTotalConnections());
-        builder.setProxyServer(clientConfig.getProxyServer());
-        builder.setRealm(clientConfig.getRealm());
-        builder.setRequestTimeoutInMs(clientConfig.getRequestTimeoutInMs());
-        builder.setSSLContext(clientConfig.getSSLContext());
-        builder.setSSLEngineFactory(clientConfig.getSSLEngineFactory());
-        builder.setUserAgent(clientConfig.getUserAgent());
-        builder.setFollowRedirects(clientConfig.isRedirectEnabled());
-        builder.setCompressionEnabled(clientConfig.isCompressionEnabled());
-        builder.setScheduledExecutorService(clientConfig.reaper());
-        builder.setExecutorService(clientConfig.executorService());
 
-        for (RequestFilter filter : clientConfig.getRequestFilters()) {
-            builder.addRequestFilter(filter);
-        }
-        
-        for (ResponseFilter filter : clientConfig.getResponseFilters()) {
-            builder.addResponseFilter(filter);
-        }
+        AsyncHttpClientConfig.Builder builder = new AsyncHttpClientConfig.Builder(clientConfig);
 
-        for (IOExceptionFilter filter : clientConfig.getIOExceptionFilters()) {
-            builder.addIOExceptionFilter(filter);
-        }
-        
-        builder.setRequestCompressionLevel(clientConfig.getRequestCompressionLevel());
-        builder.setUseRawUrl(clientConfig.isUseRawUrl());
-        builder.setMaxRequestRetry(clientConfig.getMaxRequestRetry());
-        builder.setAllowSslConnectionPool(clientConfig.getAllowPoolingConnection());
-        // End of duplicate code to remove.
-        
         return builder;
     }
 }

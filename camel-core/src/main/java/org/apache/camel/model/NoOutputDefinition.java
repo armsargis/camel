@@ -24,9 +24,8 @@ import java.util.List;
  */
 public abstract class NoOutputDefinition<Type extends ProcessorDefinition<Type>> extends ProcessorDefinition<Type> {
 
-    @SuppressWarnings("unchecked")
-    public List<ProcessorDefinition> getOutputs() {
-        return Collections.EMPTY_LIST;
+    public List<ProcessorDefinition<?>> getOutputs() {
+        return Collections.emptyList();
     }
 
     public boolean isOutputSupported() {

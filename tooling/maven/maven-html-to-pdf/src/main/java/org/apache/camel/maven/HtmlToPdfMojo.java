@@ -16,8 +16,6 @@
  */
 package org.apache.camel.maven;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -33,10 +31,13 @@ import org.w3c.dom.Node;
 
 import org.apache.camel.converter.jaxp.XmlConverter;
 import org.apache.camel.dataformat.tagsoup.TidyMarkupDataFormat;
+import org.apache.camel.util.IOHelper;
+
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
+
 import org.codehaus.plexus.util.cli.CommandLineException;
 import org.codehaus.plexus.util.cli.CommandLineUtils;
 import org.codehaus.plexus.util.cli.Commandline;
@@ -51,6 +52,8 @@ import org.codehaus.plexus.util.cli.StreamConsumer;
  * @phase compile
  */
 public class HtmlToPdfMojo extends AbstractMojo {
+
+    private static final String XSLT_SYSTEM_PROPERTY_KEY = "javax.xml.transform.TransformerFactory";
 
     /**
      * The URL to the confluence page to convert.
@@ -158,6 +161,14 @@ public class HtmlToPdfMojo extends AbstractMojo {
      */
     private String classifier;
 
+    /**
+     * The XSL transformer factory class name to be used which will be set through the <code>javax.xml.transform.TransformerFactory</code> system property.
+     *
+     * @parameter
+     */
+    private String transformerFactoryClassName;
+
+
     public void execute() throws MojoExecutionException {
         File outputDir = new File(pdf).getParentFile();
         if (!outputDir.exists()) {
@@ -194,9 +205,9 @@ public class HtmlToPdfMojo extends AbstractMojo {
         Argument arg;
 
         if (princeArgs != null) {
-            for (int i = 0; i < princeArgs.length; i++) {
+            for (String princeArg : princeArgs) {
                 arg = new Argument();
-                arg.setValue(princeArgs[i]);
+                arg.setValue(princeArg);
                 cl.addArg(arg);
             }
         }
@@ -241,7 +252,7 @@ public class HtmlToPdfMojo extends AbstractMojo {
     }
 
     private void storeDummyFile() throws FileNotFoundException {
-        PrintWriter out = new PrintWriter(new BufferedOutputStream(new FileOutputStream(getHTMLFileName())));
+        PrintWriter out = new PrintWriter(IOHelper.buffered(new FileOutputStream(getHTMLFileName())));
         out.println("<html>");
         out.println("<body>Generation of the offline PDF version of the manual failed, however you could try "
                     + "<a href=\"http://camel.apache.org/book-in-one-page.html\">the online HTML version</a>.</body>");
@@ -251,7 +262,7 @@ public class HtmlToPdfMojo extends AbstractMojo {
     }
 
     private void storeHTMLFile(String content) throws FileNotFoundException {
-        PrintWriter out = new PrintWriter(new BufferedOutputStream(new FileOutputStream(getHTMLFileName())));
+        PrintWriter out = new PrintWriter(IOHelper.buffered(new FileOutputStream(getHTMLFileName())));
         out.println("<html>");
         out.println("<head>");
         out.println("   <base href=\"" + page + "\"/>");
@@ -259,8 +270,8 @@ public class HtmlToPdfMojo extends AbstractMojo {
             out.println(head);
         }
         if (styleSheets != null) {
-            for (int i = 0; i < styleSheets.length; i++) {
-                out.println("   <link href=\"" + styleSheets[i] + "\" rel=\"stylesheet\" type=\"text/css\"/>");
+            for (String styleSheet : styleSheets) {
+                out.println("   <link href=\"" + styleSheet + "\" rel=\"stylesheet\" type=\"text/css\"/>");
             }
         }
         out.println("</head>");
@@ -283,6 +294,13 @@ public class HtmlToPdfMojo extends AbstractMojo {
     }
 
     private String downloadContent() throws MalformedURLException, MojoExecutionException {
+        // avoid the usage of default xslt by jdk as that could cause problems
+        String previousTransformerFactoryClassName = null;
+        if (transformerFactoryClassName != null) {
+            previousTransformerFactoryClassName = System.setProperty(XSLT_SYSTEM_PROPERTY_KEY, transformerFactoryClassName);
+            getLog().info("Set the XSL transformer factory class name to be '" + transformerFactoryClassName + "'");
+        }
+
         String contentTag = "<div class=\"" + contentDivClass + "\"";
 
         getLog().info("Downloading: " + page);
@@ -291,7 +309,7 @@ public class HtmlToPdfMojo extends AbstractMojo {
         try {
             TidyMarkupDataFormat dataFormat = new TidyMarkupDataFormat();
             dataFormat.setMethod("html");
-            Node doc = dataFormat.asNodeTidyMarkup(new BufferedInputStream(url.openStream()));
+            Node doc = dataFormat.asNodeTidyMarkup(IOHelper.buffered(url.openStream()));
             XPath xpath = XPathFactory.newInstance().newXPath();
             Node nd = (Node)xpath.evaluate("//div[@class='" + contentDivClass + "']", doc, XPathConstants.NODE);
             if (nd != null) {
@@ -304,7 +322,20 @@ public class HtmlToPdfMojo extends AbstractMojo {
                 getLog().error("Download or validation of '" + page + "' failed: " + e);
                 return null;
             }
-        }        
+        } finally {
+            // avoid any side effects by other camel modules (for example while running the tests) and reset the system property 
+            if (transformerFactoryClassName != null) {
+                if (previousTransformerFactoryClassName == null) {
+                    // remove the set system property
+                    System.getProperties().remove(XSLT_SYSTEM_PROPERTY_KEY);
+                    getLog().info("Removed the set XSL transformer factory class name '" + transformerFactoryClassName + "' from the system properties");
+                } else {
+                    // reset the previous system property value to whatever it was before
+                    System.setProperty(XSLT_SYSTEM_PROPERTY_KEY, previousTransformerFactoryClassName);
+                    getLog().info("Resetted the XSL transformer factory class name to be '" + previousTransformerFactoryClassName + "'");
+                }
+            }
+        }
         throw new MojoExecutionException("The '" + page + "' page did not have a " + contentTag + " element.");
     }
 

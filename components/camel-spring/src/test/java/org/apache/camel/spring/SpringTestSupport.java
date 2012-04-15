@@ -24,13 +24,11 @@ import java.util.Set;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.ContextTestSupport;
-import org.apache.camel.Route;
 import org.apache.camel.core.xml.AbstractCamelContextFactoryBean;
 import org.apache.camel.impl.DefaultPackageScanClassResolver;
 import org.apache.camel.impl.scan.AssignableToPackageScanFilter;
 import org.apache.camel.impl.scan.InvertingPackageScanFilter;
 import org.apache.camel.util.CastUtils;
-import org.apache.camel.util.ObjectHelper;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.AbstractXmlApplicationContext;
@@ -43,6 +41,7 @@ public abstract class SpringTestSupport extends ContextTestSupport {
     protected AbstractXmlApplicationContext applicationContext;
     protected abstract AbstractXmlApplicationContext createApplicationContext();
 
+    @SuppressWarnings("deprecation")
     @Override
     protected void setUp() throws Exception {
         if (isLazyLoadingTypeConverter()) {
@@ -68,7 +67,7 @@ public abstract class SpringTestSupport extends ContextTestSupport {
 
         public void setExcludedClasses(Set<Class<?>> excludedClasses) {
             if (excludedClasses == null) {
-                excludedClasses = CastUtils.cast(Collections.emptySet());
+                excludedClasses = Collections.emptySet();
             }
             addFilter(new InvertingPackageScanFilter(new AssignableToPackageScanFilter(excludedClasses)));
         }
@@ -137,23 +136,7 @@ public abstract class SpringTestSupport extends ContextTestSupport {
         return value;
     }
 
-    @Override
-    protected void assertValidContext(CamelContext context) {
-        super.assertValidContext(context);
-
-        List<Route> routes = context.getRoutes();
-        int routeCount = getExpectedRouteCount();
-        if (routeCount > 0) {
-            assertNotNull("Should have some routes defined", routes);
-            assertTrue("Should have at least one route", routes.size() >= routeCount);
-        }
-        log.debug("Camel Routes: " + routes);
-    }
-
-    protected int getExpectedRouteCount() {
-        return 1;
-    }
-
+    @SuppressWarnings("deprecation")
     @Override
     protected CamelContext createCamelContext() throws Exception {
         CamelContext context = SpringCamelContext.springCamelContext(applicationContext);

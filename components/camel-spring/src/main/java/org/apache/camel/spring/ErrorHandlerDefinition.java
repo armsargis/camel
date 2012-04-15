@@ -42,6 +42,8 @@ public class ErrorHandlerDefinition extends IdentifiedType {
     @XmlAttribute
     private LoggingLevel level = LoggingLevel.ERROR;
     @XmlAttribute
+    private LoggingLevel rollbackLoggingLevel = LoggingLevel.WARN;
+    @XmlAttribute
     private String logName;
     @XmlAttribute
     private Boolean useOriginalMessage;
@@ -58,7 +60,6 @@ public class ErrorHandlerDefinition extends IdentifiedType {
     @XmlAttribute
     private String executorServiceRef;
     @XmlElement
-    private RedeliveryPolicyDefinition redeliveryPolicy;
+    private CamelRedeliveryPolicyFactoryBean redeliveryPolicy;
 
-   
 }

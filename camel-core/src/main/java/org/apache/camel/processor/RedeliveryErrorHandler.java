@@ -201,6 +201,16 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         return false;
     }
 
+    @Override
+    public boolean isRunAllowed() {
+        // determine if we can still run, or the camel context is forcing a shutdown
+        boolean forceShutdown = camelContext.getShutdownStrategy().forceShutdown(this);
+        if (forceShutdown) {
+            log.trace("Run not allowed as ShutdownStrategy is forcing shutting down");
+        }
+        return !forceShutdown && super.isRunAllowed();
+    }
+
     public void process(Exchange exchange) throws Exception {
         if (output == null) {
             // no output then just return
@@ -227,6 +237,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
 
             // can we still run
             if (!isRunAllowed()) {
+                log.trace("Run not allowed, will reject executing exchange: {}", exchange);
                 if (exchange.getException() == null) {
                     exchange.setException(new RejectedExecutionException());
                 }
@@ -393,6 +404,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
     protected void processAsyncErrorHandler(final Exchange exchange, final AsyncCallback callback, final RedeliveryData data) {
         // can we still run
         if (!isRunAllowed()) {
+            log.trace("Run not allowed, will reject executing exchange: {}", exchange);
             if (exchange.getException() == null) {
                 exchange.setException(new RejectedExecutionException());
             }
@@ -568,7 +580,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         // keep the Exchange.EXCEPTION_CAUGHT as property so end user knows the caused exception
 
         // create log message
-        String msg = "Failed delivery for exchangeId: " + exchange.getExchangeId();
+        String msg = "Failed delivery for " + ExchangeHelper.logIds(exchange);
         msg = msg + ". Exhausted after delivery attempt: " + data.redeliveryCounter + " caught: " + caught;
         msg = msg + ". Handled and continue routing.";
 
@@ -656,7 +668,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
 
         // only log if not failure handled or not an exhausted unit of work
         if (!ExchangeHelper.isFailureHandled(exchange) && !ExchangeHelper.isUnitOfWorkExhausted(exchange)) {
-            String msg = "Failed delivery for exchangeId: " + exchange.getExchangeId()
+            String msg = "Failed delivery for " + ExchangeHelper.logIds(exchange)
                     + ". On delivery attempt: " + data.redeliveryCounter + " caught: " + e;
             logFailedDelivery(true, false, false, exchange, msg, data, e);
         }
@@ -700,13 +712,21 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         // clear exception as we let the failure processor handle it
         exchange.setException(null);
 
-        boolean handled = false;
+        final boolean shouldHandle = shouldHandled(exchange, data);
+        final boolean shouldContinue = shouldContinue(exchange, data);
         // regard both handled or continued as being handled
-        if (shouldHandled(exchange, data) || shouldContinue(exchange, data)) {
+        boolean handled = false;
+
+        if (shouldHandle || shouldContinue) {
             // its handled then remove traces of redelivery attempted
             exchange.getIn().removeHeader(Exchange.REDELIVERED);
             exchange.getIn().removeHeader(Exchange.REDELIVERY_COUNTER);
             exchange.getIn().removeHeader(Exchange.REDELIVERY_MAX_COUNTER);
+
+            // and remove traces of rollback only and uow exhausted markers
+            exchange.removeProperty(Exchange.ROLLBACK_ONLY);
+            exchange.removeProperty(Exchange.UNIT_OF_WORK_EXHAUSTED);
+
             handled = true;
         } else {
             // must decrement the redelivery counter as we didn't process the redelivery but is
@@ -742,7 +762,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
                 public void done(boolean sync) {
                     log.trace("Failure processor done: {} processing Exchange: {}", processor, exchange);
                     try {
-                        prepareExchangeAfterFailure(exchange, data);
+                        prepareExchangeAfterFailure(exchange, data, shouldHandle, shouldContinue);
                         // fire event as we had a failure processor to handle it, which there is a event for
                         boolean deadLetterChannel = processor == data.deadLetterProcessor && data.deadLetterProcessor != null;
                         EventHelper.notifyExchangeFailureHandled(exchange.getContext(), exchange, processor, deadLetterChannel);
@@ -756,7 +776,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         } else {
             try {
                 // no processor but we need to prepare after failure as well
-                prepareExchangeAfterFailure(exchange, data);
+                prepareExchangeAfterFailure(exchange, data, shouldHandle, shouldContinue);
             } finally {
                 // callback we are done
                 callback.done(data.sync);
@@ -764,7 +784,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         }
 
         // create log message
-        String msg = "Failed delivery for exchangeId: " + exchange.getExchangeId();
+        String msg = "Failed delivery for " + ExchangeHelper.logIds(exchange);
         msg = msg + ". Exhausted after delivery attempt: " + data.redeliveryCounter + " caught: " + caught;
         if (processor != null) {
             msg = msg + ". Processed by failure processor: " + processor;
@@ -776,7 +796,8 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         return sync;
     }
 
-    protected void prepareExchangeAfterFailure(final Exchange exchange, final RedeliveryData data) {
+    protected void prepareExchangeAfterFailure(final Exchange exchange, final RedeliveryData data,
+                                               final boolean shouldHandle, final boolean shouldContinue) {
         // we could not process the exchange so we let the failure processor handled it
         ExchangeHelper.setFailureHandled(exchange);
 
@@ -796,10 +817,10 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
             return;
         }
 
-        if (shouldHandled(exchange, data)) {
+        if (shouldHandle) {
             log.trace("This exchange is handled so its marked as not failed: {}", exchange);
             exchange.setProperty(Exchange.ERRORHANDLER_HANDLED, Boolean.TRUE);
-        } else if (shouldContinue(exchange, data)) {
+        } else if (shouldContinue) {
             log.trace("This exchange is continued: {}", exchange);
             // okay we want to continue then prepare the exchange for that as well
             prepareExchangeForContinue(exchange, data);
@@ -858,7 +879,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
         }
 
         if (exchange.isRollbackOnly()) {
-            String msg = "Rollback exchangeId: " + exchange.getExchangeId();
+            String msg = "Rollback " + ExchangeHelper.logIds(exchange);
             Throwable cause = exchange.getException() != null ? exchange.getException() : exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Throwable.class);
             if (cause != null) {
                 msg = msg + " due: " + cause.getMessage();
@@ -1056,6 +1077,6 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport impleme
 
     @Override
     protected void doShutdown() throws Exception {
-        ServiceHelper.stopServices(deadLetter, output, outputAsync);
+        ServiceHelper.stopAndShutdownServices(deadLetter, output, outputAsync);
     }
 }

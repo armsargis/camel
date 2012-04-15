@@ -48,6 +48,12 @@ public class URISupportTest extends ContextTestSupport {
         out1 = URISupport.normalizeUri("seda:foo?concurrentConsumer=2");
         out2 = URISupport.normalizeUri("seda:foo");
         assertNotSame(out1, out2);
+        
+        out1 = URISupport.normalizeUri("foo:?test=1");
+        out2 = URISupport.normalizeUri("foo://?test=1");
+        assertEquals("foo://?test=1", out2);
+        assertEquals(out1, out2);
+        
     }
 
     public void testNormalizeEndpointUriNoParam() throws Exception {
@@ -97,7 +103,7 @@ public class URISupportTest extends ContextTestSupport {
 
     public void testCreateRemaingURI() throws Exception {
         URI original = new URI("http://camel.apache.org");
-        Map<Object, Object> param = new HashMap<Object, Object>();
+        Map<String, Object> param = new HashMap<String, Object>();
         param.put("foo", "123");
         URI newUri = URISupport.createRemainingURI(original, param);
         assertNotNull(newUri);
@@ -120,6 +126,13 @@ public class URISupportTest extends ContextTestSupport {
         assertEquals("jms://queue:foo?foo=bar&selector=somekey%3D%27somevalue%27", out);
     }
 
+    public void testNormalizeEndpointWithPercentSignInParameter() throws Exception {
+        String out = URISupport.normalizeUri("http://someendpoint?username=james&password=%25test");
+        assertNotNull(out);
+        // Camel will safe encode the URI
+        assertEquals("http://someendpoint?password=%25test&username=james", out);
+    }
+
     public void testParseParameters() throws Exception {
         URI u = new URI("quartz:myGroup/myTimerName?cron=0+0+*+*+*+?");
         Map<String, Object> params = URISupport.parseParameters(u);
@@ -138,7 +151,7 @@ public class URISupportTest extends ContextTestSupport {
         String uri = "http://localhost:23271/myapp/mytest?columns=name%2Ctotalsens%2Cupsens&username=apiuser";
 
         // these are the parameters which is tricky to encode
-        Map<Object, Object> map = new LinkedHashMap<Object, Object>();
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
         map.put("foo", "abc def");
         map.put("bar", "123,456");
         map.put("name", "S\u00F8ren"); // danish letter

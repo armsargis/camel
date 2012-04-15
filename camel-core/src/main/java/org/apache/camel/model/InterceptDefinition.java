@@ -75,10 +75,10 @@ public class InterceptDefinition extends OutputDefinition<InterceptDefinition> {
         routeContext.getInterceptStrategies().add(new InterceptStrategy() {
             private Processor interceptedTarget;
 
-            public Processor wrapProcessorInInterceptors(CamelContext context, ProcessorDefinition definition,
+            public Processor wrapProcessorInInterceptors(CamelContext context, ProcessorDefinition<?> definition,
                                                          Processor target, Processor nextTarget) throws Exception {
-                // prefer next target over target as next target is the real target
-                interceptedTarget = nextTarget != null ? nextTarget : target;
+                // store the target we are intercepting
+                this.interceptedTarget = target;
 
                 // remember the target that was intercepted
                 intercepted.add(interceptedTarget);
@@ -112,15 +112,16 @@ public class InterceptDefinition extends OutputDefinition<InterceptDefinition> {
      * @param predicate the predicate
      * @return the builder
      */
-    public ChoiceDefinition when(Predicate predicate) {
-        return choice().when(predicate);
+    public InterceptDefinition when(Predicate predicate) {
+        WhenDefinition when = new WhenDefinition(predicate);
+        addOutput(when);
+        return this;
     }
 
     /**
      * This method is <b>only</b> for handling some post configuration
-     * that is needed from the Spring DSL side as JAXB does not invoke the fluent
-     * builders, so we need to manually handle this afterwards, and since this is
-     * an interceptor it has to do a bit of magic logic to fixup to handle predicates
+     * that is needed since this is an interceptor, and we have to do
+     * a bit of magic logic to fixup to handle predicates
      * with or without proceed/stop set as well.
      */
     public void afterPropertiesSet() {
@@ -129,17 +130,17 @@ public class InterceptDefinition extends OutputDefinition<InterceptDefinition> {
             return;
         }
 
-        ProcessorDefinition first = getOutputs().get(0);
+        ProcessorDefinition<?> first = getOutputs().get(0);
         if (first instanceof WhenDefinition) {
             WhenDefinition when = (WhenDefinition) first;
             // move this outputs to the when, expect the first one
             // as the first one is the interceptor itself
             for (int i = 1; i < outputs.size(); i++) {
-                ProcessorDefinition out = outputs.get(i);
+                ProcessorDefinition<?> out = outputs.get(i);
                 when.addOutput(out);
             }
             // remove the moved from the original output, by just keeping the first one
-            ProcessorDefinition keep = outputs.get(0);
+            ProcessorDefinition<?> keep = outputs.get(0);
             clearOutput();
             outputs.add(keep);
         }

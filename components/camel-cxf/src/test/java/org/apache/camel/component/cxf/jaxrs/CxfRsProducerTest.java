@@ -28,12 +28,11 @@ import org.apache.camel.ExchangePattern;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.component.cxf.CXFTestSupport;
+import org.apache.camel.component.cxf.CxfOperationException;
 import org.apache.camel.component.cxf.common.message.CxfConstants;
 import org.apache.camel.component.cxf.jaxrs.testbean.Customer;
-import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit4.CamelSpringTestSupport;
 import org.apache.camel.util.CastUtils;
-import org.apache.http.util.EntityUtils;
 import org.junit.Test;
 import org.springframework.context.support.AbstractXmlApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
@@ -71,7 +70,7 @@ public class CxfRsProducerTest extends CamelSpringTestSupport {
     }
     
     @Test
-    public void testGetConstumerWithClientProxyAPI() {
+    public void testGetCostumerWithClientProxyAPI() {
         // START SNIPPET: ProxyExample
         Exchange exchange = template.send("direct://proxy", new Processor() {
             public void process(Exchange exchange) throws Exception {
@@ -82,6 +81,8 @@ public class CxfRsProducerTest extends CamelSpringTestSupport {
                 inMessage.setHeader(CxfConstants.OPERATION_NAME, "getCustomer");
                 // using the proxy client API
                 inMessage.setHeader(CxfConstants.CAMEL_CXF_RS_USING_HTTP_API, Boolean.FALSE);
+                // set a customer header
+                inMessage.setHeader("key", "value");
                 // set the parameters , if you just have one parameter 
                 // camel will put this object into an Object[] itself
                 inMessage.setBody("123");
@@ -95,11 +96,13 @@ public class CxfRsProducerTest extends CamelSpringTestSupport {
         assertEquals("Get a wrong customer id ", String.valueOf(response.getId()), "123");
         assertEquals("Get a wrong customer name", response.getName(), "John");
         assertEquals("Get a wrong response code", 200, exchange.getOut().getHeader(Exchange.HTTP_RESPONSE_CODE));
+        System.out.println(exchange.getOut().getHeaders());
+        assertEquals("Get a wrong header value", "value", exchange.getOut().getHeader("key"));
         // END SNIPPET: ProxyExample     
     }
     
     @Test
-    public void testGetConstumersWithClientProxyAPI() {
+    public void testGetCostumersWithClientProxyAPI() {
         Exchange exchange = template.send("direct://proxy", new Processor() {
             public void process(Exchange exchange) throws Exception {
                 exchange.setPattern(ExchangePattern.InOut);
@@ -116,7 +119,7 @@ public class CxfRsProducerTest extends CamelSpringTestSupport {
         });
      
         // get the response message 
-        List<Customer> response = CastUtils.cast((List) exchange.getOut().getBody());
+        List<Customer> response = CastUtils.cast((List<?>) exchange.getOut().getBody());
         
         assertNotNull("The response should not be null ", response);
         assertEquals("Get a wrong customer id ", String.valueOf(response.get(0).getId()), "113");
@@ -125,7 +128,7 @@ public class CxfRsProducerTest extends CamelSpringTestSupport {
     }
     
     @Test
-    public void testGetConstumerWithHttpCentralClientAPI() {
+    public void testGetCostumerWithHttpCentralClientAPI() {
      // START SNIPPET: HttpExample
         Exchange exchange = template.send("direct://http", new Processor() {
             public void process(Exchange exchange) throws Exception {
@@ -140,6 +143,8 @@ public class CxfRsProducerTest extends CamelSpringTestSupport {
                 inMessage.setHeader(Exchange.HTTP_PATH, "/customerservice/customers/123");                
                 // Specify the response class , cxfrs will use InputStream as the response object type 
                 inMessage.setHeader(CxfConstants.CAMEL_CXF_RS_RESPONSE_CLASS, Customer.class);
+                // set a customer header
+                inMessage.setHeader("key", "value");
                 // since we use the Get method, so we don't need to set the message body
                 inMessage.setBody(null);                
             }
@@ -152,11 +157,39 @@ public class CxfRsProducerTest extends CamelSpringTestSupport {
         assertEquals("Get a wrong customer id ", String.valueOf(response.getId()), "123");
         assertEquals("Get a wrong customer name", response.getName(), "John");
         assertEquals("Get a wrong response code", 200, exchange.getOut().getHeader(Exchange.HTTP_RESPONSE_CODE));
+        assertEquals("Get a wrong header value", "value", exchange.getOut().getHeader("key"));
         // END SNIPPET: HttpExample 
     }
     
     @Test
-    public void testGetConstumerWithCxfRsEndpoint() {
+    public void testGetCustomerExceptionWithCxfRsEndpoint() {
+        Exchange exchange 
+            = template.send("cxfrs://http://localhost:" + getPort1() + "/" + getClass().getSimpleName() + "/?httpClientAPI=true", new Processor() {
+                public void process(Exchange exchange) throws Exception {
+                    exchange.setPattern(ExchangePattern.InOut);
+                    Message message = exchange.getIn();
+                    // set the Http method
+                    message.setHeader(Exchange.HTTP_METHOD, "PUT");
+                    // set the relative path
+                    message.setHeader(Exchange.HTTP_PATH, "/customerservice/customers");
+                    // we just setup the customer with a wrong id
+                    Customer customer = new Customer();
+                    customer.setId(222);
+                    customer.setName("user");
+                    message.setBody(customer);                
+                }
+            });
+ 
+        // we should get the exception here 
+        assertNotNull("Expect the exception here", exchange.getException());
+        CxfOperationException exception = (CxfOperationException)exchange.getException();
+        
+        assertEquals("Get a wrong response body", "Cannot find the customer!", exception.getResponseBody());
+        
+    }
+    
+    @Test
+    public void testGetCustumerWithCxfRsEndpoint() {
         Exchange exchange 
             = template.send("cxfrs://http://localhost:" + getPort1() + "/" + getClass().getSimpleName() + "/?httpClientAPI=true", new Processor() {
                 public void process(Exchange exchange) throws Exception {

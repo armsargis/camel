@@ -39,6 +39,7 @@ public class InterceptSendToMockEndpointStrategy implements EndpointStrategy {
 
     private static final Logger LOG = LoggerFactory.getLogger(InterceptSendToMockEndpointStrategy.class);
     private final String pattern;
+    private boolean skip;
 
     /**
      * Mock all endpoints.
@@ -51,10 +52,22 @@ public class InterceptSendToMockEndpointStrategy implements EndpointStrategy {
      * Mock endpoints based on the given pattern.
      *
      * @param pattern the pattern.
-     * @see EndpointHelper#matchEndpoint(String, String)
+     * @see EndpointHelper#matchEndpoint(org.apache.camel.CamelContext, String, String)
      */
     public InterceptSendToMockEndpointStrategy(String pattern) {
+        this(pattern, false);
+    }
+
+    /**
+     * Mock endpoints based on the given pattern.
+     *
+     * @param pattern the pattern.
+     * @param skip <tt>true</tt> to skip sending after the detour to the original endpoint
+     * @see EndpointHelper#matchEndpoint(org.apache.camel.CamelContext, String, String)
+     */
+    public InterceptSendToMockEndpointStrategy(String pattern, boolean skip) {
         this.pattern = pattern;
+        this.skip = skip;
     }
 
     public Endpoint registerEndpoint(String uri, Endpoint endpoint) {
@@ -64,12 +77,12 @@ public class InterceptSendToMockEndpointStrategy implements EndpointStrategy {
         } else if (endpoint instanceof MockEndpoint) {
             // we should not intercept mock endpoints
             return endpoint;
-        } else if (uri == null || pattern == null || EndpointHelper.matchEndpoint(uri, pattern)) {
+        } else if (uri == null || pattern == null || EndpointHelper.matchEndpoint(endpoint.getCamelContext(), uri, pattern)) {
             // if pattern is null then it mean to match all
 
             // only proxy if the uri is matched decorate endpoint with our proxy
             // should be false by default
-            InterceptSendToEndpoint proxy = new InterceptSendToEndpoint(endpoint, false);
+            InterceptSendToEndpoint proxy = new InterceptSendToEndpoint(endpoint, skip);
 
             // create mock endpoint which we will use as interceptor
             // replace :// from scheme to make it easy to lookup the mock endpoint without having double :// in uri

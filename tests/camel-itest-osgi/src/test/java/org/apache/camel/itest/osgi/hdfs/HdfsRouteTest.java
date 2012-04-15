@@ -27,7 +27,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
-import org.apache.karaf.testing.Helper;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.Customizer;
@@ -38,11 +37,8 @@ import org.osgi.framework.Constants;
 
 
 import static org.apache.hadoop.io.SequenceFile.createWriter;
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.felix;
 import static org.ops4j.pax.exam.OptionUtils.combine;
 import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.scanFeatures;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.workingDirectory;
 import static org.ops4j.pax.swissbox.tinybundles.core.TinyBundles.modifyBundle;
 
 @RunWith(JUnit4TestRunner.class)
@@ -83,10 +79,11 @@ public class HdfsRouteTest extends OSGiIntegrationTestSupport {
     @Configuration
     public static Option[] configure() throws Exception {
         Option[] options = combine(
-                // Default karaf environment
-                Helper.getDefaultOptions(
-                        // this is how you set the default log level when using pax logging (logProfile)
-                        Helper.setLogLevel("WARN")),
+
+                getDefaultCamelKarafOptions(),
+                // using the features to install the camel components
+                scanFeatures(getCamelKarafFeatureUrl(), "camel-hdfs"),
+
                 new Customizer() {
                     @Override
                     public InputStream customizeTestProbe(InputStream testProbe) {
@@ -98,16 +95,7 @@ public class HdfsRouteTest extends OSGiIntegrationTestSupport {
                                 .set(Constants.DYNAMICIMPORT_PACKAGE, "*")
                                 .build();
                     }
-                },
-
-                // install the spring.
-                scanFeatures(getKarafFeatureUrl(), "spring"),
-                // using the features to install the camel components
-                scanFeatures(getCamelKarafFeatureUrl(),
-                        "camel-core", "camel-spring", "camel-test", "camel-hdfs"),
-                workingDirectory("target/paxrunner/"),
-                //vmOption("-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"),
-                felix(), equinox());
+                });
 
         return options;
     }

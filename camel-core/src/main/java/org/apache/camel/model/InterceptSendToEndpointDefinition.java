@@ -80,21 +80,20 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
     }
 
     @Override
-    public Processor createProcessor(RouteContext routeContext) throws Exception {
+    public Processor createProcessor(final RouteContext routeContext) throws Exception {
         // create the detour
         final Processor detour = this.createChildProcessor(routeContext, true);
 
         // register endpoint callback so we can proxy the endpoint
         routeContext.getCamelContext().addRegisterEndpointCallback(new EndpointStrategy() {
             public Endpoint registerEndpoint(String uri, Endpoint endpoint) {
-                
                 if (endpoint instanceof InterceptSendToEndpoint) {
                     // endpoint already decorated
                     return endpoint;
-                } else if (getUri() == null || EndpointHelper.matchEndpoint(uri, getUri())) {
+                } else if (getUri() == null || EndpointHelper.matchEndpoint(routeContext.getCamelContext(), uri, getUri())) {
                     // only proxy if the uri is matched decorate endpoint with our proxy
                     // should be false by default
-                    boolean skip = getSkipSendToOriginalEndpoint() != null ? getSkipSendToOriginalEndpoint() : false;
+                    boolean skip = isSkipSendToOriginalEndpoint();
                     InterceptSendToEndpoint proxy = new InterceptSendToEndpoint(endpoint, skip);
                     proxy.setDetour(detour);
                     return proxy;
@@ -110,7 +109,7 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
         // instead we use the proxy endpoints producer do the triggering. That is we trigger when someone sends
         // an exchange to the endpoint, see InterceptSendToEndpoint for details.
         RouteDefinition route = routeContext.getRoute();
-        List<ProcessorDefinition> outputs = route.getOutputs();
+        List<ProcessorDefinition<?>> outputs = route.getOutputs();
         outputs.remove(this);
 
         return new InterceptEndpointProcessor(uri, detour);
@@ -122,8 +121,10 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
      * @param predicate  the predicate
      * @return the builder
      */
-    public ChoiceDefinition when(Predicate predicate) {
-        return choice().when(predicate);
+    public InterceptSendToEndpointDefinition when(Predicate predicate) {
+        WhenDefinition when = new WhenDefinition(predicate);
+        addOutput(when);
+        return this;
     }
 
     /**
@@ -138,9 +139,8 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
 
     /**
      * This method is <b>only</b> for handling some post configuration
-     * that is needed from the Spring DSL side as JAXB does not invoke the fluent
-     * builders, so we need to manually handle this afterwards, and since this is
-     * an interceptor it has to do a bit of magic logic to fixup to handle predicates
+     * that is needed since this is an interceptor, and we have to do
+     * a bit of magic logic to fixup to handle predicates
      * with or without proceed/stop set as well.
      */
     public void afterPropertiesSet() {
@@ -152,19 +152,30 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
             return;
         }
 
-        ProcessorDefinition first = getOutputs().get(0);
-        if (first instanceof WhenDefinition) {
+        // if there is a when definition at first, then its a predicate for this interceptor
+        ProcessorDefinition<?> first = getOutputs().get(0);
+        if (first instanceof WhenDefinition && !(first instanceof WhenSkipSendToEndpointDefinition)) {
             WhenDefinition when = (WhenDefinition) first;
+
+            // create a copy of when to use as replacement
+            WhenSkipSendToEndpointDefinition newWhen = new WhenSkipSendToEndpointDefinition();
+            newWhen.setExpression(when.getExpression());
+            newWhen.setId(when.getId());
+            newWhen.setInheritErrorHandler(when.isInheritErrorHandler());
+            newWhen.setParent(when.getParent());
+            newWhen.setOtherAttributes(when.getOtherAttributes());
+            newWhen.setNodeFactory(when.getNodeFactory());
+            newWhen.setDescription(when.getDescription());
+
             // move this outputs to the when, expect the first one
             // as the first one is the interceptor itself
             for (int i = 1; i < outputs.size(); i++) {
-                ProcessorDefinition out = outputs.get(i);
-                when.addOutput(out);
+                ProcessorDefinition<?> out = outputs.get(i);
+                newWhen.addOutput(out);
             }
             // remove the moved from the original output, by just keeping the first one
-            ProcessorDefinition keep = outputs.get(0);
             clearOutput();
-            outputs.add(keep);
+            outputs.add(newWhen);
         }
     }
 
@@ -174,6 +185,10 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
 
     public void setSkipSendToOriginalEndpoint(Boolean skipSendToOriginalEndpoint) {
         this.skipSendToOriginalEndpoint = skipSendToOriginalEndpoint;
+    }
+    
+    public boolean isSkipSendToOriginalEndpoint() {
+        return skipSendToOriginalEndpoint != null && skipSendToOriginalEndpoint;
     }
 
     public String getUri() {

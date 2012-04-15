@@ -21,10 +21,7 @@ import java.util.Date;
 import org.apache.camel.api.management.ManagedAttribute;
 import org.apache.camel.api.management.ManagedOperation;
 
-public interface ManagedPerformanceCounterMBean {
-
-    @ManagedOperation(description = "Reset counters")
-    void reset();
+public interface ManagedPerformanceCounterMBean extends ManagedCounterMBean {
 
     @ManagedAttribute(description = "Number of completed exchanges")
     long getExchangesCompleted() throws Exception;
@@ -35,8 +32,11 @@ public interface ManagedPerformanceCounterMBean {
     @ManagedAttribute(description = "Number of failures handled")
     long getFailuresHandled() throws Exception;
 
-    @ManagedAttribute(description = "Number of redeliveries")
+    @ManagedAttribute(description = "Number of redeliveries (internal only)")
     long getRedeliveries() throws Exception;
+
+    @ManagedAttribute(description = "Number of external initiated redeliveries (such as from JMS broker)")
+    long getExternalRedeliveries() throws Exception;
 
     @ManagedAttribute(description = "Min Processing Time [milliseconds]")
     long getMinProcessingTime() throws Exception;
@@ -56,19 +56,34 @@ public interface ManagedPerformanceCounterMBean {
     @ManagedAttribute(description = "Last Exchange Completed Timestamp")
     Date getLastExchangeCompletedTimestamp();
 
+    @ManagedAttribute(description = "Last Exchange Completed ExchangeId")
+    String getLastExchangeCompletedExchangeId();
+
     @ManagedAttribute(description = "First Exchange Completed Timestamp")
     Date getFirstExchangeCompletedTimestamp();
+
+    @ManagedAttribute(description = "First Exchange Completed ExchangeId")
+    String getFirstExchangeCompletedExchangeId();
 
     @ManagedAttribute(description = "Last Exchange Failed Timestamp")
     Date getLastExchangeFailureTimestamp();
 
+    @ManagedAttribute(description = "Last Exchange Failed ExchangeId")
+    String getLastExchangeFailureExchangeId();
+
     @ManagedAttribute(description = "First Exchange Failed Timestamp")
     Date getFirstExchangeFailureTimestamp();
+
+    @ManagedAttribute(description = "First Exchange Failed ExchangeId")
+    String getFirstExchangeFailureExchangeId();
 
     @ManagedAttribute(description = "Statistics enabled")
     boolean isStatisticsEnabled();
 
     @ManagedAttribute(description = "Statistics enabled")
     void setStatisticsEnabled(boolean statisticsEnabled);
+
+    @ManagedOperation(description = "Dumps the statistics as XML")
+    String dumpStatsAsXml(boolean fullStats);
 
 }

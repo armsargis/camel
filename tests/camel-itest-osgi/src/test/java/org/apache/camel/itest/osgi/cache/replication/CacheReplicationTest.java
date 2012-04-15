@@ -17,7 +17,6 @@
 package org.apache.camel.itest.osgi.cache.replication;
 
 import org.apache.camel.itest.osgi.OSGiIntegrationSpringTestSupport;
-import org.apache.karaf.testing.Helper;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -30,7 +29,6 @@ import org.springframework.osgi.context.support.OsgiBundleXmlApplicationContext;
 import static org.ops4j.pax.exam.CoreOptions.felix;
 import static org.ops4j.pax.exam.OptionUtils.combine;
 import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.scanFeatures;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.workingDirectory;
 
 
 
@@ -55,7 +53,7 @@ public class CacheReplicationTest extends OSGiIntegrationSpringTestSupport {
         template.sendBody("direct:addRoute", "Am I replicated?");
 
         // give some time to make replication
-        Thread.sleep(200);
+        Thread.sleep(300);
 
         template.sendBody("direct:getRoute1", "Will I get replicated cache");
         template.sendBody("direct:getRoute2", "Will I get replicated cache");
@@ -66,24 +64,14 @@ public class CacheReplicationTest extends OSGiIntegrationSpringTestSupport {
     @Configuration
     public static Option[] configure() throws Exception {
         Option[] options = combine(
-        // Default karaf environment
-                Helper.getDefaultOptions(
-                    // this is how you set the default log level when using pax
-                    // logging (logProfile)
-                    Helper.setLogLevel("WARN")),
-                    
-                    // install the spring, http features first
-                    scanFeatures(getKarafFeatureUrl(), "spring", "spring-dm", "jetty"),
+                // Default karaf environment
+                getDefaultCamelKarafOptions(),
+                // using the features to install the camel components
+                scanFeatures(getCamelKarafFeatureUrl(), "jetty", "camel-jms", "camel-cache"),
 
-                    // using the features to install AMQ
-                    scanFeatures("mvn:org.apache.activemq/activemq-karaf/5.5.0/xml/features",
-                            "activemq"),
-
-                    // using the features to install the camel components
-                    scanFeatures(getCamelKarafFeatureUrl(),
-                            "camel-core", "camel-spring", "camel-test", "camel-jms", "camel-cache"),
-
-                workingDirectory("target/paxrunner/"),
+                // using the features to install AMQ
+                scanFeatures("mvn:org.apache.activemq/activemq-karaf/5.5.0/xml/features",
+                        "activemq"),
 
                 felix());
 

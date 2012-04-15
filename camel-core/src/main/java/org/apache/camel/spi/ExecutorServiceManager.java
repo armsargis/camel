@@ -101,12 +101,12 @@ public interface ExecutorServiceManager extends ShutdownableService {
     /**
      * Sets the thread name pattern used for creating the full thread name.
      * <p/>
-     * The default pattern is: <tt>Camel (${camelId}) thread #${counter} - ${name}</tt>
+     * The default pattern is: <tt>Camel (#camelId#) thread ##counter# - #name#</tt>
      * <p/>
-     * Where <tt>${camelId}</tt> is the name of the {@link org.apache.camel.CamelContext}
-     * <br/>and <tt>${counter}</tt> is a unique incrementing counter.
-     * <br/>and <tt>${name}</tt> is the regular thread name.
-     * <br/>You can also use <tt>${longName}</tt> is the long thread name which can includes endpoint parameters etc.
+     * Where <tt>#camelId#</tt> is the name of the {@link org.apache.camel.CamelContext}
+     * <br/>and <tt>#counter#</tt> is a unique incrementing counter.
+     * <br/>and <tt>#name#</tt> is the regular thread name.
+     * <br/>You can also use <tt>#longName#</tt> is the long thread name which can includes endpoint parameters etc.
      *
      * @param pattern the pattern
      * @throws IllegalArgumentException if the pattern is invalid.
@@ -174,6 +174,10 @@ public interface ExecutorServiceManager extends ShutdownableService {
 
     /**
      * Creates a new single-threaded thread pool. This is often used for background threads.
+     * <p/>
+     * Notice that there will always be a single thread in the pool. If you want the pool to be
+     * able to shrink to no threads, then use the <tt>newThreadPool</tt> method, and use
+     * 0 in core pool size, and 1 in max pool size.
      *
      * @param source      the source object, usually it should be <tt>this</tt> passed in as parameter
      * @param name        name which is appended to the thread name

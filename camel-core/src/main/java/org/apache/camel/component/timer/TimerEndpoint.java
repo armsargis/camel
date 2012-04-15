@@ -21,10 +21,10 @@ import java.util.Timer;
 
 import org.apache.camel.Component;
 import org.apache.camel.Consumer;
+import org.apache.camel.MultipleConsumersSupport;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
 import org.apache.camel.RuntimeCamelException;
-import org.apache.camel.Service;
 import org.apache.camel.api.management.ManagedAttribute;
 import org.apache.camel.api.management.ManagedResource;
 import org.apache.camel.impl.DefaultEndpoint;
@@ -34,8 +34,8 @@ import org.apache.camel.impl.DefaultEndpoint;
  *
  * @version 
  */
-@ManagedResource(description = "Managed Timer Endpoint")
-public class TimerEndpoint extends DefaultEndpoint {
+@ManagedResource(description = "Managed TimerEndpoint")
+public class TimerEndpoint extends DefaultEndpoint implements MultipleConsumersSupport {
     private String timerName;
     private Date time;
     private long period = 1000;
@@ -61,12 +61,21 @@ public class TimerEndpoint extends DefaultEndpoint {
         return new TimerConsumer(this, processor);
     }
 
-    public void start() throws Exception {
+    @Override
+    protected void doStart() throws Exception {
+        super.doStart();
         // do nothing, the timer will be set when the first consumer will request it
     }
 
-    public void stop() throws Exception {
+    @Override
+    protected void doStop() throws Exception {
         setTimer(null);
+        super.doStop();
+    }
+
+    @ManagedAttribute
+    public boolean isMultipleConsumersSupported() {
+        return true;
     }
 
     @ManagedAttribute(description = "Timer Name")
@@ -165,5 +174,10 @@ public class TimerEndpoint extends DefaultEndpoint {
     @ManagedAttribute(description = "Endpoint Uri")
     public String getEndpointUri() {
         return super.getEndpointUri();
+    }
+
+    @ManagedAttribute(description = "Endpoint State")
+    public String getState() {
+        return getStatus().name();
     }
 }

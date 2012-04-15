@@ -24,7 +24,6 @@ import java.util.Scanner;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.InvalidPayloadException;
-import org.apache.camel.Predicate;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
 
@@ -98,7 +97,7 @@ public class TokenPairExpressionIterator extends ExpressionAdapter {
      * @param charset charset
      * @return the iterator
      */
-    protected Iterator createIterator(InputStream in, String charset) {
+    protected Iterator<?> createIterator(InputStream in, String charset) {
         TokenPairIterator iterator = new TokenPairIterator(startToken, endToken, includeTokens, in, charset);
         iterator.init();
         return iterator;
@@ -112,7 +111,7 @@ public class TokenPairExpressionIterator extends ExpressionAdapter {
     /**
      * Iterator to walk the input stream
      */
-    static class TokenPairIterator implements Iterator, Closeable {
+    static class TokenPairIterator implements Iterator<Object>, Closeable {
 
         final String startToken;
         String scanStartToken;

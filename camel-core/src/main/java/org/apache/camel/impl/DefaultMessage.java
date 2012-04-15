@@ -22,7 +22,6 @@ import java.util.Set;
 import javax.activation.DataHandler;
 
 import org.apache.camel.Exchange;
-import org.apache.camel.Message;
 import org.apache.camel.util.CaseInsensitiveMap;
 import org.apache.camel.util.EndpointHelper;
 import org.apache.camel.util.MessageHelper;
@@ -45,12 +44,6 @@ public class DefaultMessage extends MessageSupport {
     @Override
     public String toString() {
         return MessageHelper.extractBodyForLogging(this);
-    }
-
-    @Override
-    public void copyFrom(Message that) {
-        super.copyFrom(that);
-        fault = that.isFault();
     }
 
     public boolean isFault() {
@@ -237,6 +230,21 @@ public class DefaultMessage extends MessageSupport {
         // do nothing by default
     }
 
+    /**
+     * A strategy for component specific messages to determine whether the
+     * message is redelivered or not.
+     * <p/>
+     * <b>Important: </b> It is not always possible to determine if the transacted is a redelivery
+     * or not, and therefore <tt>null</tt> is returned. Such an example would be a JDBC message.
+     * However JMS brokers provides details if a transacted message is redelivered.
+     *
+     * @return <tt>true</tt> if redelivered, <tt>false</tt> if not, <tt>null</tt> if not able to determine
+     */
+    protected Boolean isTransactedRedelivered() {
+        // return null by default
+        return null;
+    }
+
     public void addAttachment(String id, DataHandler content) {
         if (attachments == null) {
             attachments = createAttachments();
@@ -273,6 +281,9 @@ public class DefaultMessage extends MessageSupport {
     }
 
     public boolean hasAttachments() {
+        // optimized to avoid calling createAttachments as that creates a new empty map
+        // that we 99% do not need (only camel-mail supports attachments), and we have
+        // then ensure camel-mail always creates attachments to remedy for this
         return this.attachments != null && this.attachments.size() > 0;
     }
 

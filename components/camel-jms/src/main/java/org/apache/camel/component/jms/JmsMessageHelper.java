@@ -64,7 +64,7 @@ public final class JmsMessageHelper {
         // clear a single property, but must clear them all and redo
         // the properties
         Map<String, Object> map = new LinkedHashMap<String, Object>();
-        Enumeration en = jmsMessage.getPropertyNames();
+        Enumeration<?> en = jmsMessage.getPropertyNames();
         while (en.hasMoreElements()) {
             String key = (String) en.nextElement();
             if (name.equals(key)) {
@@ -92,7 +92,7 @@ public final class JmsMessageHelper {
      * @throws JMSException can be thrown
      */
     public static boolean hasProperty(Message jmsMessage, String name) throws JMSException {
-        Enumeration en = jmsMessage.getPropertyNames();
+        Enumeration<?> en = jmsMessage.getPropertyNames();
         while (en.hasMoreElements()) {
             String key = (String) en.nextElement();
             if (name.equals(key)) {
@@ -212,6 +212,22 @@ public final class JmsMessageHelper {
             return message.getJMSType();
         } catch (Exception e) {
             // ignore due OracleAQ does not support accessing JMSType
+        }
+
+        return null;
+    }
+
+    /**
+     * Gets the JMSRedelivered from the message.
+     *
+     * @param message  the message
+     * @return <tt>true</tt> if redelivered, <tt>false</tt> if not, <tt>null</tt> if not able to determine
+     */
+    public static Boolean getJMSRedelivered(Message message) {
+        try {
+            return message.getJMSRedelivered();
+        } catch (Exception e) {
+            // ignore if JMS broker do not support this
         }
 
         return null;

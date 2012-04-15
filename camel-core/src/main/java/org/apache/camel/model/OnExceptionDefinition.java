@@ -43,7 +43,6 @@ import org.apache.camel.processor.RedeliveryPolicy;
 import org.apache.camel.spi.ClassResolver;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
-import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.ExpressionToPredicateAdapter;
 import org.apache.camel.util.ObjectHelper;
 
@@ -74,9 +73,9 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
     @XmlAttribute(name = "useOriginalMessage")
     private Boolean useOriginalMessagePolicy;
     @XmlElementRef
-    private List<ProcessorDefinition> outputs = new ArrayList<ProcessorDefinition>();
+    private List<ProcessorDefinition<?>> outputs = new ArrayList<ProcessorDefinition<?>>();
     @XmlTransient
-    private List<Class> exceptionClasses;
+    private List<Class<? extends Throwable>> exceptionClasses;
     @XmlTransient
     private Predicate handledPolicy;
     @XmlTransient
@@ -94,12 +93,12 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
     public OnExceptionDefinition() {
     }
 
-    public OnExceptionDefinition(List<Class> exceptionClasses) {
-        this.exceptionClasses = CastUtils.cast(exceptionClasses);
+    public OnExceptionDefinition(List<Class<? extends Throwable>> exceptionClasses) {
+        this.exceptionClasses = exceptionClasses;
     }
 
-    public OnExceptionDefinition(Class exceptionType) {
-        exceptionClasses = new ArrayList<Class>();
+    public OnExceptionDefinition(Class<? extends Throwable> exceptionType) {
+        exceptionClasses = new ArrayList<Class<? extends Throwable>>();
         exceptionClasses.add(exceptionType);
     }
 
@@ -224,7 +223,7 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
             throw new IllegalArgumentException(this + " cannot have the inheritErrorHandler option set to true");
         }
 
-        List<Class> exceptions = getExceptionClasses();
+        List<Class<? extends Throwable>> exceptions = getExceptionClasses();
         if (exceptions == null || exceptions.isEmpty()) {
             throw new IllegalArgumentException("At least one exception must be configured on " + this);
         }
@@ -248,7 +247,7 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
     //-------------------------------------------------------------------------
 
     @Override
-    public OnExceptionDefinition onException(Class exceptionType) {
+    public OnExceptionDefinition onException(Class<? extends Throwable> exceptionType) {
         getExceptionClasses().add(exceptionType);
         return this;
     }
@@ -349,19 +348,6 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
      */
     public OnExceptionDefinition retryWhile(Predicate retryWhile) {
         setRetryWhilePolicy(retryWhile);
-        return this;
-    }
-
-    /**
-     * Sets the retry while expression.
-     * <p/>
-     * Will continue retrying until expression evaluates to <tt>false</tt>.
-     *
-     * @param retryWhile expression that determines when to stop retrying
-     * @return the builder
-     */
-    public OnExceptionDefinition retryWhile(Expression retryWhile) {
-        setRetryWhilePolicy(ExpressionToPredicateAdapter.toPredicate(retryWhile));
         return this;
     }
 
@@ -722,12 +708,12 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
 
     // Properties
     //-------------------------------------------------------------------------
-
-    public List<ProcessorDefinition> getOutputs() {
+    @Override
+    public List<ProcessorDefinition<?>> getOutputs() {
         return outputs;
     }
 
-    public void setOutputs(List<ProcessorDefinition> outputs) {
+    public void setOutputs(List<ProcessorDefinition<?>> outputs) {
         this.outputs = outputs;
     }
 
@@ -735,11 +721,11 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
         return true;
     }
 
-    public List<Class> getExceptionClasses() {
+    public List<Class<? extends Throwable>> getExceptionClasses() {
         return exceptionClasses;
     }
 
-    public void setExceptionClasses(List<Class> exceptionClasses) {
+    public void setExceptionClasses(List<Class<? extends Throwable>> exceptionClasses) {
         this.exceptionClasses = exceptionClasses;
     }
 
@@ -876,12 +862,12 @@ public class OnExceptionDefinition extends ProcessorDefinition<OnExceptionDefini
         return redeliveryPolicy;
     }
 
-    protected List<Class> createExceptionClasses(ClassResolver resolver) throws ClassNotFoundException {
+    protected List<Class<? extends Throwable>> createExceptionClasses(ClassResolver resolver) throws ClassNotFoundException {
         List<String> list = getExceptions();
-        List<Class> answer = new ArrayList<Class>(list.size());
+        List<Class<? extends Throwable>> answer = new ArrayList<Class<? extends Throwable>>(list.size());
         for (String name : list) {
-            Class<?> type = resolver.resolveMandatoryClass(name);
-            answer.add(CastUtils.cast(type, Throwable.class));
+            Class<? extends Throwable> type = resolver.resolveMandatoryClass(name, Throwable.class);
+            answer.add(type);
         }
         return answer;
     }

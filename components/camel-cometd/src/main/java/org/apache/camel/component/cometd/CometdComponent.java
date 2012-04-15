@@ -41,7 +41,6 @@ import org.eclipse.jetty.server.session.HashSessionManager;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.server.ssl.SslConnector;
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector;
-import org.eclipse.jetty.server.ssl.SslSocketConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.resource.Resource;
@@ -55,8 +54,7 @@ public class CometdComponent extends DefaultComponent {
     private static final transient Logger LOG = LoggerFactory.getLogger(CometdComponent.class);
 
     private final Map<String, ConnectorRef> connectors = new LinkedHashMap<String, ConnectorRef>();
-
-    private Server server;
+   
     private String sslKeyPassword;
     private String sslPassword;
     private String sslKeystore;
@@ -67,11 +65,13 @@ public class CometdComponent extends DefaultComponent {
     class ConnectorRef {
         Connector connector;
         CometdServlet servlet;
+        Server server;
         int refCount;
 
-        public ConnectorRef(Connector connector, CometdServlet servlet) {
+        public ConnectorRef(Connector connector, CometdServlet servlet, Server server) {
             this.connector = connector;
             this.servlet = servlet;
+            this.server = server;
             increment();
         }
 
@@ -98,7 +98,7 @@ public class CometdComponent extends DefaultComponent {
      */
     public void connect(CometdProducerConsumer prodcon) throws Exception {
         // Make sure that there is a connector for the requested endpoint.
-        CometdEndpoint endpoint = (CometdEndpoint) prodcon.getEndpoint();
+        CometdEndpoint endpoint = prodcon.getEndpoint();
         String connectorKey = endpoint.getProtocol() + ":" + endpoint.getUri().getHost() + ":" + endpoint.getPort();
 
         synchronized (connectors) {
@@ -116,11 +116,12 @@ public class CometdComponent extends DefaultComponent {
                     LOG.warn("You use localhost interface! It means that no external connections will be available."
                             + " Don't you want to use 0.0.0.0 instead (all network interfaces)?");
                 }
-                getServer().addConnector(connector);
+                Server server = createServer();
+                server.addConnector(connector);
 
-                CometdServlet servlet = createServletForConnector(connector, endpoint);
-                connectorRef = new ConnectorRef(connector, servlet);
-                getServer().start();
+                CometdServlet servlet = createServletForConnector(server, connector, endpoint);
+                connectorRef = new ConnectorRef(connector, servlet, server);
+                server.start();
 
                 connectors.put(connectorKey, connectorRef);
             } else {
@@ -154,15 +155,16 @@ public class CometdComponent extends DefaultComponent {
             ConnectorRef connectorRef = connectors.get(connectorKey);
             if (connectorRef != null) {
                 if (connectorRef.decrement() == 0) {
-                    getServer().removeConnector(connectorRef.connector);
+                    connectorRef.server.removeConnector(connectorRef.connector);
                     connectorRef.connector.stop();
+                    connectorRef.server.stop();
                     connectors.remove(connectorKey);
                 }
             }
         }
     }
 
-    protected CometdServlet createServletForConnector(Connector connector, CometdEndpoint endpoint) throws Exception {
+    protected CometdServlet createServletForConnector(Server server, Connector connector, CometdEndpoint endpoint) throws Exception {
         CometdServlet servlet = new CometdServlet();
 
         ServletContextHandler context = new ServletContextHandler(server, "/", ServletContextHandler.NO_SECURITY | ServletContextHandler.NO_SESSIONS);
@@ -221,23 +223,12 @@ public class CometdComponent extends DefaultComponent {
             sslSocketConnector.getSslContextFactory().setKeyManagerPassword(sslPassword);
             sslSocketConnector.getSslContextFactory().setKeyStorePassword(sslKeyPassword);
             if (sslKeystore != null) {
-                sslSocketConnector.getSslContextFactory().setKeyStore(sslKeystore);
+                sslSocketConnector.getSslContextFactory().setKeyStorePath(sslKeystore);
             }
 
         }
 
         return sslSocketConnector;
-    }
-
-    public Server getServer() throws Exception {
-        if (server == null) {
-            server = createServer();
-        }
-        return server;
-    }
-
-    public void setServer(Server server) {
-        this.server = server;
     }
 
     public String getSslKeyPassword() {
@@ -308,10 +299,7 @@ public class CometdComponent extends DefaultComponent {
             connectorRef.connector.stop();
         }
         connectors.clear();
-
-        if (server != null) {
-            server.stop();
-        }
+       
         super.doStop();
     }
 

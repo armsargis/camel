@@ -147,6 +147,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
     private final boolean streaming;
     private final boolean stopOnException;
     private final ExecutorService executorService;
+    private final boolean shutdownExecutorService;
     private ExecutorService aggregateExecutorService;
     private final long timeout;
     private final ConcurrentMap<PreparedErrorHandler, Processor> errorHandlers = new ConcurrentHashMap<PreparedErrorHandler, Processor>();
@@ -157,18 +158,18 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
     }
 
     public MulticastProcessor(CamelContext camelContext, Collection<Processor> processors, AggregationStrategy aggregationStrategy) {
-        this(camelContext, processors, aggregationStrategy, false, null, false, false, 0, null, false);
+        this(camelContext, processors, aggregationStrategy, false, null, false, false, false, 0, null, false);
     }
 
     public MulticastProcessor(CamelContext camelContext, Collection<Processor> processors, AggregationStrategy aggregationStrategy,
-                              boolean parallelProcessing, ExecutorService executorService, boolean streaming,
-                              boolean stopOnException, long timeout, Processor onPrepare,
-                              boolean shareUnitOfWork) {
+                              boolean parallelProcessing, ExecutorService executorService, boolean shutdownExecutorService,
+                              boolean streaming, boolean stopOnException, long timeout, Processor onPrepare, boolean shareUnitOfWork) {
         notNull(camelContext, "camelContext");
         this.camelContext = camelContext;
         this.processors = processors;
         this.aggregationStrategy = aggregationStrategy;
         this.executorService = executorService;
+        this.shutdownExecutorService = shutdownExecutorService;
         this.streaming = streaming;
         this.stopOnException = stopOnException;
         // must enable parallel if executor service is provided
@@ -209,7 +210,8 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
 
             // after we have created the processors we consider the exchange as exhausted if an unhandled
             // exception was thrown, (used in the catch block)
-            exhaust = true;
+            // if the processors is working in Streaming model, the exchange could not be processed at this point.
+            exhaust = !isStreaming();
 
             if (isParallelProcessing()) {
                 // ensure an executor is set when running in parallel
@@ -457,7 +459,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
                     // mark that index as timed out, which allows us to try to retrieve
                     // any already completed tasks in the next loop
                     if (completion instanceof SubmitOrderedCompletionService) {
-                        ((SubmitOrderedCompletionService) completion).timeoutTask();
+                        ((SubmitOrderedCompletionService<?>) completion).timeoutTask();
                     }
                 } else {
                     // there is a result to aggregate
@@ -647,6 +649,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
                             return;
                         }
 
+                        // must catch any exceptions from aggregation
                         try {
                             doAggregate(getAggregationStrategy(subExchange), result, subExchange);
                         } catch (Throwable e) {
@@ -736,14 +739,14 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
     protected void doDone(Exchange original, Exchange subExchange, AsyncCallback callback, boolean doneSync, boolean exhaust) {
         // cleanup any per exchange aggregation strategy
         removeAggregationStrategyFromExchange(original);
-        if (original.getException() != null) {
+        if (original.getException() != null || subExchange != null && subExchange.getException() != null) {
             // multicast uses error handling on its output processors and they have tried to redeliver
             // so we shall signal back to the other error handlers that we are exhausted and they should not
             // also try to redeliver as we will then do that twice
             original.setProperty(Exchange.REDELIVERY_EXHAUSTED, exhaust);
         }
         if (subExchange != null) {
-            // and copy the current result to original so it will contain this exception
+            // and copy the current result to original so it will contain this result of this eip
             ExchangeHelper.copyResults(original, subExchange);
         }
         callback.done(doneSync);
@@ -942,9 +945,20 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
         return camelContext.getExecutorServiceManager().newCachedThreadPool(this, name);
     }
 
+    @Override
     protected void doStop() throws Exception {
         ServiceHelper.stopServices(processors, errorHandlers);
+    }
+
+    @Override
+    protected void doShutdown() throws Exception {
+        ServiceHelper.stopAndShutdownServices(processors, errorHandlers);
+        // only clear error handlers when shutting down
         errorHandlers.clear();
+
+        if (shutdownExecutorService && executorService != null) {
+            getCamelContext().getExecutorServiceManager().shutdownNow(executorService);
+        }
     }
 
     protected static void setToEndpoint(Exchange exchange, Processor processor) {
@@ -959,7 +973,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
 
         // prefer to use per Exchange aggregation strategy over a global strategy
         if (exchange != null) {
-            Map property = exchange.getProperty(Exchange.AGGREGATION_STRATEGY, Map.class);
+            Map<?, ?> property = exchange.getProperty(Exchange.AGGREGATION_STRATEGY, Map.class);
             Map<Object, AggregationStrategy> map = CastUtils.cast(property);
             if (map != null) {
                 answer = map.get(this);
@@ -979,7 +993,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
      * @param aggregationStrategy the strategy
      */
     protected void setAggregationStrategyOnExchange(Exchange exchange, AggregationStrategy aggregationStrategy) {
-        Map property = exchange.getProperty(Exchange.AGGREGATION_STRATEGY, Map.class);
+        Map<?, ?> property = exchange.getProperty(Exchange.AGGREGATION_STRATEGY, Map.class);
         Map<Object, AggregationStrategy> map = CastUtils.cast(property);
         if (map == null) {
             map = new HashMap<Object, AggregationStrategy>();
@@ -997,7 +1011,7 @@ public class MulticastProcessor extends ServiceSupport implements AsyncProcessor
      * @param exchange the current exchange
      */
     protected void removeAggregationStrategyFromExchange(Exchange exchange) {
-        Map property = exchange.getProperty(Exchange.AGGREGATION_STRATEGY, Map.class);
+        Map<?, ?> property = exchange.getProperty(Exchange.AGGREGATION_STRATEGY, Map.class);
         Map<Object, AggregationStrategy> map = CastUtils.cast(property);
         if (map == null) {
             return;

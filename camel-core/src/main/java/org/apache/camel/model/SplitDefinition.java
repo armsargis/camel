@@ -30,7 +30,6 @@ import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.processor.Splitter;
 import org.apache.camel.processor.SubUnitOfWorkProcessor;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
-import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
 
@@ -95,11 +94,9 @@ public class SplitDefinition extends ExpressionNode implements ExecutorServiceAw
     public Processor createProcessor(RouteContext routeContext) throws Exception {
         Processor childProcessor = this.createChildProcessor(routeContext, true);
         aggregationStrategy = createAggregationStrategy(routeContext);
-        if (isParallelProcessing() && executorService == null) {
-            String ref = this.executorServiceRef != null ? this.executorServiceRef : "Split";
-            ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
-            executorService = manager.newDefaultThreadPool(this, ref);
-        }
+
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, isParallelProcessing());
+        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "Split", this, isParallelProcessing());
 
         long timeout = getTimeout() != null ? getTimeout() : 0;
         if (timeout > 0 && !isParallelProcessing()) {
@@ -112,7 +109,7 @@ public class SplitDefinition extends ExpressionNode implements ExecutorServiceAw
         Expression exp = getExpression().createExpression(routeContext);
 
         Splitter answer = new Splitter(routeContext.getCamelContext(), exp, childProcessor, aggregationStrategy,
-                            isParallelProcessing(), executorService, isStreaming(), isStopOnException(),
+                            isParallelProcessing(), threadPool, shutdownThreadPool, isStreaming(), isStopOnException(),
                             timeout, onPrepare, isShareUnitOfWork());
         if (isShareUnitOfWork()) {
             // wrap answer in a sub unit of work, since we share the unit of work

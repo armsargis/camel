@@ -99,7 +99,7 @@ public class CxfRsProducer extends DefaultProducer {
         cfb.setBus(((CxfRsEndpoint)getEndpoint()).getBus());
         WebClient client = cfb.createWebClient();
         String httpMethod = inMessage.getHeader(Exchange.HTTP_METHOD, String.class);
-        Class responseClass = inMessage.getHeader(CxfConstants.CAMEL_CXF_RS_RESPONSE_CLASS, Class.class);
+        Class<?> responseClass = inMessage.getHeader(CxfConstants.CAMEL_CXF_RS_RESPONSE_CLASS, Class.class);
         Type genericType = inMessage.getHeader(CxfConstants.CAMEL_CXF_RS_RESPONSE_GENERIC_TYPE, Type.class);
         String path = inMessage.getHeader(Exchange.HTTP_PATH, String.class);
 
@@ -158,7 +158,7 @@ public class CxfRsProducer extends DefaultProducer {
                 if (genericType instanceof ParameterizedType) {
                     // Get the collection member type first
                     Type[] actualTypeArguments = ((ParameterizedType) genericType).getActualTypeArguments();
-                    response = client.invokeAndGetCollection(httpMethod, body, (Class) actualTypeArguments[0]);
+                    response = client.invokeAndGetCollection(httpMethod, body, (Class<?>) actualTypeArguments[0]);
                     
                 } else {
                     throw new CamelExchangeException("Header " + CxfConstants.CAMEL_CXF_RS_RESPONSE_GENERIC_TYPE + " not found in message", exchange);
@@ -181,8 +181,9 @@ public class CxfRsProducer extends DefaultProducer {
         // set response
         if (exchange.getPattern().isOutCapable()) {
             LOG.trace("Response body = {}", response);
+            exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
             exchange.getOut().setBody(binding.bindResponseToCamelBody(response, exchange));
-            exchange.getOut().setHeaders(binding.bindResponseHeadersToCamelHeaders(response, exchange));
+            exchange.getOut().getHeaders().putAll(binding.bindResponseHeadersToCamelHeaders(response, exchange));
             exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, statesCode);
         }
     }
@@ -230,8 +231,9 @@ public class CxfRsProducer extends DefaultProducer {
         
         if (exchange.getPattern().isOutCapable()) {
             LOG.trace("Response body = {}", response);
+            exchange.getOut().getHeaders().putAll(exchange.getIn().getHeaders());
             exchange.getOut().setBody(binding.bindResponseToCamelBody(response, exchange));
-            exchange.getOut().setHeaders(binding.bindResponseHeadersToCamelHeaders(response, exchange));
+            exchange.getOut().getHeaders().putAll(binding.bindResponseHeadersToCamelHeaders(response, exchange));
             exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, statesCode);
         }
     }
@@ -251,7 +253,7 @@ public class CxfRsProducer extends DefaultProducer {
         return answer;
     }
 
-    private Method findRightMethod(List<Class<?>> resourceClasses, String methodName, Class[] parameterTypes) throws NoSuchMethodException {
+    private Method findRightMethod(List<Class<?>> resourceClasses, String methodName, Class<?>[] parameterTypes) throws NoSuchMethodException {
         Method answer = null;
         for (Class<?> clazz : resourceClasses) {
             try {
@@ -299,7 +301,8 @@ public class CxfRsProducer extends DefaultProducer {
         String uri = exchange.getFromEndpoint().getEndpointUri();
         String statusText = Response.Status.fromStatusCode(responseCode).toString();
         Map<String, String> headers = parseResponseHeaders(response, exchange);
-        String copy = response.toString();
+        //Get the response detail string
+        String copy = exchange.getContext().getTypeConverter().convertTo(String.class, response.getEntity());
         if (responseCode >= 300 && responseCode < 400) {
             String redirectLocation;
             if (response.getMetadata().getFirst("Location") != null) {

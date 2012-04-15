@@ -81,7 +81,7 @@ public class EmbeddedMojo extends AbstractExecMojo {
      * @required
      * @readonly
      */
-    private List classpathElements;
+    private List<?> classpathElements;
 
     /**
      * The main class to execute.
@@ -136,11 +136,11 @@ public class EmbeddedMojo extends AbstractExecMojo {
         this.outputDirectory = inOutputDirectory;
     }
 
-    public List getClasspathElements() {
+    public List<?> getClasspathElements() {
         return classpathElements;
     }
 
-    public void setClasspathElements(List classpathElements) {
+    public void setClasspathElements(List<?> classpathElements) {
         this.classpathElements = classpathElements;
     }
 
@@ -198,7 +198,7 @@ public class EmbeddedMojo extends AbstractExecMojo {
 
     protected String[] createArguments() {
 
-        ArrayList<String> args = new ArrayList<String>(5);
+        List<String> args = new ArrayList<String>(5);
         if (isDotEnabled()) {
             args.add("-outdir");
             args.add(getOutputDirectory());

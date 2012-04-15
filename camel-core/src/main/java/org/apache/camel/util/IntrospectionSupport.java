@@ -25,7 +25,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -137,8 +136,7 @@ public final class IntrospectionSupport {
      * @param optionPrefix   an optional prefix to append the property key
      * @return <tt>true</tt> if any properties was found, <tt>false</tt> otherwise.
      */
-    @SuppressWarnings("unchecked")
-    public static boolean getProperties(Object target, Map properties, String optionPrefix) {
+    public static boolean getProperties(Object target, Map<String, Object> properties, String optionPrefix) {
         ObjectHelper.notNull(target, "target");
         ObjectHelper.notNull(properties, "properties");
         boolean rc = false;
@@ -146,7 +144,7 @@ public final class IntrospectionSupport {
             optionPrefix = "";
         }
 
-        Class clazz = target.getClass();
+        Class<?> clazz = target.getClass();
         Method[] methods = clazz.getMethods();
         for (Method method : methods) {
             if (EXCLUDED_METHODS.contains(method)) {
@@ -171,7 +169,7 @@ public final class IntrospectionSupport {
     public static boolean hasSetter(Object target, Method getter) {
         String name = getGetterShorthandName(getter);
 
-        Class clazz = target.getClass();
+        Class<?> clazz = target.getClass();
         Method[] methods = clazz.getMethods();
         for (Method method : methods) {
             if (EXCLUDED_METHODS.contains(method)) {
@@ -273,7 +271,7 @@ public final class IntrospectionSupport {
     public static Map<String, Object> extractProperties(Map<String, Object> properties, String optionPrefix) {
         ObjectHelper.notNull(properties, "properties");
 
-        HashMap<String, Object> rc = new LinkedHashMap<String, Object>(properties.size());
+        Map<String, Object> rc = new LinkedHashMap<String, Object>(properties.size());
 
         for (Iterator<Map.Entry<String, Object>> it = properties.entrySet().iterator(); it.hasNext();) {
             Map.Entry<String, Object> entry = it.next();
@@ -377,8 +375,7 @@ public final class IntrospectionSupport {
         return setProperty(target, name, value, false);
     }
 
-    @SuppressWarnings("unchecked")
-    private static Object convert(TypeConverter typeConverter, Class type, Object value)
+    private static Object convert(TypeConverter typeConverter, Class<?> type, Object value)
         throws URISyntaxException, NoTypeConversionAvailableException {
         if (typeConverter != null) {
             return typeConverter.mandatoryConvertTo(type, value);

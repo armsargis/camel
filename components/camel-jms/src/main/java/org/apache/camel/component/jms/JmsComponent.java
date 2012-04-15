@@ -17,16 +17,17 @@
 package org.apache.camel.component.jms;
 
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import javax.jms.ConnectionFactory;
 import javax.jms.ExceptionListener;
 import javax.jms.Session;
 
 import org.apache.camel.CamelContext;
 import org.apache.camel.Endpoint;
+import org.apache.camel.LoggingLevel;
 import org.apache.camel.impl.DefaultComponent;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.spi.HeaderFilterStrategyAware;
-import org.apache.camel.util.CastUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -53,6 +54,7 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
     private ApplicationContext applicationContext;
     private QueueBrowseStrategy queueBrowseStrategy;
     private HeaderFilterStrategy headerFilterStrategy = new JmsHeaderFilterStrategy();
+    private ExecutorService asyncStartExecutorService;
 
     public JmsComponent() {
     }
@@ -180,6 +182,10 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
     public void setCacheLevelName(String cacheName) {
         getConfiguration().setCacheLevelName(cacheName);
     }
+    
+    public void setReplyToCacheLevelName(String cacheName) {
+        getConfiguration().setReplyToCacheLevelName(cacheName);
+    }
 
     public void setClientId(String consumerClientId) {
         getConfiguration().setClientId(consumerClientId);
@@ -207,8 +213,16 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
 
     public void setErrorHandler(ErrorHandler errorHandler) {
         getConfiguration().setErrorHandler(errorHandler);
-    }    
-    
+    }
+
+    public void setErrorHandlerLoggingLevel(LoggingLevel errorHandlerLoggingLevel) {
+        getConfiguration().setErrorHandlerLoggingLevel(errorHandlerLoggingLevel);
+    }
+
+    public void setErrorHandlerLogStackTrace(boolean errorHandlerLogStackTrace) {
+        getConfiguration().setErrorHandlerLogStackTrace(errorHandlerLogStackTrace);
+    }
+
     public void setExplicitQosEnabled(boolean explicitQosEnabled) {
         getConfiguration().setExplicitQosEnabled(explicitQosEnabled);
     }
@@ -306,12 +320,20 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
         getConfiguration().setTestConnectionOnStartup(testConnectionOnStartup);
     }
 
+    public void setAsyncStartListener(boolean asyncStartListener) {
+        getConfiguration().setAsyncStartListener(asyncStartListener);
+    }
+
     public void setForceSendOriginalMessage(boolean forceSendOriginalMessage) {
         getConfiguration().setForceSendOriginalMessage(forceSendOriginalMessage);
     }
 
     public void setRequestTimeout(long requestTimeout) {
         getConfiguration().setRequestTimeout(requestTimeout);
+    }
+
+    public void setRequestTimeoutCheckerInterval(long requestTimeoutCheckerInterval) {
+        getConfiguration().setRequestTimeoutCheckerInterval(requestTimeoutCheckerInterval);
     }
 
     public void setTransferExchange(boolean transferExchange) {
@@ -381,8 +403,21 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
     // -------------------------------------------------------------------------
 
     @Override
-    protected void doStop() throws Exception {
-        super.doStop();
+    protected void doShutdown() throws Exception {
+        if (asyncStartExecutorService != null) {
+            getCamelContext().getExecutorServiceManager().shutdownNow(asyncStartExecutorService);
+            asyncStartExecutorService = null;
+        }
+        super.doShutdown();
+    }
+
+    protected synchronized ExecutorService getAsyncStartExecutorService() {
+        if (asyncStartExecutorService == null) {
+            // use a cached thread pool for async start tasks as they can run for a while, and we need a dedicated thread
+            // for each task, and the thread pool will shrink when no more tasks running
+            asyncStartExecutorService = getCamelContext().getExecutorServiceManager().newCachedThreadPool(this, "AsyncStartListener");
+        }
+        return asyncStartExecutorService;
     }
 
     @Override
@@ -411,7 +446,7 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
 
         // lets make sure we copy the configuration as each endpoint can
         // customize its own version
-        JmsConfiguration newConfiguration = getConfiguration().copy();        
+        JmsConfiguration newConfiguration = getConfiguration().copy();
         JmsEndpoint endpoint;
         if (pubSubDomain) {
             if (tempDestination) {
@@ -461,12 +496,12 @@ public class JmsComponent extends DefaultComponent implements ApplicationContext
             endpoint.setJmsKeyFormatStrategy(resolveAndRemoveReferenceParameter(
                     parameters, KEY_FORMAT_STRATEGY_PARAM, JmsKeyFormatStrategy.class));
         }
-        
+
         setProperties(endpoint.getConfiguration(), parameters);
         endpoint.setHeaderFilterStrategy(getHeaderFilterStrategy());
 
         return endpoint;
-    }   
+    }
 
     /**
      * A strategy method allowing the URI destination to be translated into the

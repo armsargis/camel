@@ -24,7 +24,6 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.ResolveEndpointFailedException;
 import org.apache.camel.component.http4.helper.HttpHelper;
 import org.apache.camel.impl.HeaderFilterStrategyComponent;
-import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.IntrospectionSupport;
 import org.apache.camel.util.URISupport;
 import org.apache.camel.util.jsse.SSLContextParameters;
@@ -45,6 +44,7 @@ import org.apache.http.params.BasicHttpParams;
 import org.apache.http.params.HttpConnectionParamBean;
 import org.apache.http.params.HttpParams;
 import org.apache.http.params.HttpProtocolParamBean;
+import org.apache.http.protocol.HttpContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +60,7 @@ public class HttpComponent extends HeaderFilterStrategyComponent {
     protected HttpClientConfigurer httpClientConfigurer;
     protected ClientConnectionManager clientConnectionManager;
     protected HttpBinding httpBinding;
+    protected HttpContext httpContext;
     protected SSLContextParameters sslContextParameters;
     protected X509HostnameVerifier x509HostnameVerifier = new BrowserCompatHostnameVerifier();
 
@@ -172,27 +173,32 @@ public class HttpComponent extends HeaderFilterStrategyComponent {
         if (httpBinding == null) {
             httpBinding = resolveAndRemoveReferenceParameter(parameters, "httpBinding", HttpBinding.class);
         }
-        
+
         HttpClientConfigurer httpClientConfigurer = resolveAndRemoveReferenceParameter(parameters, "httpClientConfigurerRef", HttpClientConfigurer.class);
         if (httpClientConfigurer == null) {
             httpClientConfigurer = resolveAndRemoveReferenceParameter(parameters, "httpClientConfigurer", HttpClientConfigurer.class);
         }
-        
+
+        HttpContext httpContext = resolveAndRemoveReferenceParameter(parameters, "httpContextRef", HttpContext.class);
+        if (httpContext == null) {
+            httpContext = resolveAndRemoveReferenceParameter(parameters, "httpContext", HttpContext.class);
+        }
+
         X509HostnameVerifier x509HostnameVerifier = resolveAndRemoveReferenceParameter(parameters, "x509HostnameVerifier", X509HostnameVerifier.class);
         if (x509HostnameVerifier == null) {
-            x509HostnameVerifier = this.x509HostnameVerifier;
+            x509HostnameVerifier = getX509HostnameVerifier();
         }
         
         SSLContextParameters sslContextParameters = resolveAndRemoveReferenceParameter(parameters, "sslContextParametersRef", SSLContextParameters.class);
         if (sslContextParameters == null) {
-            sslContextParameters = this.sslContextParameters;
+            sslContextParameters = getSslContextParameters();
         }
         
         boolean secure = HttpHelper.isSecureConnection(uri);
 
         // create the configurer to use for this endpoint
         HttpClientConfigurer configurer = createHttpClientConfigurer(parameters, secure);
-        URI endpointUri = URISupport.createRemainingURI(new URI(addressUri), CastUtils.cast(httpClientParameters));
+        URI endpointUri = URISupport.createRemainingURI(new URI(addressUri), httpClientParameters);
         // create the endpoint and set the http uri to be null
         HttpEndpoint endpoint = new HttpEndpoint(endpointUri.toString(), this, clientParams, clientConnectionManager, configurer);
         // configure the endpoint
@@ -207,7 +213,7 @@ public class HttpComponent extends HeaderFilterStrategyComponent {
         }
         // restructure uri to be based on the parameters left as we dont want to include the Camel internal options
         // build up the http uri
-        URI httpUri = URISupport.createRemainingURI(new URI(httpUriAddress), CastUtils.cast(parameters));
+        URI httpUri = URISupport.createRemainingURI(new URI(httpUriAddress), parameters);
 
         // validate http uri that end-user did not duplicate the http part that can be a common error
         String part = httpUri.getSchemeSpecificPart();
@@ -226,6 +232,10 @@ public class HttpComponent extends HeaderFilterStrategyComponent {
         }
         if (httpClientConfigurer != null) {
             endpoint.setHttpClientConfigurer(httpClientConfigurer);
+        }
+        endpoint.setHttpContext(getHttpContext());
+        if (httpContext != null) {
+            endpoint.setHttpContext(httpContext);
         }
         // register port on schema registry
         int port = getPort(httpUri);
@@ -248,6 +258,7 @@ public class HttpComponent extends HeaderFilterStrategyComponent {
         return port;
     }
     
+    @SuppressWarnings("deprecation")
     protected void registerPort(boolean secure, X509HostnameVerifier x509HostnameVerifier, int port, SSLContextParameters sslContextParams) throws Exception {
         SchemeRegistry registry = clientConnectionManager.getSchemeRegistry();
         if (secure) {
@@ -344,13 +355,29 @@ public class HttpComponent extends HeaderFilterStrategyComponent {
     public void setHttpBinding(HttpBinding httpBinding) {
         this.httpBinding = httpBinding;
     }
-    
+
+    public HttpContext getHttpContext() {
+        return httpContext;
+    }
+
+    public void setHttpContext(HttpContext httpContext) {
+        this.httpContext = httpContext;
+    }
+
     public SSLContextParameters getSslContextParameters() {
         return sslContextParameters;
     }
 
     public void setSslContextParameters(SSLContextParameters sslContextParameters) {
         this.sslContextParameters = sslContextParameters;
+    }
+
+    public X509HostnameVerifier getX509HostnameVerifier() {
+        return x509HostnameVerifier;
+    }
+
+    public void setX509HostnameVerifier(X509HostnameVerifier x509HostnameVerifier) {
+        this.x509HostnameVerifier = x509HostnameVerifier;
     }
 
     public int getMaxTotalConnections() {

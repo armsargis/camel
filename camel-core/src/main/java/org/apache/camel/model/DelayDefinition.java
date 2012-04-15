@@ -30,7 +30,6 @@ import org.apache.camel.builder.ExpressionBuilder;
 import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.processor.Delayer;
 import org.apache.camel.spi.RouteContext;
-import org.apache.camel.util.ObjectHelper;
 
 /**
  * Represents an XML &lt;delay/&gt; element
@@ -79,15 +78,10 @@ public class DelayDefinition extends ExpressionNode implements ExecutorServiceAw
         Processor childProcessor = this.createChildProcessor(routeContext, false);
         Expression delay = createAbsoluteTimeDelayExpression(routeContext);
 
-        ScheduledExecutorService scheduled = null;
-        if (getAsyncDelayed() != null && getAsyncDelayed()) {
-            scheduled = ProcessorDefinitionHelper.getConfiguredScheduledExecutorService(routeContext, "Delay", this);
-            if (scheduled == null) {
-                scheduled = routeContext.getCamelContext().getExecutorServiceManager().newDefaultScheduledThreadPool(this, "Delay");
-            }
-        }
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, isAsyncDelayed());
+        ScheduledExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredScheduledExecutorService(routeContext, "Delay", this, isAsyncDelayed());
 
-        Delayer answer = new Delayer(childProcessor, delay, scheduled);
+        Delayer answer = new Delayer(routeContext.getCamelContext(), childProcessor, delay, threadPool, shutdownThreadPool);
         if (getAsyncDelayed() != null) {
             answer.setAsyncDelayed(getAsyncDelayed());
         }
@@ -103,10 +97,8 @@ public class DelayDefinition extends ExpressionNode implements ExecutorServiceAw
     private Expression createAbsoluteTimeDelayExpression(RouteContext routeContext) {
         ExpressionDefinition expr = getExpression();
         if (expr != null) {
-            if (ObjectHelper.isNotEmpty(expr.getExpression()) || expr.getExpressionValue() != null) {
-                return expr.createExpression(routeContext);
-            } 
-        } 
+            return expr.createExpression(routeContext);
+        }
         return null;
     }
 
@@ -166,6 +158,10 @@ public class DelayDefinition extends ExpressionNode implements ExecutorServiceAw
 
     public void setAsyncDelayed(Boolean asyncDelayed) {
         this.asyncDelayed = asyncDelayed;
+    }
+
+    public boolean isAsyncDelayed() {
+        return asyncDelayed != null && asyncDelayed;
     }
 
     public Boolean getCallerRunsWhenRejected() {

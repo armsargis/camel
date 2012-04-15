@@ -28,7 +28,6 @@ import org.apache.camel.impl.DefaultComponent;
 public class SnsComponent extends DefaultComponent {
     
     public SnsComponent() {
-        super();
     }
 
     public SnsComponent(CamelContext context) {
@@ -48,7 +47,7 @@ public class SnsComponent extends DefaultComponent {
             throw new IllegalArgumentException("AmazonSNSClient or accessKey and secretKey must be specified");
         }
 
-        SnsEndpoint endpoint = new SnsEndpoint(uri, getCamelContext(), configuration);
+        SnsEndpoint endpoint = new SnsEndpoint(uri, this, configuration);
         return endpoint;
     }
 }

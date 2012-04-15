@@ -142,7 +142,13 @@ public class SimpleFunctionExpression extends LiteralExpression {
         }
         if (remainder != null) {
             // remove leading character (dot or ?)
-            remainder = remainder.substring(1);
+            if (remainder.startsWith(".") || remainder.startsWith("?")) {
+                remainder = remainder.substring(1);
+            }
+            // remove starting and ending brackets
+            if (remainder.startsWith("[") && remainder.endsWith("]")) {
+                remainder = remainder.substring(1, remainder.length() - 1);
+            }
 
             // validate syntax
             boolean invalid = OgnlHelper.isInvalidValidOgnlExpression(remainder);
@@ -172,7 +178,13 @@ public class SimpleFunctionExpression extends LiteralExpression {
         remainder = ifStartsWithReturnRemainder("property", function);
         if (remainder != null) {
             // remove leading character (dot or ?)
-            remainder = remainder.substring(1);
+            if (remainder.startsWith(".") || remainder.startsWith("?")) {
+                remainder = remainder.substring(1);
+            }
+            // remove starting and ending brackets
+            if (remainder.startsWith("[") && remainder.endsWith("]")) {
+                remainder = remainder.substring(1, remainder.length() - 1);
+            }
 
             // validate syntax
             boolean invalid = OgnlHelper.isInvalidValidOgnlExpression(remainder);
@@ -275,6 +287,8 @@ public class SimpleFunctionExpression extends LiteralExpression {
             return ExpressionBuilder.exchangeExceptionStackTraceExpression();
         } else if (ObjectHelper.equal(expression, "threadName")) {
             return ExpressionBuilder.threadNameExpression();
+        } else if (ObjectHelper.equal(expression, "camelId")) {
+            return ExpressionBuilder.camelContextNameExpression();
         }
 
         return null;

@@ -20,10 +20,8 @@ package org.apache.camel.component.cxf;
 import org.apache.camel.component.cxf.CxfEndpoint.CamelCxfClientImpl;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.spring.SpringCamelContext;
-import org.apache.camel.test.AvailablePortFinder;
 import org.apache.cxf.BusFactory;
 import org.apache.cxf.bus.CXFBusImpl;
-import org.apache.cxf.frontend.ServerFactoryBean;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
@@ -60,7 +58,7 @@ public class CxfEndpointTest extends Assert {
             endpoint.getServiceClass().getCanonicalName(),
             "org.apache.camel.component.cxf.HelloService");
     }
-    
+
     @Test
     public void testSettingClientBus() throws Exception {
         CXFBusImpl bus = (CXFBusImpl) BusFactory.newInstance().createBus();

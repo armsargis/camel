@@ -41,7 +41,7 @@ public class ExpressionNode extends ProcessorDefinition<ExpressionNode> {
     @XmlElementRef
     private ExpressionDefinition expression;
     @XmlElementRef
-    private List<ProcessorDefinition> outputs = new ArrayList<ProcessorDefinition>();
+    private List<ProcessorDefinition<?>> outputs = new ArrayList<ProcessorDefinition<?>>();
 
     public ExpressionNode() {
     }
@@ -76,11 +76,12 @@ public class ExpressionNode extends ProcessorDefinition<ExpressionNode> {
         this.expression = expression;
     }
 
-    public List<ProcessorDefinition> getOutputs() {
+    @Override
+    public List<ProcessorDefinition<?>> getOutputs() {
         return outputs;
     }
 
-    public void setOutputs(List<ProcessorDefinition> outputs) {
+    public void setOutputs(List<ProcessorDefinition<?>> outputs) {
         this.outputs = outputs;
     }
 
@@ -97,13 +98,30 @@ public class ExpressionNode extends ProcessorDefinition<ExpressionNode> {
         return getExpression().getLabel();
     }
 
+    /**
+     * Creates the {@link FilterProcessor} from the expression node.
+     *
+     * @param routeContext  the route context
+     * @return the created {@link FilterProcessor}
+     * @throws Exception is thrown if error creating the processor
+     */
     protected FilterProcessor createFilterProcessor(RouteContext routeContext) throws Exception {
         Processor childProcessor = this.createChildProcessor(routeContext, false);
-        return new FilterProcessor(getExpression().createPredicate(routeContext), childProcessor);
+        return new FilterProcessor(createPredicate(routeContext), childProcessor);
+    }
+
+    /**
+     * Creates the {@link Predicate} from the expression node.
+     *
+     * @param routeContext  the route context
+     * @return the created predicate
+     */
+    protected Predicate createPredicate(RouteContext routeContext) {
+        return getExpression().createPredicate(routeContext);
     }
 
     @Override
-    protected void configureChild(ProcessorDefinition output) {
+    protected void configureChild(ProcessorDefinition<?> output) {
         // reuse the logic from pre create processor
         preCreateProcessor();
     }
@@ -111,12 +129,12 @@ public class ExpressionNode extends ProcessorDefinition<ExpressionNode> {
     @Override
     protected void preCreateProcessor() {
         Expression exp = expression;
-        if (expression.getExpressionValue() != null) {
+        if (expression != null && expression.getExpressionValue() != null) {
             exp = expression.getExpressionValue();
         }
 
         if (exp instanceof ExpressionClause) {
-            ExpressionClause clause = (ExpressionClause) exp;
+            ExpressionClause<?> clause = (ExpressionClause<?>) exp;
             if (clause.getExpressionType() != null) {
                 // if using the Java DSL then the expression may have been set using the
                 // ExpressionClause which is a fancy builder to define expressions and predicates

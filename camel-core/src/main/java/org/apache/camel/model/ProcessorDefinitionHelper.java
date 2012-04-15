@@ -22,10 +22,8 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
-import org.apache.camel.NoSuchBeanException;
 import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
-import org.apache.camel.spi.ThreadPoolProfile;
 import org.apache.camel.util.ObjectHelper;
 
 /**
@@ -43,7 +41,7 @@ public final class ProcessorDefinitionHelper {
      * @param type     the type to look for
      * @return         the found definitions, or <tt>null</tt> if not found
      */
-    public static <T> Iterator<T> filterTypeInOutputs(List<ProcessorDefinition> outputs, Class<T> type) {
+    public static <T> Iterator<T> filterTypeInOutputs(List<ProcessorDefinition<?>> outputs, Class<T> type) {
         List<T> found = new ArrayList<T>();
         doFindType(outputs, type, found);
         return found.iterator();
@@ -57,7 +55,7 @@ public final class ProcessorDefinitionHelper {
      * @param type     the type to look for
      * @return         the first found type, or <tt>null</tt> if not found
      */
-    public static <T> T findFirstTypeInOutputs(List<ProcessorDefinition> outputs, Class<T> type) {
+    public static <T> T findFirstTypeInOutputs(List<ProcessorDefinition<?>> outputs, Class<T> type) {
         List<T> found = new ArrayList<T>();
         doFindType(outputs, type, found);
         if (found.isEmpty()) {
@@ -123,7 +121,7 @@ public final class ProcessorDefinitionHelper {
             return null;
         }
 
-        ProcessorDefinition def = node;
+        ProcessorDefinition<?> def = node;
         // drill to the top
         while (def != null && def.getParent() != null) {
             def = def.getParent();
@@ -138,8 +136,8 @@ public final class ProcessorDefinitionHelper {
 
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> void doFindType(List<ProcessorDefinition> outputs, Class<T> type, List<T> found) {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static <T> void doFindType(List<ProcessorDefinition<?>> outputs, Class<T> type, List<T> found) {
         if (outputs == null || outputs.isEmpty()) {
             return;
         }
@@ -152,7 +150,7 @@ public final class ProcessorDefinitionHelper {
             // send is much common
             if (out instanceof SendDefinition) {
                 SendDefinition send = (SendDefinition) out;
-                List<ProcessorDefinition> children = send.getOutputs();
+                List<ProcessorDefinition<?>> children = send.getOutputs();
                 doFindType(children, type, found);
             }
 
@@ -160,19 +158,19 @@ public final class ProcessorDefinitionHelper {
             if (out instanceof ChoiceDefinition) {
                 ChoiceDefinition choice = (ChoiceDefinition) out;
                 for (WhenDefinition when : choice.getWhenClauses()) {
-                    List<ProcessorDefinition> children = when.getOutputs();
+                    List<ProcessorDefinition<?>> children = when.getOutputs();
                     doFindType(children, type, found);
                 }
 
                 // otherwise is optional
                 if (choice.getOtherwise() != null) {
-                    List<ProcessorDefinition> children = choice.getOtherwise().getOutputs();
+                    List<ProcessorDefinition<?>> children = choice.getOtherwise().getOutputs();
                     doFindType(children, type, found);
                 }
             }
 
             // try children as well
-            List<ProcessorDefinition> children = out.getOutputs();
+            List<ProcessorDefinition<?>> children = out.getOutputs();
             doFindType(children, type, found);
         }
     }
@@ -186,8 +184,8 @@ public final class ProcessorDefinitionHelper {
      * @param excludeAbstract   whether or not to exclude abstract outputs (e.g. skip onException etc.)
      * @return <tt>true</tt> if has outputs, otherwise <tt>false</tt> is returned
      */
-    @SuppressWarnings("unchecked")
-    public static boolean hasOutputs(List<ProcessorDefinition> outputs, boolean excludeAbstract) {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static boolean hasOutputs(List<ProcessorDefinition<?>> outputs, boolean excludeAbstract) {
         if (outputs == null || outputs.isEmpty()) {
             return false;
         }
@@ -207,6 +205,69 @@ public final class ProcessorDefinitionHelper {
     }
 
     /**
+     * Determines whether a new thread pool will be created or not.
+     * <p/>
+     * This is used to know if a new thread pool will be created, and therefore is not shared by others, and therefore
+     * exclusive to the definition.
+     *
+     * @param routeContext   the route context
+     * @param definition     the node definition which may leverage executor service.
+     * @param useDefault     whether to fallback and use a default thread pool, if no explicit configured
+     * @return <tt>true</tt> if a new thread pool will be created, <tt>false</tt> if not
+     * @see #getConfiguredExecutorService(org.apache.camel.spi.RouteContext, String, ExecutorServiceAwareDefinition, boolean)
+     */
+    public static boolean willCreateNewThreadPool(RouteContext routeContext, ExecutorServiceAwareDefinition<?> definition, boolean useDefault) {
+        ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
+        ObjectHelper.notNull(manager, "ExecutorServiceManager", routeContext.getCamelContext());
+        
+        if (definition.getExecutorService() != null) {
+            // no there is a custom thread pool configured
+            return false;
+        } else if (definition.getExecutorServiceRef() != null) {
+            ExecutorService answer = routeContext.getCamelContext().getRegistry().lookup(definition.getExecutorServiceRef(), ExecutorService.class);
+            // if no existing thread pool, then we will have to create a new thread pool
+            return answer == null;
+        } else if (useDefault) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Will lookup in {@link org.apache.camel.spi.Registry} for a {@link ExecutorService} registered with the given
+     * <tt>executorServiceRef</tt> name.
+     * <p/>
+     * This method will lookup for configured thread pool in the following order
+     * <ul>
+     *   <li>from the {@link org.apache.camel.spi.Registry} if found</li>
+     *   <li>from the known list of {@link org.apache.camel.spi.ThreadPoolProfile ThreadPoolProfile(s)}.</li>
+     *   <li>if none found, then <tt>null</tt> is returned.</li>
+     * </ul>
+     * @param routeContext   the route context
+     * @param name           name which is appended to the thread name, when the {@link java.util.concurrent.ExecutorService}
+     *                       is created based on a {@link org.apache.camel.spi.ThreadPoolProfile}.
+     * @param source         the source to use the thread pool
+     * @param executorServiceRef reference name of the thread pool
+     * @return the executor service, or <tt>null</tt> if none was found.
+     */
+    public static ExecutorService lookupExecutorServiceRef(RouteContext routeContext, String name,
+                                                           Object source, String executorServiceRef) {
+
+        ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
+        ObjectHelper.notNull(manager, "ExecutorServiceManager", routeContext.getCamelContext());
+        ObjectHelper.notNull(executorServiceRef, "executorServiceRef");
+
+        // lookup in registry first and use existing thread pool if exists
+        ExecutorService answer = routeContext.getCamelContext().getRegistry().lookup(executorServiceRef, ExecutorService.class);
+        if (answer == null) {
+            // then create a thread pool assuming the ref is a thread pool profile id
+            answer = manager.newThreadPool(source, name, executorServiceRef);
+        }
+        return answer;
+    }
+
+    /**
      * Will lookup and get the configured {@link java.util.concurrent.ExecutorService} from the given definition.
      * <p/>
      * This method will lookup for configured thread pool in the following order
@@ -223,11 +284,13 @@ public final class ProcessorDefinitionHelper {
      * @param name           name which is appended to the thread name, when the {@link java.util.concurrent.ExecutorService}
      *                       is created based on a {@link org.apache.camel.spi.ThreadPoolProfile}.
      * @param definition     the node definition which may leverage executor service.
+     * @param useDefault     whether to fallback and use a default thread pool, if no explicit configured
      * @return the configured executor service, or <tt>null</tt> if none was configured.
-     * @throws NoSuchBeanException is thrown if lookup of executor service in {@link org.apache.camel.spi.Registry} was not found
+     * @throws IllegalArgumentException is thrown if lookup of executor service in {@link org.apache.camel.spi.Registry} was not found
      */
     public static ExecutorService getConfiguredExecutorService(RouteContext routeContext, String name,
-                                                               ExecutorServiceAwareDefinition definition) throws NoSuchBeanException {
+                                                               ExecutorServiceAwareDefinition<?> definition,
+                                                               boolean useDefault) throws IllegalArgumentException {
         ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
         ObjectHelper.notNull(manager, "ExecutorServiceManager", routeContext.getCamelContext());
 
@@ -236,18 +299,49 @@ public final class ProcessorDefinitionHelper {
             return definition.getExecutorService();
         } else if (definition.getExecutorServiceRef() != null) {
             // lookup in registry first and use existing thread pool if exists
-            ExecutorService answer = routeContext.getCamelContext().getRegistry().lookup(definition.getExecutorServiceRef(), ExecutorService.class);
+            ExecutorService answer = lookupExecutorServiceRef(routeContext, name, definition, definition.getExecutorServiceRef());
             if (answer == null) {
-                // then create a thread pool assuming the ref is a thread pool profile id
-                answer = manager.newThreadPool(definition, name, definition.getExecutorServiceRef());
-            }
-            if (answer == null) {
-                throw new NoSuchBeanException(definition.getExecutorServiceRef(), "ExecutorService");
+                throw new IllegalArgumentException("ExecutorServiceRef " + definition.getExecutorServiceRef() + " not found in registry or as a thread pool profile.");
             }
             return answer;
+        } else if (useDefault) {
+            return manager.newDefaultThreadPool(definition, name);
         }
 
         return null;
+    }
+
+    /**
+     * Will lookup in {@link org.apache.camel.spi.Registry} for a {@link ScheduledExecutorService} registered with the given
+     * <tt>executorServiceRef</tt> name.
+     * <p/>
+     * This method will lookup for configured thread pool in the following order
+     * <ul>
+     *   <li>from the {@link org.apache.camel.spi.Registry} if found</li>
+     *   <li>from the known list of {@link org.apache.camel.spi.ThreadPoolProfile ThreadPoolProfile(s)}.</li>
+     *   <li>if none found, then <tt>null</tt> is returned.</li>
+     * </ul>
+     * @param routeContext   the route context
+     * @param name           name which is appended to the thread name, when the {@link java.util.concurrent.ExecutorService}
+     *                       is created based on a {@link org.apache.camel.spi.ThreadPoolProfile}.
+     * @param source         the source to use the thread pool
+     * @param executorServiceRef reference name of the thread pool
+     * @return the executor service, or <tt>null</tt> if none was found.
+     */
+    public static ScheduledExecutorService lookupScheduledExecutorServiceRef(RouteContext routeContext, String name,
+                                                                             Object source, String executorServiceRef) {
+
+        ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
+        ObjectHelper.notNull(manager, "ExecutorServiceManager", routeContext.getCamelContext());
+        ObjectHelper.notNull(executorServiceRef, "executorServiceRef");
+
+        // lookup in registry first and use existing thread pool if exists
+        ScheduledExecutorService answer = routeContext.getCamelContext().getRegistry().lookup(executorServiceRef, ScheduledExecutorService.class);
+        if (answer == null) {
+            // then create a thread pool assuming the ref is a thread pool profile id
+            answer = manager.newScheduledThreadPool(source, name, executorServiceRef);
+        }
+        return answer;
     }
 
     /**
@@ -267,12 +361,14 @@ public final class ProcessorDefinitionHelper {
      * @param name           name which is appended to the thread name, when the {@link java.util.concurrent.ExecutorService}
      *                       is created based on a {@link org.apache.camel.spi.ThreadPoolProfile}.
      * @param definition     the node definition which may leverage executor service.
+     * @param useDefault     whether to fallback and use a default thread pool, if no explicit configured
      * @return the configured executor service, or <tt>null</tt> if none was configured.
-     * @throws IllegalArgumentException is thrown if the found instance is not a ScheduledExecutorService type.
-     * @throws NoSuchBeanException is thrown if lookup of executor service in {@link org.apache.camel.spi.Registry} was not found
+     * @throws IllegalArgumentException is thrown if the found instance is not a ScheduledExecutorService type,
+     * or lookup of executor service in {@link org.apache.camel.spi.Registry} was not found
      */
     public static ScheduledExecutorService getConfiguredScheduledExecutorService(RouteContext routeContext, String name,
-                                                               ExecutorServiceAwareDefinition definition) throws IllegalArgumentException, NoSuchBeanException {
+                                                               ExecutorServiceAwareDefinition<?> definition,
+                                                               boolean useDefault) throws IllegalArgumentException {
         ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
         ObjectHelper.notNull(manager, "ExecutorServiceManager", routeContext.getCamelContext());
 
@@ -284,18 +380,13 @@ public final class ProcessorDefinitionHelper {
             }
             throw new IllegalArgumentException("ExecutorServiceRef " + definition.getExecutorServiceRef() + " is not an ScheduledExecutorService instance");
         } else if (definition.getExecutorServiceRef() != null) {
-            ScheduledExecutorService answer = routeContext.getCamelContext().getRegistry().lookup(definition.getExecutorServiceRef(), ScheduledExecutorService.class);
+            ScheduledExecutorService answer = lookupScheduledExecutorServiceRef(routeContext, name, definition, definition.getExecutorServiceRef());
             if (answer == null) {
-                // then create a thread pool assuming the ref is a thread pool profile id
-                ThreadPoolProfile profile = manager.getThreadPoolProfile(definition.getExecutorServiceRef());
-                if (profile != null) {
-                    answer = manager.newScheduledThreadPool(definition, name, profile);
-                }
-            }
-            if (answer == null) {
-                throw new NoSuchBeanException(definition.getExecutorServiceRef(), "ScheduledExecutorService");
+                throw new IllegalArgumentException("ExecutorServiceRef " + definition.getExecutorServiceRef() + " not found in registry or as a thread pool profile.");
             }
             return answer;
+        } else if (useDefault) {
+            return manager.newDefaultScheduledThreadPool(definition, name);
         }
 
         return null;

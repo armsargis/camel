@@ -33,10 +33,6 @@ public class JMSTransactionErrorHandlerTest extends CamelSpringTestSupport {
             "/org/apache/camel/component/jms/tx/JMSTransactionErrorHandlerTest.xml");
     }
 
-    protected int getExpectedRouteCount() {
-        return 1;
-    }
-
     @Test
     public void testTransactionSuccess() throws Exception {
         MockEndpoint mock = getMockEndpoint("mock:result");
@@ -44,7 +40,7 @@ public class JMSTransactionErrorHandlerTest extends CamelSpringTestSupport {
         mock.expectedBodiesReceived("Bye World");
         // success at 3rd attempt
         mock.message(0).header("count").isEqualTo(3);
-        // and since it was Camel doing the redelivey we should have headers for this
+        // and since it was Camel doing the redelivery we should have headers for this
         mock.message(0).header(Exchange.REDELIVERED).isEqualTo(true);
         mock.message(0).header(Exchange.REDELIVERY_COUNTER).isEqualTo(2);
         // and not JMS doing the redelivery

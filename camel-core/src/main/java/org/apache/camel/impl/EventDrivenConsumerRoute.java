@@ -30,6 +30,10 @@ import org.apache.camel.spi.RouteContext;
 /**
  * A {@link DefaultRoute} which starts with an
  * <a href="http://camel.apache.org/event-driven-consumer.html">Event Driven Consumer</a>
+ * <p/>
+ * Use the API from {@link org.apache.camel.CamelContext} to control the lifecycle of a route,
+ * such as starting and stopping using the {@link org.apache.camel.CamelContext#startRoute(String)}
+ * and {@link org.apache.camel.CamelContext#stopRoute(String)} methods.
  *
  * @version 
  */
@@ -71,13 +75,19 @@ public class EventDrivenConsumerRoute extends DefaultRoute {
     @SuppressWarnings("unchecked")
     public Navigate<Processor> navigate() {
         Processor answer = getProcessor();
+
+        // we do not want to navigate the instrument and inflight processors
+        // which is the first 2 delegate async processors, so skip them
         // skip the instrumentation processor if this route was wrapped by one
         if (answer instanceof DelegateAsyncProcessor) {
             answer = ((DelegateAsyncProcessor) answer).getProcessor();
+            if (answer instanceof DelegateAsyncProcessor) {
+                answer = ((DelegateAsyncProcessor) answer).getProcessor();
+            }
         }
 
         if (answer instanceof Navigate) {
-            return (Navigate) answer;
+            return (Navigate<Processor>) answer;
         }
         return null;
     }

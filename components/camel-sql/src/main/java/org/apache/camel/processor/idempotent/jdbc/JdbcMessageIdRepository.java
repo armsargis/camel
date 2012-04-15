@@ -17,120 +17,133 @@
 package org.apache.camel.processor.idempotent.jdbc;
 
 import java.sql.Timestamp;
-
 import javax.sql.DataSource;
 
-import org.apache.camel.api.management.ManagedAttribute;
-import org.apache.camel.api.management.ManagedOperation;
-import org.apache.camel.api.management.ManagedResource;
-import org.apache.camel.spi.IdempotentRepository;
-import org.apache.camel.support.ServiceSupport;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * @version 
+ * Default implementation of {@link AbstractJdbcMessageIdRepository}
  */
-@ManagedResource(description = "JDBC based message id repository")
-public class JdbcMessageIdRepository extends ServiceSupport implements IdempotentRepository<String> {
-    
-    protected static final String QUERY_STRING = "SELECT COUNT(*) FROM CAMEL_MESSAGEPROCESSED WHERE processorName = ? AND messageId = ?";
-    protected static final String INSERT_STRING = "INSERT INTO CAMEL_MESSAGEPROCESSED (processorName, messageId, createdAt) VALUES (?, ?, ?)";
-    protected static final String DELETE_STRING = "DELETE FROM CAMEL_MESSAGEPROCESSED WHERE processorName = ? AND messageId = ?";
-    
-    private final JdbcTemplate jdbcTemplate;
-    private final String processorName;
-    private final TransactionTemplate transactionTemplate;
+public class JdbcMessageIdRepository extends AbstractJdbcMessageIdRepository<String> {
+
+    private boolean createTableIfNotExists = true;
+    private String tableExistsString = "SELECT 1 FROM CAMEL_MESSAGEPROCESSED WHERE 1 = 0";
+    private String createString = "CREATE TABLE CAMEL_MESSAGEPROCESSED (processorName VARCHAR(255), messageId VARCHAR(100), createdAt TIMESTAMP)";
+    private String queryString = "SELECT COUNT(*) FROM CAMEL_MESSAGEPROCESSED WHERE processorName = ? AND messageId = ?";
+    private String insertString = "INSERT INTO CAMEL_MESSAGEPROCESSED (processorName, messageId, createdAt) VALUES (?, ?, ?)";
+    private String deleteString = "DELETE FROM CAMEL_MESSAGEPROCESSED WHERE processorName = ? AND messageId = ?";
+
+    public JdbcMessageIdRepository() {
+    }
 
     public JdbcMessageIdRepository(DataSource dataSource, String processorName) {
-        this(dataSource, createTransactionTemplate(dataSource), processorName);
+        super(dataSource, processorName);
     }
 
     public JdbcMessageIdRepository(DataSource dataSource, TransactionTemplate transactionTemplate, String processorName) {
-        this.jdbcTemplate = new JdbcTemplate(dataSource);
-        this.jdbcTemplate.afterPropertiesSet();
-        this.processorName = processorName;
-        this.transactionTemplate = transactionTemplate;
+        super(dataSource, transactionTemplate, processorName);
     }
 
-    public static JdbcMessageIdRepository jpaMessageIdRepository(DataSource dataSource, String processorName) {
-        return new JdbcMessageIdRepository(dataSource, processorName);
+    public JdbcMessageIdRepository(JdbcTemplate jdbcTemplate, TransactionTemplate transactionTemplate) {
+        super(jdbcTemplate, transactionTemplate);
     }
-
-    private static TransactionTemplate createTransactionTemplate(DataSource dataSource) {
-        TransactionTemplate transactionTemplate = new TransactionTemplate();
-        transactionTemplate.setTransactionManager(new DataSourceTransactionManager(dataSource));
-        transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
-        return transactionTemplate;
-    }
-
-    @ManagedOperation(description = "Adds the key to the store")
-    public boolean add(final String messageId) {
-        // Run this in single transaction.
-        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
-            public Boolean doInTransaction(TransactionStatus status) {
-                int count = jdbcTemplate.queryForInt(QUERY_STRING, processorName, messageId);
-                if (count == 0) {
-                    jdbcTemplate.update(INSERT_STRING, processorName, messageId, new Timestamp(System.currentTimeMillis()));
-                    return Boolean.TRUE;
-                } else {
-                    return Boolean.FALSE;
-                }
-            }
-        });
-        return rc.booleanValue();
-    }
-
-    @ManagedOperation(description = "Does the store contain the given key")
-    public boolean contains(final String messageId) {
-        // Run this in single transaction.
-        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
-            public Boolean doInTransaction(TransactionStatus status) {
-                int count = jdbcTemplate.queryForInt(QUERY_STRING, processorName, messageId);
-                if (count == 0) {
-                    return Boolean.FALSE;
-                } else {
-                    return Boolean.TRUE;
-                }
-            }
-        });
-        return rc.booleanValue();
-    }
-
-    @ManagedOperation(description = "Remove the key from the store")
-    public boolean remove(final String messageId) {
-        Boolean rc = transactionTemplate.execute(new TransactionCallback<Boolean>() {
-            public Boolean doInTransaction(TransactionStatus status) {
-                int updateCount = jdbcTemplate.update(DELETE_STRING, processorName, messageId);
-                if (updateCount == 0) {
-                    return Boolean.FALSE;
-                } else {
-                    return Boolean.TRUE;
-                }
-            }
-        });
-        return rc.booleanValue();
-    }
-
-    public boolean confirm(String s) {
-        // noop
-        return true;
-    }
-
-    @ManagedAttribute(description = "The processor name")
-    public String getProcessorName() {
-        return processorName;
-    }
-
+    
     @Override
     protected void doStart() throws Exception {
+        super.doStart();
+        
+        transactionTemplate.execute(new TransactionCallback<Boolean>() {
+            public Boolean doInTransaction(TransactionStatus status) {
+                try {
+                    // we will receive an exception if the table doesn't exists or we cannot access it
+                    jdbcTemplate.execute(tableExistsString);
+                    log.debug("Expected table for JdbcMessageIdRepository exist");
+                } catch (DataAccessException e) {
+                    if (createTableIfNotExists) {
+                        try {
+                            log.debug("creating table for JdbcMessageIdRepository because it doesn't exist...");
+                            jdbcTemplate.execute(createString);
+                            log.info("table created with query '{}'", createString);
+                        } catch (DataAccessException dae) {
+                            // we will fail if we cannot create it
+                            log.error("Can't create table for JdbcMessageIdRepository with query '{}' because of: {}. This may be a permissions problem. Please create this table and try again.",
+                                    createString, e.getMessage());
+                            throw dae;
+                        }
+                    } else {
+                        throw e;
+                    }
+
+                }
+                return Boolean.TRUE;
+            }
+        });   
     }
 
     @Override
-    protected void doStop() throws Exception {
+    protected int queryForInt(String key) {
+        return jdbcTemplate.queryForInt(queryString, processorName, key);
+    }
+
+    @Override
+    protected int insert(String key) {
+        return jdbcTemplate.update(insertString, processorName, key, new Timestamp(System.currentTimeMillis()));
+    }
+
+    @Override
+    protected int delete(String key) {
+        return jdbcTemplate.update(deleteString, processorName, key);
+    }
+
+    public boolean isCreateTableIfNotExists() {
+        return createTableIfNotExists;
+    }
+
+    public void setCreateTableIfNotExists(boolean createTableIfNotExists) {
+        this.createTableIfNotExists = createTableIfNotExists;
+    }
+
+    public String getTableExistsString() {
+        return tableExistsString;
+    }
+
+    public void setTableExistsString(String tableExistsString) {
+        this.tableExistsString = tableExistsString;
+    }
+    
+    public String getCreateString() {
+        return createString;
+    }
+
+    public void setCreateString(String createString) {
+        this.createString = createString;
+    }
+
+    public String getQueryString() {
+        return queryString;
+    }
+
+    public void setQueryString(String queryString) {
+        this.queryString = queryString;
+    }
+
+    public String getInsertString() {
+        return insertString;
+    }
+
+    public void setInsertString(String insertString) {
+        this.insertString = insertString;
+    }
+
+    public String getDeleteString() {
+        return deleteString;
+    }
+
+    public void setDeleteString(String deleteString) {
+        this.deleteString = deleteString;
     }
 }

@@ -18,9 +18,6 @@ package org.apache.camel.component.cxf.feature;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-
 import javax.xml.transform.Source;
 import javax.xml.transform.dom.DOMSource;
 
@@ -38,7 +35,6 @@ import org.apache.cxf.jaxws.interceptors.HolderOutInterceptor;
 import org.apache.cxf.service.model.BindingMessageInfo;
 import org.apache.cxf.service.model.BindingOperationInfo;
 import org.apache.cxf.service.model.MessageInfo;
-import org.apache.cxf.service.model.MessagePartInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,10 +44,10 @@ import org.slf4j.LoggerFactory;
  */
 public class PayLoadDataFormatFeature extends AbstractDataFormatFeature {
     private static final Logger LOG = LoggerFactory.getLogger(PayLoadDataFormatFeature.class);
-    private static final Collection<Class> REMOVING_FAULT_IN_INTERCEPTORS;
+    private static final Collection<Class<?>> REMOVING_FAULT_IN_INTERCEPTORS;
     private static final boolean DEFAULT_ALLOW_STREAMING;
     static {
-        REMOVING_FAULT_IN_INTERCEPTORS = new ArrayList<Class>();
+        REMOVING_FAULT_IN_INTERCEPTORS = new ArrayList<Class<?>>();
         REMOVING_FAULT_IN_INTERCEPTORS.add(ClientFaultConverter.class);
         
         String s = System.getProperty("org.apache.camel.component.cxf.streaming");

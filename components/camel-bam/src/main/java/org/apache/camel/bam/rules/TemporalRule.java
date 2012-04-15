@@ -50,7 +50,9 @@ public class TemporalRule extends ServiceSupport {
     private long expectedMillis;
     private long overdueMillis;
     private Processor overdueAction;
-    private OutputDefinition overdueProcessors = new OutputDefinition();
+
+    @SuppressWarnings("rawtypes")
+    private OutputDefinition<?> overdueProcessors = new OutputDefinition();
 
     public TemporalRule(TimeExpression first, TimeExpression second) {
         this.first = first;
@@ -66,11 +68,11 @@ public class TemporalRule extends ServiceSupport {
         return this;
     }
 
-    public OutputDefinition errorIfOver(Time builder) {
+    public OutputDefinition<?> errorIfOver(Time builder) {
         return errorIfOver(builder.toMillis());
     }
 
-    public OutputDefinition errorIfOver(long millis) {
+    public OutputDefinition<?> errorIfOver(long millis) {
         overdueMillis = millis;
         return overdueProcessors;
     }
@@ -104,7 +106,7 @@ public class TemporalRule extends ServiceSupport {
         // TODO now we might need to set the second activity state
         // to 'grey' to indicate it now could happen?
 
-        // lets force the lazy creation of the second state
+        // let's force the lazy creation of the second state
         ActivityState secondState = second.getOrCreateActivityState(instance);
         if (expectedMillis > 0L) {
             Date expected = secondState.getTimeExpected();

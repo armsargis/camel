@@ -96,11 +96,11 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
             // ignore
         }
         if (correlationID == null) {
-            log.warn("Ignoring message with no correlationID: " + message);
+            log.warn("Ignoring message with no correlationID: {}", message);
             return;
         }
 
-        log.debug("Received reply message with correlationID: {} -> {}", correlationID, message);
+        log.debug("Received reply message with correlationID [{}] -> {}", correlationID, message);
 
         // handle the reply message
         handleReplyMessage(correlationID, message);
@@ -114,8 +114,16 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
 
                 boolean timeout = holder.isTimeout();
                 if (timeout) {
+                    // timeout occurred do a WARN log so its easier to spot in the logs
+                    if (log.isWarnEnabled()) {
+                        log.warn("Timeout occurred after {} millis waiting for reply message with correlationID [{}]."
+                                + " Setting ExchangeTimedOutException on ExchangeId: {} and continue routing.",
+                                new Object[]{holder.getRequestTimeout(), holder.getCorrelationId(), exchange.getExchangeId()});
+                    }
+
                     // no response, so lets set a timed out exception
-                    exchange.setException(new ExchangeTimedOutException(exchange, holder.getRequestTimeout()));
+                    String msg = "reply message with correlationID: " + holder.getCorrelationId() + " not received";
+                    exchange.setException(new ExchangeTimedOutException(exchange, holder.getRequestTimeout(), msg));
                 } else {
                     JmsMessage response = new JmsMessage(message, endpoint.getBinding());
                     Object body = response.getBody();
@@ -161,7 +169,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
         // event that the reply comes back really really fast, and the correlation map hasn't yet been updated
         // from the provisional id to the JMSMessageID. If so we have to wait a bit and lookup again.
         if (log.isWarnEnabled()) {
-            log.warn("Early reply received with correlationID [" + correlationID + "] -> " + message);
+            log.warn("Early reply received with correlationID [{}] -> {}", correlationID, message);
         }
 
         ReplyHandler answer = null;
@@ -197,14 +205,16 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
         ObjectHelper.notNull(executorService, "executorService", this);
         ObjectHelper.notNull(endpoint, "endpoint", this);
 
-        // purge for timeout every second
-        correlation = new CorrelationTimeoutMap(executorService, 1000);
+        // timeout map to use for purging messages which have timed out, while waiting for an expected reply
+        // when doing request/reply over JMS
+        log.trace("Using timeout checker interval with {} millis", endpoint.getRequestTimeoutCheckerInterval());
+        correlation = new CorrelationTimeoutMap(executorService, endpoint.getRequestTimeoutCheckerInterval());
         ServiceHelper.startService(correlation);
 
         // create JMS listener and start it
         listenerContainer = createListenerContainer();
         listenerContainer.afterPropertiesSet();
-        log.info("Starting reply listener container on endpoint: " + endpoint);
+        log.debug("Starting reply listener container on endpoint: {}", endpoint);
         listenerContainer.start();
     }
 
@@ -213,7 +223,7 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
         ServiceHelper.stopService(correlation);
 
         if (listenerContainer != null) {
-            log.info("Stopping reply listener container on endpoint: " + endpoint);
+            log.debug("Stopping reply listener container on endpoint: {}", endpoint);
             listenerContainer.stop();
             listenerContainer.destroy();
             listenerContainer = null;

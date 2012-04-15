@@ -18,6 +18,7 @@ package org.apache.camel.component.http;
 
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -45,7 +46,7 @@ public class CamelServlet extends HttpServlet {
      */
     private String servletName;
 
-    private ConcurrentHashMap<String, HttpConsumer> consumers = new ConcurrentHashMap<String, HttpConsumer>();
+    private ConcurrentMap<String, HttpConsumer> consumers = new ConcurrentHashMap<String, HttpConsumer>();
    
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -63,8 +64,8 @@ public class CamelServlet extends HttpServlet {
             log.debug("No consumer to service request {}", request);
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
-        }
-
+        }       
+        
         // are we suspended?
         if (consumer.isSuspended()) {
             log.debug("Consumer suspended, cannot service request {}", request);
@@ -72,6 +73,10 @@ public class CamelServlet extends HttpServlet {
             return;
         }
 
+        if ("TRACE".equals(request.getMethod()) && !consumer.isTraceEnabled()) {
+            response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        }
+        
         // create exchange and set data on it
         Exchange exchange = new DefaultExchange(consumer.getEndpoint(), ExchangePattern.InOut);
         if (consumer.getEndpoint().isBridgeEndpoint()) {

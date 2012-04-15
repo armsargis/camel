@@ -29,7 +29,6 @@ import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.component.sql.SqlConstants;
 import org.apache.camel.itest.osgi.OSGiIntegrationTestSupport;
 import org.apache.camel.spring.SpringCamelContext;
-import org.apache.karaf.testing.Helper;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,12 +41,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.osgi.context.support.OsgiBundleXmlApplicationContext;
 
 
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.felix;
 import static org.ops4j.pax.exam.CoreOptions.mavenBundle;
 import static org.ops4j.pax.exam.OptionUtils.combine;
 import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.scanFeatures;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.workingDirectory;
 
 @RunWith(JUnit4TestRunner.class)
 public class SqlRouteTest extends OSGiIntegrationTestSupport {
@@ -118,7 +114,7 @@ public class SqlRouteTest extends OSGiIntegrationTestSupport {
         template.sendBody("direct:insert", new Object[]{10, "test", "test"});
         mock.assertIsSatisfied();
         try {
-            String projectName = (String) jdbcTemplate.queryForObject("select project from projects where id = 10", String.class);
+            String projectName = jdbcTemplate.queryForObject("select project from projects where id = 10", String.class);
             assertEquals("test", projectName);
         } catch (EmptyResultDataAccessException e) {
             fail("no row inserted");
@@ -144,21 +140,12 @@ public class SqlRouteTest extends OSGiIntegrationTestSupport {
     @Configuration
     public static Option[] configure() throws Exception {
         Option[] options = combine(
-                // Default karaf environment
-                Helper.getDefaultOptions(
-                        // this is how you set the default log level when using pax logging (logProfile)
-                        Helper.setLogLevel("WARN")),
-
-                // install the spring.
-                scanFeatures(getKarafFeatureUrl(), "spring"),
+                getDefaultCamelKarafOptions(),
                 // using the features to install the camel components
-                scanFeatures(getCamelKarafFeatureUrl(),
-                        "camel-core", "camel-spring", "camel-test", "camel-sql"),
+                scanFeatures(getCamelKarafFeatureUrl(), "camel-sql"),
 
-                mavenBundle().groupId("org.apache.derby").artifactId("derby").version("10.4.2.0"),
-                workingDirectory("target/paxrunner/"),
-
-                felix(), equinox());
+                // and use derby as the database
+                mavenBundle().groupId("org.apache.derby").artifactId("derby").version("10.4.2.0"));
 
         return options;
     }

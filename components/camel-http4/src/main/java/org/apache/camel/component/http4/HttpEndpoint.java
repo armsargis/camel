@@ -33,6 +33,7 @@ import org.apache.http.conn.params.ConnRoutePNames;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.params.BasicHttpParams;
 import org.apache.http.params.HttpParams;
+import org.apache.http.protocol.HttpContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +47,7 @@ public class HttpEndpoint extends DefaultPollingEndpoint implements HeaderFilter
     private static final transient Logger LOG = LoggerFactory.getLogger(HttpEndpoint.class);
     private HeaderFilterStrategy headerFilterStrategy = new HttpHeaderFilterStrategy();
     private HttpBinding binding;
+    private HttpContext httpContext;
     private HttpComponent component;
     private URI httpUri;
     private HttpParams clientParams;
@@ -58,7 +60,8 @@ public class HttpEndpoint extends DefaultPollingEndpoint implements HeaderFilter
     private boolean chunked = true;
     private boolean disableStreamCache;
     private boolean transferException;
-
+    private boolean traceEnabled;
+    
     public HttpEndpoint() {
     }
 
@@ -183,6 +186,10 @@ public class HttpEndpoint extends DefaultPollingEndpoint implements HeaderFilter
         return httpClientConfigurer;
     }
 
+    public HttpContext getHttpContext() {
+        return httpContext;
+    }
+
     /**
      * Register a custom configuration strategy for new {@link HttpClient} instances
      * created by producers or consumers such as to configure authentication mechanisms etc
@@ -204,20 +211,16 @@ public class HttpEndpoint extends DefaultPollingEndpoint implements HeaderFilter
         this.binding = binding;
     }
     
-    /**
-     * Used from the IntrospectionSupport in HttpComponent.
-     * @param binding
-     */
     public void setHttpBinding(HttpBinding binding) {
         this.binding = binding;
     }
-    
-    /**
-     * Used from the IntrospectionSupport in HttpComponent.
-     * @param binding
-     */
+
     public void setHttpBindingRef(HttpBinding binding) {
         this.binding = binding;
+    }
+
+    public void setHttpContext(HttpContext httpContext) {
+        this.httpContext = httpContext;
     }
 
     public String getPath() {
@@ -309,5 +312,13 @@ public class HttpEndpoint extends DefaultPollingEndpoint implements HeaderFilter
 
     public void setTransferException(boolean transferException) {
         this.transferException = transferException;
+    }
+    
+    public boolean isTraceEnabled() {
+        return this.traceEnabled;
+    }
+
+    public void setTraceEnabled(boolean traceEnabled) {
+        this.traceEnabled = traceEnabled;
     }
 }

@@ -22,8 +22,10 @@ import java.util.Map;
 import java.util.Properties;
 import javax.mail.Message;
 import javax.mail.Session;
+import javax.net.ssl.SSLContext;
 
 import org.apache.camel.RuntimeCamelException;
+import org.apache.camel.util.jsse.SSLContextParameters;
 
 /**
  * Represents the configuration data for communicating over email
@@ -49,6 +51,7 @@ public class MailConfiguration implements Cloneable {
     private boolean unseen = true;
     private boolean ignoreUriScheme;
     private Map<Message.RecipientType, String> recipients = new HashMap<Message.RecipientType, String>();
+    private String replyTo;
     private int fetchSize = -1;
     private boolean debugMode;
     private long connectionTimeout = MailConstants.MAIL_DEFAULT_CONNECTION_TIMEOUT;
@@ -58,6 +61,7 @@ public class MailConfiguration implements Cloneable {
     private boolean useInlineAttachments;
     private boolean ignoreUnsupportedCharset;
     private boolean disconnect;
+    private SSLContextParameters sslContextParameters;
 
     public MailConfiguration() {
     }
@@ -169,6 +173,17 @@ public class MailConfiguration implements Cloneable {
             properties.put("javax.net.debug", "all");
         }
 
+        if (sslContextParameters != null && isSecureProtocol()) {
+            SSLContext sslContext;
+            try {
+                sslContext = sslContextParameters.createSSLContext();
+            } catch (Exception e) {
+                throw new RuntimeCamelException("Error initializing SSLContext.", e);
+            }
+            properties.put("mail." + protocol + ".socketFactory", sslContext.getSocketFactory());
+            properties.put("mail." + protocol + ".socketFactory.fallback", "false");
+            properties.put("mail." + protocol + ".socketFactory.port", "" + port);
+        }
         if (dummyTrustManager && isSecureProtocol()) {
             // set the custom SSL properties
             properties.put("mail." + protocol + ".socketFactory.class", "org.apache.camel.component.mail.security.DummySSLSocketFactory");
@@ -372,6 +387,14 @@ public class MailConfiguration implements Cloneable {
     public Map<Message.RecipientType, String> getRecipients() {
         return recipients;
     }
+    
+    public String getReplyTo() {
+        return replyTo;
+    }
+
+    public void setReplyTo(String replyTo) {
+        this.replyTo = replyTo;
+    }
 
     public int getFetchSize() {
         return fetchSize;
@@ -443,5 +466,13 @@ public class MailConfiguration implements Cloneable {
 
     public void setDisconnect(boolean disconnect) {
         this.disconnect = disconnect;
+    }
+    
+    public SSLContextParameters getSslContextParameters() {
+        return sslContextParameters;
+    }
+
+    public void setSslContextParameters(SSLContextParameters sslContextParameters) {
+        this.sslContextParameters = sslContextParameters;
     }
 }

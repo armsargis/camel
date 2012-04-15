@@ -22,7 +22,7 @@ import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import org.apache.camel.processor.RedeliveryPolicy;
+import org.apache.camel.spring.CamelRedeliveryPolicyFactoryBean;
 import org.apache.camel.spring.ErrorHandlerType;
 import org.apache.camel.util.ObjectHelper;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -35,14 +35,14 @@ import org.springframework.util.StringUtils;
  * The DefinitionParser to deal with the ErrorHandler
  */
 public class ErrorHandlerDefinitionParser extends BeanDefinitionParser {
-    protected BeanDefinitionParser redeliveryPolicyParser = new RedeliveryPolicyDefinitionParser(RedeliveryPolicy.class);
+    protected BeanDefinitionParser redeliveryPolicyParser = new RedeliveryPolicyDefinitionParser(CamelRedeliveryPolicyFactoryBean.class);
     
     public ErrorHandlerDefinitionParser() {
         // need to override the default
         super(null, false);
     }
 
-    protected Class getBeanClass(Element element) {
+    protected Class<?> getBeanClass(Element element) {
         ErrorHandlerType type = ErrorHandlerType.DefaultErrorHandler;
 
         if (ObjectHelper.isNotEmpty(element.getAttribute("type"))) {
@@ -102,7 +102,6 @@ public class ErrorHandlerDefinitionParser extends BeanDefinitionParser {
             parserRefAttribute(element, "onRetryWhileRef", "onRetryWhile", builder);
             parserRefAttribute(element, "redeliveryPolicyRef", "redeliveryPolicy", builder);
             if (type.equals(ErrorHandlerType.TransactionErrorHandler)) {
-                // deal with transactionTemplateRef
                 parserRefAttribute(element, "transactionTemplateRef", "transactionTemplate", builder);
                 parserRefAttribute(element, "transactionManagerRef", "transactionManager", builder);
             }
@@ -123,6 +122,11 @@ public class ErrorHandlerDefinitionParser extends BeanDefinitionParser {
         String transactionManagerRef = element.getAttribute("transactionManagerRef");
         if (ObjectHelper.isNotEmpty(transactionManagerRef) && !type.equals(ErrorHandlerType.TransactionErrorHandler)) {
             throw new IllegalArgumentException("Attribute transactionManagerRef can only be used if type is "
+                    + ErrorHandlerType.TransactionErrorHandler.name() + ", in error handler with id: " + id);
+        }
+        String rollbackLoggingLevel = element.getAttribute("rollbackLoggingLevel");
+        if (ObjectHelper.isNotEmpty(rollbackLoggingLevel) && (!type.equals(ErrorHandlerType.TransactionErrorHandler))) {
+            throw new IllegalArgumentException("Attribute rollbackLoggingLevel can only be used if type is "
                     + ErrorHandlerType.TransactionErrorHandler.name() + ", in error handler with id: " + id);
         }
         String useOriginalMessage = element.getAttribute("useOriginalMessage");
@@ -177,7 +181,7 @@ public class ErrorHandlerDefinitionParser extends BeanDefinitionParser {
     
     protected class RedeliveryPolicyDefinitionParser extends BeanDefinitionParser {
 
-        public RedeliveryPolicyDefinitionParser(Class type) {
+        public RedeliveryPolicyDefinitionParser(Class<?> type) {
             super(type, false);
         }
 

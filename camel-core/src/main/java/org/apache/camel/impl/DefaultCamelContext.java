@@ -102,6 +102,7 @@ import org.apache.camel.spi.Language;
 import org.apache.camel.spi.LanguageResolver;
 import org.apache.camel.spi.LifecycleStrategy;
 import org.apache.camel.spi.ManagementMBeanAssembler;
+import org.apache.camel.spi.ManagementNameStrategy;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.NodeIdFactory;
 import org.apache.camel.spi.PackageScanClassResolver;
@@ -119,7 +120,6 @@ import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.EndpointHelper;
 import org.apache.camel.util.EventHelper;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.util.ReflectionInjector;
 import org.apache.camel.util.ServiceHelper;
 import org.apache.camel.util.StopWatch;
 import org.apache.camel.util.TimeUtils;
@@ -132,10 +132,12 @@ import org.slf4j.LoggerFactory;
  *
  * @version 
  */
+@SuppressWarnings("deprecation")
 public class DefaultCamelContext extends ServiceSupport implements ModelCamelContext, SuspendableService {
     private final transient Logger log = LoggerFactory.getLogger(getClass());
     private JAXBContext jaxbContext;
     private CamelContextNameStrategy nameStrategy = new DefaultCamelContextNameStrategy();
+    private ManagementNameStrategy managementNameStrategy = new DefaultManagementNameStrategy(this);
     private String managementName;
     private ClassLoader applicationContextClassLoader;
     private Map<EndpointKey, Endpoint> endpoints;
@@ -204,7 +206,6 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     private Date startDate;
 
     public DefaultCamelContext() {
-        super();
         this.executorServiceManager = new DefaultExecutorServiceManager(this);
 
         // create endpoint registry at first since end users may access endpoints before CamelContext is started
@@ -259,6 +260,14 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
 
     public void setNameStrategy(CamelContextNameStrategy nameStrategy) {
         this.nameStrategy = nameStrategy;
+    }
+
+    public ManagementNameStrategy getManagementNameStrategy() {
+        return managementNameStrategy;
+    }
+
+    public void setManagementNameStrategy(ManagementNameStrategy managementNameStrategy) {
+        this.managementNameStrategy = managementNameStrategy;
     }
 
     public String getManagementName() {
@@ -317,8 +326,13 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         if (componentType.isInstance(component)) {
             return componentType.cast(component);
         } else {
-            throw new IllegalArgumentException("Found component of type: " 
-                + component.getClass() + " instead of expected: " + componentType);
+            String message;
+            if (component == null) {
+                message = "Did not find component given by the name: " + name;
+            } else {
+                message = "Found component of type: " + component.getClass() + " instead of expected: " + componentType;
+            }
+            throw new IllegalArgumentException(message);
         }
     }
 
@@ -376,15 +390,17 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
             answer.add(oldEndpoint);
             stopServices(oldEndpoint);
         } else {
-            for (Map.Entry entry : endpoints.entrySet()) {
-                oldEndpoint = (Endpoint)entry.getValue();
-                if (EndpointHelper.matchEndpoint(oldEndpoint.getEndpointUri(), uri)) {
-                    answer.add(oldEndpoint);
-                    stopServices(oldEndpoint);
+            for (Map.Entry<EndpointKey, Endpoint> entry : endpoints.entrySet()) {
+                oldEndpoint = entry.getValue();
+                if (EndpointHelper.matchEndpoint(this, oldEndpoint.getEndpointUri(), uri)) {
+                    try {
+                        stopServices(oldEndpoint);
+                        answer.add(oldEndpoint);
+                        endpoints.remove(entry.getKey());
+                    } catch (Exception e) {
+                        log.warn("Endpoint '{}' matching pattern '{}' should be removed, but could not be stopped. Remove ignored...");
+                    }
                 }
-            }
-            for (Endpoint endpoint : answer) {
-                endpoints.remove(getEndpointKey(endpoint.getEndpointUri()));
             }
         }
 
@@ -909,8 +925,25 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         if (object instanceof Service) {
             startService((Service)object);
         } else if (object instanceof Collection<?>) {
-            startServices((Collection)object);
+            startServices((Collection<?>)object);
         }
+    }
+
+    public boolean removeService(Object object) throws Exception {
+        if (object instanceof Service) {
+            Service service = (Service) object;
+
+            for (LifecycleStrategy strategy : lifecycleStrategies) {
+                if (service instanceof Endpoint) {
+                    // use specialized endpoint remove
+                    strategy.onEndpointRemove((Endpoint) service);
+                } else {
+                    strategy.onServiceRemove(this, service, null);
+                }
+            }
+            return servicesToClose.remove(service);
+        }
+        return false;
     }
 
     public boolean hasService(Object object) {
@@ -1352,10 +1385,17 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         log.info("Apache Camel " + getVersion() + " (CamelContext: " + getName() + ") is starting");
 
         doNotStartRoutesOnFirstStart = !firstStartDone && !isAutoStartup();
-        firstStartDone = true;
+
+        // if the context was configured with auto startup = false, and we are already started,
+        // then we may need to start the routes on the 2nd start call
+        if (firstStartDone && !isAutoStartup() && isStarted()) {
+            // invoke this logic to warmup the routes and if possible also start the routes
+            doStartOrResumeRoutes(routeServices, true, true, false, true);
+        }
 
         // super will invoke doStart which will prepare internal services and start routes etc.
         try {
+            firstStartDone = true;
             super.start();
         } catch (VetoCamelContextStartException e) {
             if (e.isRethrowException()) {
@@ -1513,7 +1553,8 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
 
         // stop route inputs in the same order as they was started so we stop the very first inputs first
         try {
-            shutdownStrategy.shutdown(this, getRouteStartupOrder());
+            // force shutting down routes as they may otherwise cause shutdown to hang
+            shutdownStrategy.shutdownForced(this, getRouteStartupOrder());
         } catch (Throwable e) {
             log.warn("Error occurred while shutting down routes. This exception will be ignored.", e);
         }
@@ -1566,8 +1607,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
 
         stopWatch.stop();
         if (log.isInfoEnabled()) {
-            log.info("Uptime: " + getUptime());
-            log.info("Apache Camel " + getVersion() + " (CamelContext: " + getName() + ") is shutdown in " + TimeUtils.printDuration(stopWatch.taken()));
+            log.info("Apache Camel " + getVersion() + " (CamelContext: " + getName() + ") is shutdown in " + TimeUtils.printDuration(stopWatch.taken()) + ". Uptime " + getUptime() + ".");
         }
 
         // and clear start date
@@ -1589,16 +1629,18 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         // filter out already started routes
         Map<String, RouteService> filtered = new LinkedHashMap<String, RouteService>();
         for (Map.Entry<String, RouteService> entry : routeServices.entrySet()) {
-            boolean startable;
+            boolean startable = false;
 
             Consumer consumer = entry.getValue().getRoutes().iterator().next().getConsumer();
             if (consumer instanceof SuspendableService) {
                 // consumer could be suspended, which is not reflected in the RouteService status
                 startable = ((SuspendableService) consumer).isSuspended();
-            } else if (consumer instanceof StatefulService) {
+            }
+
+            if (!startable && consumer instanceof StatefulService) {
                 // consumer could be stopped, which is not reflected in the RouteService status
                 startable = ((StatefulService) consumer).getStatus().isStartable();
-            } else {
+            } else if (!startable) {
                 // no consumer so use state from route service
                 startable = entry.getValue().getStatus().isStartable();
             }
@@ -1635,7 +1677,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         // allow us to do custom work before delegating to service helper
         try {
             if (service instanceof Service) {
-                ServiceHelper.stopAndShutdownService((Service)service);
+                ServiceHelper.stopAndShutdownService(service);
             } else if (service instanceof Collection) {
                 ServiceHelper.stopAndShutdownServices((Collection<?>)service);
             }
@@ -1654,7 +1696,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     private void shutdownServices(Collection<?> services, boolean reverse) {
         Collection<Object> list = CastUtils.cast(services);
         if (reverse) {
-            ArrayList<Object> reverseList = new ArrayList<Object>(services);
+            List<Object> reverseList = new ArrayList<Object>(services);
             Collections.reverse(reverseList);
             list = reverseList;
         }
@@ -1675,7 +1717,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         service.start();
     }
     
-    private void startServices(Collection services) throws Exception {
+    private void startServices(Collection<?> services) throws Exception {
         for (Object element : services) {
             if (element instanceof Service) {
                 startService((Service)element);
@@ -1921,10 +1963,29 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
             for (Consumer consumer : routeService.getInputs().values()) {
                 Endpoint endpoint = consumer.getEndpoint();
 
-                // check multiple consumer violation
+                // check multiple consumer violation, with the other routes to be started
                 if (!doCheckMultipleConsumerSupportClash(endpoint, routeInputs)) {
                     throw new FailedToStartRouteException(routeService.getId(),
                         "Multiple consumers for the same endpoint is not allowed: " + endpoint);
+                }
+                
+                // check for multiple consumer violations with existing routes which
+                // have already been started, or is currently starting
+                List<Endpoint> existingEndpoints = new ArrayList<Endpoint>();
+                for (Route existingRoute : getRoutes()) {
+                    if (route.getId().equals(existingRoute.getId())) {
+                        // skip ourselves
+                        continue;
+                    }
+                    Endpoint existing = existingRoute.getEndpoint();
+                    ServiceStatus status = getRouteStatus(existingRoute.getId());
+                    if (status != null && status.isStarted() || status.isStarting()) {
+                        existingEndpoints.add(existing);
+                    }
+                }
+                if (!doCheckMultipleConsumerSupportClash(endpoint, existingEndpoints)) {
+                    throw new FailedToStartRouteException(routeService.getId(),
+                            "Multiple consumers for the same endpoint is not allowed: " + endpoint);
                 }
 
                 // start the consumer on the route
@@ -1994,7 +2055,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     }
 
     /**
-     * Lets force some lazy initialization to occur upfront before we start any
+     * Force some lazy initialization to occur upfront before we start any
      * components and create routes
      */
     protected void forceLazyInitialization() {
@@ -2005,7 +2066,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     }
 
     /**
-     * Lets force clear lazy initialization so they can be re-created on restart
+     * Force clear lazy initialization so they can be re-created on restart
      */
     protected void forceStopLazyInitialization() {
         injector = null;
@@ -2036,8 +2097,8 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
         try {
             return (Injector) finder.newInstance("Injector");
         } catch (NoFactoryAvailableException e) {
-            // lets use the default
-            return new ReflectionInjector();
+            // lets use the default injector
+            return new DefaultInjector(this);
         }
     }
 
@@ -2255,11 +2316,13 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
     public Boolean isAutoStartup() {
         return autoStartup != null && autoStartup;
     }
-    
+
+    @Deprecated
     public Boolean isLazyLoadTypeConverters() {
         return lazyLoadTypeConverters != null && lazyLoadTypeConverters;
     }
-    
+
+    @Deprecated
     public void setLazyLoadTypeConverters(Boolean lazyLoadTypeConverters) {
         this.lazyLoadTypeConverters = lazyLoadTypeConverters;
     }
@@ -2401,6 +2464,7 @@ public class DefaultCamelContext extends ServiceSupport implements ModelCamelCon
      */
     public static void setContextCounter(int value) {
         DefaultCamelContextNameStrategy.setCounter(value);
+        DefaultManagementNameStrategy.setCounter(value);
     }
 
     private static UuidGenerator createDefaultUuidGenerator() {

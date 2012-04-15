@@ -28,7 +28,6 @@ import org.apache.camel.impl.DefaultComponent;
 public class S3Component extends DefaultComponent {
     
     public S3Component() {
-        super();
     }
 
     public S3Component(CamelContext context) {
@@ -48,7 +47,7 @@ public class S3Component extends DefaultComponent {
             throw new IllegalArgumentException("AmazonS3Client or accessKey and secretKey must be specified");
         }
 
-        S3Endpoint endpoint = new S3Endpoint(uri, getCamelContext(), configuration);
+        S3Endpoint endpoint = new S3Endpoint(uri, this, configuration);
         return endpoint;
     }
 }

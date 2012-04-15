@@ -20,6 +20,8 @@ import org.apache.camel.component.cxf.jaxrs.testbean.CustomerService;
 import org.apache.camel.component.cxf.spring.SpringJAXRSClientFactoryBean;
 import org.apache.camel.component.cxf.spring.SpringJAXRSServerFactoryBean;
 import org.apache.camel.test.junit4.CamelSpringTestSupport;
+import org.apache.cxf.version.Version;
+
 import org.junit.Test;
 import org.springframework.context.support.AbstractXmlApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
@@ -33,7 +35,7 @@ public class CxfRsSpringEndpointTest extends CamelSpringTestSupport {
         assertEquals("Get a wrong provider size", 1, sfb.getProviders().size());
         assertEquals("Get a wrong beanId", sfb.getBeanId(), "rsServer");
         assertEquals("Get a wrong address", sfb.getAddress(), "http://localhost:9000/router");
-        assertEquals("Get a wrong size of resource classess", sfb.getResourceClasses().size(), 1);
+        assertEquals("Get a wrong size of resource classes", sfb.getResourceClasses().size(), 1);
         assertEquals("Get a wrong resource class", sfb.getResourceClasses().get(0), CustomerService.class);
         assertEquals("Got the wrong loggingFeatureEnabled", true, sfb.isLoggingFeatureEnabled());
         assertEquals("Got the wrong loggingSizeLimit", 200, sfb.getLoggingSizeLimit());
@@ -51,13 +53,12 @@ public class CxfRsSpringEndpointTest extends CamelSpringTestSupport {
     }
     
     @Override
-    protected int getExpectedRouteCount() {
-        return 0;
-    }
-
-    @Override
     protected AbstractXmlApplicationContext createApplicationContext() {
-        return new ClassPathXmlApplicationContext(new String("org/apache/camel/component/cxf/jaxrs/CxfRsSpringEndpointBeans.xml")); 
+        String version = Version.getCurrentVersion();
+        if (version.contains("2.5") || version.contains("2.4")) {
+            return new ClassPathXmlApplicationContext(new String("org/apache/camel/component/cxf/jaxrs/CxfRsSpringEndpointBeans.xml"));
+        }
+        return new ClassPathXmlApplicationContext(new String("org/apache/camel/component/cxf/jaxrs/CxfRsSpringEndpointBeans-2.6.xml"));
     }
 
 }

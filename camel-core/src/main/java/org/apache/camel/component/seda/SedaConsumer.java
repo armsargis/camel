@@ -101,7 +101,8 @@ public class SedaConsumer extends ServiceSupport implements Consumer, Runnable, 
         return endpoint.getQueue().size();
     }
 
-    public void prepareShutdown() {
+    @Override
+    public void prepareShutdown(boolean forced) {
         // signal we want to shutdown
         shutdownPending = true;
 
@@ -138,6 +139,18 @@ public class SedaConsumer extends ServiceSupport implements Consumer, Runnable, 
         BlockingQueue<Exchange> queue = endpoint.getQueue();
         // loop while we are allowed, or if we are stopping loop until the queue is empty
         while (queue != null && (isRunAllowed())) {
+
+            // do not poll during CamelContext is starting, as we should only poll when CamelContext is fully started
+            if (getEndpoint().getCamelContext().getStatus().isStarting()) {
+                LOG.trace("CamelContext is starting so skip polling");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    LOG.debug("Sleep interrupted, are we stopping? {}", isStopping() || isStopped());
+                }
+                continue;
+            }
+
             // do not poll if we are suspended
             if (isSuspending() || isSuspended()) {
                 LOG.trace("Consumer is suspended so skip polling");
@@ -155,9 +168,8 @@ public class SedaConsumer extends ServiceSupport implements Consumer, Runnable, 
                 if (exchange != null) {
                     try {
                         // send a new copied exchange with new camel context
-                        Exchange newExchange = ExchangeHelper.copyExchangeAndSetCamelContext(exchange, endpoint.getCamelContext());
-                        // set the fromEndpoint 
-                        newExchange.setFromEndpoint(endpoint);
+                        Exchange newExchange = prepareExchange(exchange);
+                        // process the exchange
                         sendToConsumers(newExchange);
                         // copy the message back
                         if (newExchange.hasOut()) {
@@ -192,6 +204,20 @@ public class SedaConsumer extends ServiceSupport implements Consumer, Runnable, 
 
         latch.countDown();
         LOG.debug("Ending this polling consumer thread, there are still {} consumer threads left.", latch.getCount());
+    }
+
+    /**
+     * Strategy to prepare exchange for being processed by this consumer
+     *
+     * @param exchange the exchange
+     * @return the exchange to process by this consumer.
+     */
+    protected Exchange prepareExchange(Exchange exchange) {
+        // send a new copied exchange with new camel context
+        Exchange newExchange = ExchangeHelper.copyExchangeAndSetCamelContext(exchange, endpoint.getCamelContext());
+        // set the from endpoint
+        newExchange.setFromEndpoint(endpoint);
+        return newExchange;
     }
 
     /**

@@ -132,13 +132,15 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
         }
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
     protected void setupJAXRSServerFactoryBean(JAXRSServerFactoryBean sfb) {
         // address
         if (getAddress() != null) {
             sfb.setAddress(getAddress());
         }
         if (getResourceClasses() != null) {
-            sfb.setResourceClasses(CastUtils.cast(getResourceClasses(), Class.class));
+            List res = CastUtils.cast(getResourceClasses());
+            sfb.setResourceClasses(res);
         }
         sfb.setStart(false);
     }
@@ -223,6 +225,10 @@ public class CxfRsEndpoint extends DefaultEndpoint implements HeaderFilterStrate
 
     public void setResourceClasses(Class<?>... classes) {
         setResourceClasses(Arrays.asList(classes));
+    }
+    
+    public void setResourceClass(Class<?> clazz) {
+        setResourceClasses(clazz);
     }
 
     public void setAddress(String address) {

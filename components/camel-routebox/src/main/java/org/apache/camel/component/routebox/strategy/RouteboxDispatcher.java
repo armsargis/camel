@@ -45,7 +45,6 @@ public class RouteboxDispatcher {
     private ProducerTemplate producer;
     
     public RouteboxDispatcher(ProducerTemplate producer) {
-        super();
         this.producer = producer;
     }
 
@@ -121,7 +120,8 @@ public class RouteboxDispatcher {
         
         return dispatchUri;
     }
-    
+
+    @SuppressWarnings("deprecation")
     protected List<URI> getInnerContextConsumerList(CamelContext context) throws URISyntaxException {
         List<URI> consumerList = new ArrayList<URI>();
         List<RouteDefinition> routeDefinitions = context.getRouteDefinitions();

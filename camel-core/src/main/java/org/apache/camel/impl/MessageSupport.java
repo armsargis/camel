@@ -134,6 +134,8 @@ public abstract class MessageSupport implements Message {
 
         setMessageId(that.getMessageId());
         setBody(that.getBody());
+        setFault(that.isFault());
+
         if (hasHeaders()) {
             getHeaders().clear();
         }
@@ -185,7 +187,7 @@ public abstract class MessageSupport implements Message {
     }
 
     /**
-     * Lets allow implementations to auto-create a messageId
+     * Allow implementations to auto-create a messageId
      */
     protected String createMessageId() {
         String uuid = null;

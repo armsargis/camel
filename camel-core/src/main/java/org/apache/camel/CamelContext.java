@@ -41,6 +41,7 @@ import org.apache.camel.spi.InterceptStrategy;
 import org.apache.camel.spi.Language;
 import org.apache.camel.spi.LifecycleStrategy;
 import org.apache.camel.spi.ManagementMBeanAssembler;
+import org.apache.camel.spi.ManagementNameStrategy;
 import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.NodeIdFactory;
 import org.apache.camel.spi.PackageScanClassResolver;
@@ -99,6 +100,20 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
     void setNameStrategy(CamelContextNameStrategy nameStrategy);
 
     /**
+     * Gets the current management name strategy
+     *
+     * @return management name strategy
+     */
+    ManagementNameStrategy getManagementNameStrategy();
+
+    /**
+     * Sets a custom management name strategy
+     *
+     * @param nameStrategy name strategy
+     */
+    void setManagementNameStrategy(ManagementNameStrategy nameStrategy);
+
+    /**
      * Gets the name this {@link CamelContext} was registered in JMX.
      * <p/>
      * The reason that a {@link CamelContext} can have a different name in JMX is the fact to remedy for name clash
@@ -108,13 +123,6 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @return the management name
      */
     String getManagementName();
-
-    /**
-     * Sets the name this {@link CamelContext} was registered in JMX.
-     *
-     * @param name  the actual name used when registering this {@link CamelContext} in JMX
-     */
-    void setManagementName(String name);
 
     /**
      * Gets the version of the this context.
@@ -152,6 +160,18 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @throws Exception can be thrown when starting the service
      */
     void addService(Object object) throws Exception;
+
+    /**
+     * Removes a service from this context.
+     * <p/>
+     * The service is assumed to have been previously added using {@link #addService(Object)} method.
+     * This method will <b>not</b> change the service lifecycle.
+     *
+     * @param object the service
+     * @throws Exception can be thrown if error removing the service
+     * @return <tt>true</tt> if the service was removed, <tt>false</tt> if no service existed
+     */
+    boolean removeService(Object object) throws Exception;
 
     /**
      * Has the given service already been added to this context?
@@ -286,9 +306,9 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * Removes all endpoints with the given URI.
      *
      * @param pattern an uri or pattern to match
-     * @return a collection of endpoints removed or null if there are no endpoints for this URI
+     * @return a collection of endpoints removed which could be empty if there are no endpoints found for the given <tt>pattern</tt>
      * @throws Exception if at least one endpoint could not be stopped
-     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(String, String) for pattern
+     * @see org.apache.camel.util.EndpointHelper#matchEndpoint(CamelContext, String, String)  for pattern
      */
     Collection<Endpoint> removeEndpoints(String pattern) throws Exception;
 
@@ -309,6 +329,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * Returns a list of the current route definitions
      *
      * @return list of the current route definitions
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#getRouteDefinitions()}
      */
     @Deprecated
     List<RouteDefinition> getRouteDefinitions();
@@ -318,6 +339,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param id id of the route
      * @return the route definition or <tt>null</tt> if not found
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#getRouteDefinition(String)}
      */
     @Deprecated
     RouteDefinition getRouteDefinition(String id);
@@ -339,7 +361,11 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
 
     /**
      * Adds a collection of routes to this context using the given builder
-     * to build them
+     * to build them.
+     * <p/>
+     * <b>Important:</b> The added routes will <b>only</b> be started, if {@link CamelContext}
+     * is already started. You may want to check the state of {@link CamelContext} before
+     * adding the routes, using the {@link org.apache.camel.CamelContext#getStatus()} method.
      *
      * @param builder the builder which will create the routes and add them to this context
      * @throws Exception if the routes could not be created for whatever reason
@@ -352,6 +378,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * @param is input stream with the route(s) definition to add
      * @throws Exception if the route definitions could not be loaded for whatever reason
      * @return the route definitions
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#loadRoutesDefinition(java.io.InputStream)}
      */
     @Deprecated
     RoutesDefinition loadRoutesDefinition(InputStream is) throws Exception;
@@ -361,6 +388,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param routeDefinitions the route(s) definition to add
      * @throws Exception if the route definitions could not be created for whatever reason
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#addRouteDefinitions(java.util.Collection)}
      */
     @Deprecated
     void addRouteDefinitions(Collection<RouteDefinition> routeDefinitions) throws Exception;
@@ -370,6 +398,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param routeDefinition the route definition to add
      * @throws Exception if the route definition could not be created for whatever reason
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#addRouteDefinition(org.apache.camel.model.RouteDefinition)}
      */
     @Deprecated
     void addRouteDefinition(RouteDefinition routeDefinition) throws Exception;
@@ -380,6 +409,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param routeDefinitions route(s) definitions to remove
      * @throws Exception if the route definitions could not be removed for whatever reason
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#removeRouteDefinitions(java.util.Collection)}
      */
     @Deprecated
     void removeRouteDefinitions(Collection<RouteDefinition> routeDefinitions) throws Exception;
@@ -390,6 +420,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param routeDefinition route definition to remove
      * @throws Exception if the route definition could not be removed for whatever reason
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#removeRouteDefinition(org.apache.camel.model.RouteDefinition)}
      */
     @Deprecated
     void removeRouteDefinition(RouteDefinition routeDefinition) throws Exception;
@@ -399,6 +430,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param route the route to start
      * @throws Exception is thrown if the route could not be started for whatever reason
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#startRoute(org.apache.camel.model.RouteDefinition)}
      */
     @Deprecated
     void startRoute(RouteDefinition route) throws Exception;
@@ -416,6 +448,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param route the route to stop
      * @throws Exception is thrown if the route could not be stopped for whatever reason
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#stopRoute(org.apache.camel.model.RouteDefinition)}
      */
     @Deprecated
     void stopRoute(RouteDefinition route) throws Exception;
@@ -715,7 +748,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
 
     /**
      * Gets the default error handler builder which is inherited by the routes
-     * @deprecated The return type will be switched to ErrorHandlerFactory in Camel 3.0
+     * @deprecated The return type will be switched to {@link ErrorHandlerFactory} in Camel 3.0
      *
      * @return the builder
      */
@@ -733,6 +766,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * Sets the data formats that can be referenced in the routes.
      *
      * @param dataFormats the data formats
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#setDataFormats(java.util.Map)}
      */
     @Deprecated
     void setDataFormats(Map<String, DataFormatDefinition> dataFormats);
@@ -741,6 +775,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * Gets the data formats that can be referenced in the routes.
      *
      * @return the data formats available
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#getDataFormats()}
      */
     @Deprecated
     Map<String, DataFormatDefinition> getDataFormats();
@@ -758,6 +793,7 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      *
      * @param name the data format definition name or a reference to it in the {@link Registry}
      * @return the resolved data format definition, or <tt>null</tt> if not found
+     * @deprecated use {@link org.apache.camel.model.ModelCamelContext#resolveDataFormatDefinition(String)}
      */
     @Deprecated
     DataFormatDefinition resolveDataFormatDefinition(String name);
@@ -1016,14 +1052,18 @@ public interface CamelContext extends SuspendableService, RuntimeConfiguration {
      * Whether or not type converters should be loaded lazy
      *
      * @return <tt>true</tt> to load lazy, <tt>false</tt> to load on startup
+     * @deprecated this option is no longer supported, will be removed in a future Camel release.
      */
+    @Deprecated
     Boolean isLazyLoadTypeConverters();
 
     /**
      * Sets whether type converters should be loaded lazy
      *
      * @param lazyLoadTypeConverters <tt>true</tt> to load lazy, <tt>false</tt> to load on startup
+     * @deprecated this option is no longer supported, will be removed in a future Camel release.
      */
+    @Deprecated
     void setLazyLoadTypeConverters(Boolean lazyLoadTypeConverters);
 
     /**

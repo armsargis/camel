@@ -29,7 +29,6 @@ import java.util.Random;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import com.notnoop.apns.internal.ApnsFeedbackParsingUtilsAcessor;
@@ -45,7 +44,6 @@ public final class ApnsUtils {
     private static Random random = new Random();
 
     private ApnsUtils() {
-        super();
     }
 
     public static byte[] createRandomDeviceTokenBytes() {

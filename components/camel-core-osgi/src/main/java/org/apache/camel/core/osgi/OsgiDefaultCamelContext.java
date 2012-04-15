@@ -33,7 +33,6 @@ public class OsgiDefaultCamelContext extends DefaultCamelContext {
     }
 
     public OsgiDefaultCamelContext(BundleContext bundleContext, Registry registry) {
-        super();
         this.bundleContext = bundleContext;
         this.registry = registry;
         OsgiCamelContextHelper.osgiUpdate(this, bundleContext);
@@ -59,10 +58,4 @@ public class OsgiDefaultCamelContext extends DefaultCamelContext {
         return new OsgiTypeConverter(ctx, getInjector(), finder);
     }
 
-    @Override
-    public void setName(String name) {
-        super.setName(name);
-        // in OSGi append the bundle id to the management name so it will be unique in the JVM
-        super.setManagementName(name + "-" + bundleContext.getBundle().getBundleId());
-    }
 }

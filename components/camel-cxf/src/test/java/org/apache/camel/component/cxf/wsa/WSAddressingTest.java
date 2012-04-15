@@ -24,7 +24,6 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.cxf.CXFTestSupport;
-import org.apache.camel.test.AvailablePortFinder;
 import org.apache.cxf.bus.spring.SpringBusFactory;
 import org.apache.cxf.common.classloader.ClassLoaderUtils;
 import org.apache.cxf.endpoint.Server;
@@ -130,7 +129,7 @@ public class WSAddressingTest extends AbstractJUnit4SpringContextTests {
     public static class RemoveRequestOutHeaderProcessor implements Processor {
 
         public void process(Exchange exchange) throws Exception {
-            List headerList = (List) exchange.getIn().getHeader(Header.HEADER_LIST);
+            List<?> headerList = (List<?>) exchange.getIn().getHeader(Header.HEADER_LIST);
             assertNotNull("We should get the header list.", headerList);
             assertEquals("Get a wrong size of header list.", 4, headerList.size());
             // we don't need send the soap headers to the client

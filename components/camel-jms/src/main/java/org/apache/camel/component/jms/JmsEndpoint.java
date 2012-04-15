@@ -34,6 +34,7 @@ import javax.jms.Topic;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
+import org.apache.camel.LoggingLevel;
 import org.apache.camel.MultipleConsumersSupport;
 import org.apache.camel.PollingConsumer;
 import org.apache.camel.Processor;
@@ -103,6 +104,7 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         this.pubSubDomain = pubSubDomain;
     }
 
+    @SuppressWarnings("deprecation")
     public JmsEndpoint(String endpointUri, JmsBinding binding, JmsConfiguration configuration, String destinationName, boolean pubSubDomain) {
         super(UnsafeUriCharactersEncoder.encode(endpointUri));
         this.binding = binding;
@@ -122,7 +124,6 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public JmsEndpoint(String endpointUri, String destinationName) {
         this(UnsafeUriCharactersEncoder.encode(endpointUri), destinationName, true);
     }
-
 
     /**
      * Returns a new JMS endpoint for the given JMS destination using the configuration from the given JMS component
@@ -305,6 +306,12 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
 
     // Properties
     // -------------------------------------------------------------------------
+
+    @Override
+    public JmsComponent getComponent() {
+        return (JmsComponent) super.getComponent();
+    }
+
     public HeaderFilterStrategy getHeaderFilterStrategy() {
         if (headerFilterStrategy == null) {
             headerFilterStrategy = new JmsHeaderFilterStrategy();
@@ -461,6 +468,14 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
         }
         return replyManagerExecutorService;
     }
+    
+    protected ExecutorService getAsyncStartExecutorService() {
+        if (getComponent() == null) {
+            throw new IllegalStateException("AsyncStartListener requires JmsComponent to be configured on this endpoint: " + this);
+        }
+        // use shared thread pool from component
+        return getComponent().getAsyncStartExecutorService();
+    }
 
     /**
      * State whether this endpoint is running (eg started)
@@ -489,6 +504,11 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
             }
             replyToReplyManager.clear();
         }
+
+        if (replyManagerExecutorService != null) {
+            getCamelContext().getExecutorServiceManager().shutdownNow(replyManagerExecutorService);
+            replyManagerExecutorService = null;
+        }
     }
 
     // Delegated properties from the configuration
@@ -511,6 +531,11 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     @ManagedAttribute
     public String getCacheLevelName() {
         return getConfiguration().getCacheLevelName();
+    }
+    
+    @ManagedAttribute
+    public String getReplyToCacheLevelName() {
+        return getConfiguration().getReplyToCacheLevelName();
     }
 
     @ManagedAttribute
@@ -543,7 +568,22 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     public ErrorHandler getErrorHandler() {
         return getConfiguration().getErrorHandler();
     }
+
+    @ManagedAttribute
+    public LoggingLevel getErrorHandlerLoggingLevel() {
+        return getConfiguration().getErrorHandlerLoggingLevel();
+    }
     
+    @ManagedAttribute
+    public boolean isErrorHandlerLogStackTrace() {
+        return getConfiguration().isErrorHandlerLogStackTrace();
+    }
+
+    @ManagedAttribute
+    public void setErrorHandlerLogStackTrace(boolean errorHandlerLogStackTrace) {
+        getConfiguration().setErrorHandlerLogStackTrace(errorHandlerLogStackTrace);
+    }
+
     @ManagedAttribute
     public int getIdleTaskExecutionLimit() {
         return getConfiguration().getIdleTaskExecutionLimit();
@@ -608,6 +648,11 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     @ManagedAttribute
     public long getRequestTimeout() {
         return getConfiguration().getRequestTimeout();
+    }
+
+    @ManagedAttribute
+    public long getRequestTimeoutCheckerInterval() {
+        return getConfiguration().getRequestTimeoutCheckerInterval();
     }
 
     public TaskExecutor getTaskExecutor() {
@@ -757,6 +802,11 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     @ManagedAttribute
     public void setCacheLevelName(String cacheName) {
         getConfiguration().setCacheLevelName(cacheName);
+    }
+    
+    @ManagedAttribute
+    public void setReplyToCacheLevelName(String cacheName) {
+        getConfiguration().setReplyToCacheLevelName(cacheName);
     }
 
     @ManagedAttribute
@@ -1033,6 +1083,16 @@ public class JmsEndpoint extends DefaultEndpoint implements HeaderFilterStrategy
     @ManagedAttribute
     public boolean isAsyncConsumer() {
         return configuration.isAsyncConsumer();
+    }
+
+    @ManagedAttribute
+    public void setAsyncStartListener(boolean asyncStartListener) {
+        configuration.setAsyncStartListener(asyncStartListener);
+    }
+
+    @ManagedAttribute
+    public boolean isAsyncStartListener() {
+        return configuration.isAsyncStartListener();
     }
 
     @ManagedAttribute

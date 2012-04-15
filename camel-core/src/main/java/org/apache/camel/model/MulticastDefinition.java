@@ -30,7 +30,6 @@ import org.apache.camel.processor.MulticastProcessor;
 import org.apache.camel.processor.SubUnitOfWorkProcessor;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.processor.aggregate.UseLatestAggregationStrategy;
-import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
 
@@ -217,11 +216,9 @@ public class MulticastDefinition extends OutputDefinition<MulticastDefinition> i
             aggregationStrategy = new UseLatestAggregationStrategy();
         }
 
-        ExecutorServiceManager executorServiceManager = routeContext.getCamelContext().getExecutorServiceManager();
-        if (isParallelProcessing() && executorService == null) {
-            String ref = this.executorServiceRef != null ? this.executorServiceRef : "Delay";
-            executorService = executorServiceManager.newDefaultThreadPool(this, ref);
-        }
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, isParallelProcessing());
+        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "Multicast", this, isParallelProcessing());
+
         long timeout = getTimeout() != null ? getTimeout() : 0;
         if (timeout > 0 && !isParallelProcessing()) {
             throw new IllegalArgumentException("Timeout is used but ParallelProcessing has not been enabled.");
@@ -231,7 +228,7 @@ public class MulticastDefinition extends OutputDefinition<MulticastDefinition> i
         }
 
         MulticastProcessor answer = new MulticastProcessor(routeContext.getCamelContext(), list, aggregationStrategy, isParallelProcessing(),
-                                      executorService, isStreaming(), isStopOnException(), timeout, onPrepare, isShareUnitOfWork());
+                                      threadPool, shutdownThreadPool, isStreaming(), isStopOnException(), timeout, onPrepare, isShareUnitOfWork());
         if (isShareUnitOfWork()) {
             // wrap answer in a sub unit of work, since we share the unit of work
             return new SubUnitOfWorkProcessor(answer);

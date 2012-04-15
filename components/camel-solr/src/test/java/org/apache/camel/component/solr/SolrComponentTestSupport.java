@@ -17,8 +17,10 @@
 package org.apache.camel.component.solr;
 
 import java.util.HashMap;
-import org.apache.camel.EndpointInject;
+import java.util.Map;
+
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -30,13 +32,15 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 
 public class SolrComponentTestSupport extends CamelTestSupport {
+    public static final int PORT = AvailablePortFinder.getNextAvailable(8899);
+    public static final String SOLR_ROUTE_URI = "solr://localhost:" + PORT + "/solr";
 
     protected static final String TEST_ID = "1234";
     protected static JettySolrRunner solrRunner;
     protected static CommonsHttpSolrServer solrServer;
 
     protected void solrInsertTestEntry() {
-        HashMap<String, Object> headers = new HashMap<String, Object>();
+        Map<String, Object> headers = new HashMap<String, Object>();
         headers.put(SolrConstants.OPERATION, SolrConstants.OPERATION_INSERT);
         headers.put("SolrField.id", TEST_ID);
         template.sendBodyAndHeaders("direct:start", null, headers);
@@ -62,10 +66,10 @@ public class SolrComponentTestSupport extends CamelTestSupport {
         System.setProperty("solr.directoryFactory", "solr.RAMDirectoryFactory");
 
         // Start a Solr instance.
-        solrRunner = new JettySolrRunner("/solr", 8999);
+        solrRunner = new JettySolrRunner("/solr", PORT);
         solrRunner.start();
 
-        solrServer = new CommonsHttpSolrServer("http://localhost:8999/solr");
+        solrServer = new CommonsHttpSolrServer("http://localhost:" + PORT + "/solr");
     }
 
     @AfterClass
@@ -78,7 +82,7 @@ public class SolrComponentTestSupport extends CamelTestSupport {
         return new RouteBuilder() {
             @Override
             public void configure() throws Exception {
-                from("direct:start").to("solr://localhost:8999/solr");
+                from("direct:start").to(SOLR_ROUTE_URI);
             }
         };
     }

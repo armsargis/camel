@@ -20,6 +20,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
 
+import javax.servlet.ServletRequest;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 
@@ -64,7 +65,7 @@ public class CxfRsConsumerTest extends CamelTestSupport {
                             assertEquals("Get a wrong http method", "GET", httpMethod);
                             String path = inMessage.getHeader(Exchange.HTTP_PATH, String.class);
                             // The parameter of the invocation is stored in the body of in message
-                            String id = (String) inMessage.getBody(String.class);
+                            String id = inMessage.getBody(String.class);
                             if ("/customerservice/customers/126".equals(path)) {                            
                                 Customer customer = new Customer();
                                 customer.setId(Long.parseLong(id));
@@ -72,6 +73,15 @@ public class CxfRsConsumerTest extends CamelTestSupport {
                                 // We just put the response Object into the out message body
                                 exchange.getOut().setBody(customer);
                             } else {
+                                if ("/customerservice/customers/400".equals(path)) {
+                                    // We return the remote client IP address this time
+                                    org.apache.cxf.message.Message cxfMessage = inMessage.getHeader(CxfConstants.CAMEL_CXF_MESSAGE, org.apache.cxf.message.Message.class);
+                                    ServletRequest request = (ServletRequest) cxfMessage.get("HTTP.REQUEST");
+                                    String remoteAddress = request.getRemoteAddr();
+                                    Response r = Response.status(200).entity("The remoteAddress is " + remoteAddress).build();
+                                    exchange.getOut().setBody(r);
+                                    return;
+                                }
                                 if ("/customerservice/customers/123".equals(path)) {
                                     // send a customer response back
                                     Response r = Response.status(200).entity("customer response back!").build();
@@ -127,6 +137,8 @@ public class CxfRsConsumerTest extends CamelTestSupport {
                           "{\"Customer\":{\"id\":126,\"name\":\"Willem\"}}");
         invokeGetCustomer("http://localhost:" + CXT + "/rest/customerservice/customers/123",
                           "customer response back!");
+        invokeGetCustomer("http://localhost:" + CXT + "/rest/customerservice/customers/400",
+            "The remoteAddress is 127.0.0.1");
         
     }
     

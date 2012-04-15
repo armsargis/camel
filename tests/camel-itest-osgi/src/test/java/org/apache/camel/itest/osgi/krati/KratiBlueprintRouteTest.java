@@ -23,8 +23,6 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.krati.KratiConstants;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.itest.osgi.blueprint.OSGiBlueprintTestSupport;
-import org.apache.karaf.testing.Helper;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.Customizer;
@@ -34,14 +32,10 @@ import org.ops4j.pax.exam.junit.Configuration;
 import org.ops4j.pax.exam.junit.JUnit4TestRunner;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
-import org.osgi.service.blueprint.container.BlueprintContainer;
 import org.springframework.osgi.context.support.OsgiBundleXmlApplicationContext;
 
-import static org.ops4j.pax.exam.CoreOptions.equinox;
-import static org.ops4j.pax.exam.CoreOptions.felix;
 import static org.ops4j.pax.exam.OptionUtils.combine;
 import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.scanFeatures;
-import static org.ops4j.pax.exam.container.def.PaxRunnerOptions.workingDirectory;
 import static org.ops4j.pax.swissbox.tinybundles.core.TinyBundles.modifyBundle;
 
 @RunWith(JUnit4TestRunner.class)
@@ -55,7 +49,6 @@ public class KratiBlueprintRouteTest extends OSGiBlueprintTestSupport {
     @Test
     public void testProducerConsumerAndIdempotent() throws Exception {
         getInstalledBundle("CamelBlueprintKratiTestBundle").start();
-        BlueprintContainer ctn = getOsgiService(BlueprintContainer.class, "(osgi.blueprint.container.symbolicname=CamelBlueprintKratiTestBundle)", 20000);
         CamelContext ctx = getOsgiService(CamelContext.class, "(camel.context.symbolicname=CamelBlueprintKratiTestBundle)", 20000);
         MockEndpoint mock = ctx.getEndpoint("mock:results", MockEndpoint.class);
         ProducerTemplate template = ctx.createProducerTemplate();
@@ -69,10 +62,11 @@ public class KratiBlueprintRouteTest extends OSGiBlueprintTestSupport {
     @Configuration
     public static Option[] configure() throws Exception {
         Option[] options = combine(
-                // Default karaf environment
-                Helper.getDefaultOptions(
-                        // this is how you set the default log level when using pax logging (logProfile)
-                        Helper.setLogLevel("WARN")),
+
+                getDefaultCamelKarafOptions(),
+                // using the features to install the camel components
+                scanFeatures(getCamelKarafFeatureUrl(), "camel-blueprint", "camel-krati"),
+
                 new Customizer() {
                     @Override
                     public InputStream customizeTestProbe(InputStream testProbe) {
@@ -84,16 +78,7 @@ public class KratiBlueprintRouteTest extends OSGiBlueprintTestSupport {
                                 .set(Constants.DYNAMICIMPORT_PACKAGE, "*")
                                 .build();
                     }
-                },
-                // install the spring.
-                scanFeatures(getKarafFeatureUrl(), "spring"),
-                // using the features to install the camel components
-                scanFeatures(getCamelKarafFeatureUrl(),
-                         "camel-core", "camel-blueprint", "camel-test", "camel-krati"),
-
-                workingDirectory("target/paxrunner/"),
-                //vmOption("-Xdebug -Xnoagent -Djava.compiler=NONE -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=5005"),
-                felix(), equinox());
+                });
 
         return options;
     }

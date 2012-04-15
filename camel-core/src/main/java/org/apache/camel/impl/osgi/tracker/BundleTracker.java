@@ -149,7 +149,7 @@ public class BundleTracker implements BundleTrackerCustomizer {
                 return;
             }
             if (DEBUG) {
-                System.out.println("BundleTracker.open"); //$NON-NLS-1$
+                System.out.println("BundleTracker.open");
             }
             t = new Tracked();
             synchronized (t) {
@@ -192,7 +192,7 @@ public class BundleTracker implements BundleTrackerCustomizer {
                 return;
             }
             if (DEBUG) {
-                System.out.println("BundleTracker.close"); //$NON-NLS-1$
+                System.out.println("BundleTracker.close");
             }
             outgoing.close();
             bundles = getBundles();
@@ -204,8 +204,8 @@ public class BundleTracker implements BundleTrackerCustomizer {
             }
         }
         if (bundles != null) {
-            for (int i = 0; i < bundles.length; i++) {
-                outgoing.untrack(bundles[i], null);
+            for (Bundle bundle : bundles) {
+                outgoing.untrack(bundle, null);
             }
         }
     }
@@ -381,12 +381,6 @@ public class BundleTracker implements BundleTrackerCustomizer {
      * @since 1.4
      */
     class Tracked extends AbstractTracked implements SynchronousBundleListener {
-        /**
-         * Tracked constructor.
-         */
-        Tracked() {
-            super();
-        }
 
         /**
          * <code>BundleListener</code> method for the <code>BundleTracker</code>
@@ -406,7 +400,7 @@ public class BundleTracker implements BundleTrackerCustomizer {
             final Bundle bundle = event.getBundle();
             final int state = bundle.getState();
             if (DEBUG) {
-                System.out.println("BundleTracker.Tracked.bundleChanged[" + state + "]: " + bundle); //$NON-NLS-1$ //$NON-NLS-2$
+                System.out.println("BundleTracker.Tracked.bundleChanged[" + state + "]: " + bundle);
             }
 
             if ((state & mask) != 0) {

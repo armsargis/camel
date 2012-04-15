@@ -79,6 +79,8 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
     private static final transient Logger LOG = LoggerFactory.getLogger(MockEndpoint.class);
     // must be volatile so changes is visible between the thread which performs the assertions
     // and the threads which process the exchanges when routing messages in Camel
+    protected volatile Processor reporter;
+    protected boolean copyOnExchange = true;
     private volatile int expectedCount;
     private volatile int counter;
     private volatile Processor defaultProcessor;
@@ -92,13 +94,14 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
     private volatile long resultMinimumWaitTime;
     private volatile long assertPeriod;
     private volatile int expectedMinimumCount;
-    private volatile List<Object> expectedBodyValues;
+    private volatile List<?> expectedBodyValues;
     private volatile List<Object> actualBodyValues;
     private volatile Map<String, Object> expectedHeaderValues;
     private volatile Map<String, Object> actualHeaderValues;
     private volatile Map<String, Object> expectedPropertyValues;
     private volatile Map<String, Object> actualPropertyValues;
-    private volatile Processor reporter;
+    private volatile int retainFirst;
+    private volatile int retainLast;
 
     public MockEndpoint(String endpointUri, Component component) {
         super(endpointUri, component);
@@ -442,7 +445,14 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
      * Sets a grace period after which the mock endpoint will re-assert
      * to ensure the preliminary assertion is still valid.
      * <p/>
-     * By default this period is disabled
+     * This is used for example to assert that <b>exactly</b> a number of messages 
+     * arrives. For example if {@link #expectedMessageCount(int)} was set to 5, then
+     * the assertion is satisfied when 5 or more message arrives. To ensure that
+     * exactly 5 messages arrives, then you would need to wait a little period
+     * to ensure no further message arrives. This is what you can use this
+     * {@link #setAssertPeriod(long)} method for.
+     * <p/>
+     * By default this period is disabled.
      *
      * @param period grace period in millis
      */
@@ -476,7 +486,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         expects(new Runnable() {
             public void run() {
                 for (int i = 0; i < getReceivedExchanges().size(); i++) {
-                    Exchange exchange = getReceivedExchanges().get(i);
+                    Exchange exchange = getReceivedExchange(i);
                     for (Map.Entry<String, Object> entry : expectedHeaderValues.entrySet()) {
                         String key = entry.getKey();
                         Object expectedValue = entry.getValue();
@@ -516,7 +526,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         expects(new Runnable() {
             public void run() {
                 for (int i = 0; i < getReceivedExchanges().size(); i++) {
-                    Exchange exchange = getReceivedExchanges().get(i);
+                    Exchange exchange = getReceivedExchange(i);
                     for (Map.Entry<String, Object> entry : expectedPropertyValues.entrySet()) {
                         String key = entry.getKey();
                         Object expectedValue = entry.getValue();
@@ -542,8 +552,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
      * Adds an expectation that the given body values are received by this
      * endpoint in the specified order
      */
-    @SuppressWarnings("unchecked")
-    public void expectedBodiesReceived(final List bodies) {
+    public void expectedBodiesReceived(final List<?> bodies) {
         expectedMessageCount(bodies.size());
         this.expectedBodyValues = bodies;
         this.actualBodyValues = new ArrayList<Object>();
@@ -551,7 +560,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         expects(new Runnable() {
             public void run() {
                 for (int i = 0; i < expectedBodyValues.size(); i++) {
-                    Exchange exchange = getReceivedExchanges().get(i);
+                    Exchange exchange = getReceivedExchange(i);
                     assertTrue("No exchange received for counter: " + i, exchange != null);
 
                     Object expectedBody = expectedBodyValues.get(i);
@@ -618,7 +627,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         expectedMessageCount(1);
         final AssertionClause clause = new AssertionClause(this) {
             public void run() {
-                Exchange exchange = getReceivedExchanges().get(0);
+                Exchange exchange = getReceivedExchange(0);
                 assertTrue("No exchange received for counter: " + 0, exchange != null);
 
                 Object actualBody = exchange.getIn().getBody();
@@ -636,8 +645,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
      * Adds an expectation that the given body values are received by this
      * endpoint in any order
      */
-    @SuppressWarnings("unchecked")
-    public void expectedBodiesReceivedInAnyOrder(final List bodies) {
+    public void expectedBodiesReceivedInAnyOrder(final List<?> bodies) {
         expectedMessageCount(bodies.size());
         this.expectedBodyValues = bodies;
         this.actualBodyValues = new ArrayList<Object>();
@@ -646,7 +654,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
             public void run() {
                 Set<Object> actualBodyValuesSet = new HashSet<Object>(actualBodyValues);
                 for (int i = 0; i < expectedBodyValues.size(); i++) {
-                    Exchange exchange = getReceivedExchanges().get(i);
+                    Exchange exchange = getReceivedExchange(i);
                     assertTrue("No exchange received for counter: " + i, exchange != null);
 
                     Object expectedBody = expectedBodyValues.get(i);
@@ -910,7 +918,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
     public Exchange assertExchangeReceived(int index) {
         int count = getReceivedCounter();
         assertTrue("Not enough messages received. Was: " + count, count > index);
-        return getReceivedExchanges().get(index);
+        return getReceivedExchange(index);
     }
 
     // Properties
@@ -920,7 +928,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
     }
 
     public int getReceivedCounter() {
-        return receivedExchanges.size();
+        return counter;
     }
 
     public List<Exchange> getReceivedExchanges() {
@@ -968,10 +976,14 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
 
     /**
      * Specifies the expected number of message exchanges that should be
-     * received by this endpoint
+     * received by this endpoint.
+     * <p/>
+     * If you want to assert that <b>exactly</b> n'th message arrives to this mock
+     * endpoint, then see also the {@link #setAssertPeriod(long)} method for further details.
      *
      * @param expectedCount the number of message exchanges that should be
      *                expected by this endpoint
+     * @see #setAssertPeriod(long)                      
      */
     public void setExpectedMessageCount(int expectedCount) {
         this.expectedCount = expectedCount;
@@ -1009,6 +1021,62 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         this.reporter = reporter;
     }
 
+    /**
+     * Specifies to only retain the first n'th number of received {@link Exchange}s.
+     * <p/>
+     * This is used when testing with big data, to reduce memory consumption by not storing
+     * copies of every {@link Exchange} this mock endpoint receives.
+     * <p/>
+     * <b>Important:</b> When using this limitation, then the {@link #getReceivedCounter()}
+     * will still return the actual number of received {@link Exchange}s. For example
+     * if we have received 5000 {@link Exchange}s, and have configured to only retain the first
+     * 10 {@link Exchange}s, then the {@link #getReceivedCounter()} will still return <tt>5000</tt>
+     * but there is only the first 10 {@link Exchange}s in the {@link #getExchanges()} and
+     * {@link #getReceivedExchanges()} methods.
+     * <p/>
+     * When using this method, then some of the other expectation methods is not supported,
+     * for example the {@link #expectedBodiesReceived(Object...)} sets a expectation on the first
+     * number of bodies received.
+     * <p/>
+     * You can configure both {@link #setRetainFirst(int)} and {@link #setRetainLast(int)} methods,
+     * to limit both the first and last received.
+     * 
+     * @param retainFirst  to limit and only keep the first n'th received {@link Exchange}s, use
+     *                     <tt>0</tt> to not retain any messages, or <tt>-1</tt> to retain all.
+     * @see #setRetainLast(int)
+     */
+    public void setRetainFirst(int retainFirst) {
+        this.retainFirst = retainFirst;
+    }
+
+    /**
+     * Specifies to only retain the last n'th number of received {@link Exchange}s.
+     * <p/>
+     * This is used when testing with big data, to reduce memory consumption by not storing
+     * copies of every {@link Exchange} this mock endpoint receives.
+     * <p/>
+     * <b>Important:</b> When using this limitation, then the {@link #getReceivedCounter()}
+     * will still return the actual number of received {@link Exchange}s. For example
+     * if we have received 5000 {@link Exchange}s, and have configured to only retain the last
+     * 20 {@link Exchange}s, then the {@link #getReceivedCounter()} will still return <tt>5000</tt>
+     * but there is only the last 20 {@link Exchange}s in the {@link #getExchanges()} and
+     * {@link #getReceivedExchanges()} methods.
+     * <p/>
+     * When using this method, then some of the other expectation methods is not supported,
+     * for example the {@link #expectedBodiesReceived(Object...)} sets a expectation on the first
+     * number of bodies received.
+     * <p/>
+     * You can configure both {@link #setRetainFirst(int)} and {@link #setRetainLast(int)} methods,
+     * to limit both the first and last received.
+     *
+     * @param retainLast  to limit and only keep the last n'th received {@link Exchange}s, use
+     *                     <tt>0</tt> to not retain any messages, or <tt>-1</tt> to retain all.
+     * @see #setRetainFirst(int)
+     */
+    public void setRetainLast(int retainLast) {
+        this.retainLast = retainLast;
+    }
+
     // Implementation methods
     // -------------------------------------------------------------------------
     private void init() {
@@ -1031,6 +1099,8 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         actualHeaderValues = null;
         expectedPropertyValues = null;
         actualPropertyValues = null;
+        retainFirst = -1;
+        retainLast = -1;
     }
 
     protected synchronized void onExchange(Exchange exchange) {
@@ -1038,8 +1108,11 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
             if (reporter != null) {
                 reporter.process(exchange);
             }
-            // copy the exchange so the mock stores the copy and not the actual exchange
-            Exchange copy = ExchangeHelper.createCopy(exchange, true);
+            Exchange copy = exchange;
+            if (copyOnExchange) {
+                // copy the exchange so the mock stores the copy and not the actual exchange
+                copy = ExchangeHelper.createCopy(exchange, true);
+            }
             performAssertions(exchange, copy);
         } catch (Throwable e) {
             // must catch java.lang.Throwable as AssertionException extends java.lang.Error
@@ -1103,11 +1176,14 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
             }
             LOG.debug(msg);
         }
-        ++counter;
 
         // record timestamp when exchange was received
         copy.setProperty(Exchange.RECEIVED_TIMESTAMP, new Date());
-        receivedExchanges.add(copy);
+
+        // add a copy of the received exchange
+        addReceivedExchange(copy);
+        // and then increment counter after adding received exchange
+        ++counter;
 
         Processor processor = processors.get(getReceivedCounter()) != null
                 ? processors.get(getReceivedCounter()) : defaultProcessor;
@@ -1120,6 +1196,38 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
             } catch (Exception e) {
                 // set exceptions on exchange so we can throw exceptions to simulate errors
                 exchange.setException(e);
+            }
+        }
+    }
+
+    /**
+     * Adds the received exchange.
+     * 
+     * @param copy  a copy of the received exchange
+     */
+    protected void addReceivedExchange(Exchange copy) {
+        if (retainFirst == 0 && retainLast == 0) {
+            // do not retain any messages at all
+        } else if (retainFirst < 0 && retainLast < 0) {
+            // no limitation so keep them all
+            receivedExchanges.add(copy);
+        } else {
+            // okay there is some sort of limitations, so figure out what to retain
+            if (retainFirst > 0 && counter < retainFirst) {
+                // store a copy as its within the retain first limitation
+                receivedExchanges.add(copy);
+            } else if (retainLast > 0) {
+                // remove the oldest from the last retained boundary,
+                int index = receivedExchanges.size() - retainLast;
+                if (index >= 0) {
+                    // but must be outside the first range as well
+                    // otherwise we should not remove the oldest
+                    if (retainFirst <= 0 || retainFirst <= index) {
+                        receivedExchanges.remove(index);
+                    }
+                }
+                // store a copy of the last n'th received
+                receivedExchanges.add(copy);
             }
         }
     }
@@ -1144,7 +1252,7 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
         // Wait for a default 10 seconds if resultWaitTime is not set
         long waitTime = timeout == 0 ? 10000L : timeout;
 
-        // now lets wait for the results
+        // now let's wait for the results
         LOG.debug("Waiting on the latch for: " + timeout + " millis");
         latch.await(waitTime, TimeUnit.MILLISECONDS);
     }
@@ -1196,4 +1304,13 @@ public class MockEndpoint extends DefaultEndpoint implements BrowsableEndpoint {
     public boolean isLenientProperties() {
         return true;
     }
+
+    private Exchange getReceivedExchange(int index) {
+        if (index <= receivedExchanges.size() - 1) {
+            return receivedExchanges.get(index);
+        } else {
+            return null;
+        }
+    }
+
 }

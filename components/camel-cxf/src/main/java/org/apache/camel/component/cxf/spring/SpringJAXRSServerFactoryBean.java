@@ -38,7 +38,6 @@ public class SpringJAXRSServerFactoryBean extends JAXRSServerFactoryBean impleme
     private int loggingSizeLimit;
     
     public SpringJAXRSServerFactoryBean() {
-        super();
     }
 
     public SpringJAXRSServerFactoryBean(JAXRSServiceFactoryBean sf) {
@@ -66,11 +65,6 @@ public class SpringJAXRSServerFactoryBean extends JAXRSServerFactoryBean impleme
 
     public void setBeanId(String id) {
         beanId = id;
-    }
-    
-    // to walk round the issue of setting the serviceClass in CXF
-    public void setServiceClass(Class clazz) {
-        setResourceClasses(clazz);
     }
     
     // add this mothod for testing

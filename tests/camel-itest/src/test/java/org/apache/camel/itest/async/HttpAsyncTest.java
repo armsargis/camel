@@ -20,15 +20,13 @@ import java.util.concurrent.Future;
 
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
-import org.apache.camel.test.junit4.CamelTestSupport;
 import org.junit.Test;
 
 /**
  * @version 
  */
-public class HttpAsyncTest extends CamelTestSupport {
+public class HttpAsyncTest extends HttpAsyncTestSupport {
  
-    @SuppressWarnings("unchecked")
     @Test
     public void testAsyncAndSyncAtSameTimeWithHttp() throws Exception {
         // START SNIPPET: e2
@@ -38,7 +36,7 @@ public class HttpAsyncTest extends CamelTestSupport {
         mock.expectedBodiesReceived("Claus", "Bye World");
 
         // Send a async request/reply message to the http endpoint
-        Future future = template.asyncRequestBody("http://0.0.0.0:9080/myservice", "Hello World");
+        Future<Object> future = template.asyncRequestBody("http://0.0.0.0:" + getPort() + "/myservice", "Hello World");
 
         // We got the future so in the meantime we can do other stuff, as this is Camel
         // so lets invoke another request/reply route but this time is synchronous
@@ -54,7 +52,7 @@ public class HttpAsyncTest extends CamelTestSupport {
         // This allows us to do this in a single code line instead of using the
         // JDK Future API to get hold of it, but you can also use that if you want
         // Adding the (String) To make the CS happy
-        String response = (String) template.extractFutureBody(future, String.class);
+        String response = template.extractFutureBody(future, String.class);
         assertEquals("Bye World", response);
 
         assertMockEndpointsSatisfied();
@@ -73,7 +71,7 @@ public class HttpAsyncTest extends CamelTestSupport {
                 from("direct:name").transform(constant("Claus")).to("mock:result");
 
                 // Simulate a slow http service (delaying 1 sec) we want to invoke async
-                from("jetty:http://0.0.0.0:9080/myservice")
+                from("jetty:http://0.0.0.0:" + getPort() + "/myservice")
                     .delay(1000)
                     .transform(constant("Bye World"))
                     .to("mock:result");

@@ -27,6 +27,7 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.UnsupportedCharsetException;
 
@@ -182,13 +183,34 @@ public final class IOHelper {
     }
     
     public static void copyAndCloseInput(InputStream input, OutputStream output) throws IOException {
-        copy(input, output);
-        close(input, null, LOG);
+        copyAndCloseInput(input, output, DEFAULT_BUFFER_SIZE);
     }
     
     public static void copyAndCloseInput(InputStream input, OutputStream output, int bufferSize) throws IOException {
         copy(input, output, bufferSize);
         close(input, null, LOG);
+    }
+
+    /**
+     * Forces any updates to this channel's file to be written to the storage device that contains it.
+     *
+     * @param channel the file channel
+     * @param name the name of the resource
+     * @param log the log to use when reporting closure warnings
+     */
+    public static void force(FileChannel channel, String name, Logger log) {
+        try {
+            channel.force(true);
+        } catch (Exception e) {
+            if (log != null) {
+                if (name != null) {
+                    log.warn("Cannot force FileChannel: " + name + ". Reason: " + e.getMessage(), e);
+                } else {
+                    log.warn("Cannot force FileChannel. Reason: " + e.getMessage(), e);
+                }
+            }
+        }
+
     }
 
     /**
@@ -232,6 +254,17 @@ public final class IOHelper {
      */
     public static void close(Closeable closeable) {
         close(closeable, null, LOG);
+    }
+
+    /**
+     * Closes the given resources if they are available.
+     * 
+     * @param closeables the objects to close
+     */
+    public static void close(Closeable... closeables) {
+        for (Closeable closeable : closeables) {
+            close(closeable);
+        }
     }
 
     public static void validateCharset(String charset) throws UnsupportedCharsetException {

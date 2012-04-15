@@ -25,8 +25,6 @@ import org.apache.abdera.parser.ParseException;
 import org.apache.camel.Processor;
 import org.apache.camel.component.feed.EntryFilter;
 import org.apache.camel.component.feed.FeedEntryPollingConsumer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Consumer to poll atom feeds and return each entry from the feed step by step.
@@ -34,7 +32,6 @@ import org.slf4j.LoggerFactory;
  * @version 
  */
 public class AtomEntryPollingConsumer extends FeedEntryPollingConsumer {
-    private static final transient Logger LOG = LoggerFactory.getLogger(AtomEntryPollingConsumer.class);
     private Document<Feed> document;
 
     public AtomEntryPollingConsumer(AtomEndpoint endpoint, Processor processor, boolean filter, Date lastUpdate, boolean throttleEntries) {

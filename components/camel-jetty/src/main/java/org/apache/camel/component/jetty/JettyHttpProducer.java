@@ -153,8 +153,8 @@ public class JettyHttpProducer extends DefaultProducer implements AsyncProcessor
             Object headerValue = in.getHeader(key);
 
             if (headerValue != null) {
-                // use an iterator as there can be multiple values. (must not use a delimiter)
-                final Iterator it = ObjectHelper.createIterator(headerValue, null);
+                // use an iterator as there can be multiple values. (must not use a delimiter, and allow empty values)
+                final Iterator<?> it = ObjectHelper.createIterator(headerValue, null, true);
 
                 // the values to add as a request header
                 final List<String> values = new ArrayList<String>();
@@ -192,7 +192,6 @@ public class JettyHttpProducer extends DefaultProducer implements AsyncProcessor
         return httpExchange;
     }
 
-    @SuppressWarnings("unchecked")
     private void doSetQueryParameters(Exchange exchange, JettyContentExchange httpExchange) throws URISyntaxException {
         // is a query string provided in the endpoint URI or in a header (header
         // overrules endpoint)
@@ -208,7 +207,7 @@ public class JettyHttpProducer extends DefaultProducer implements AsyncProcessor
         // okay we need to add the query string to the URI so we need to juggle a bit with the parameters
         String uri = httpExchange.getRequestURI();
 
-        Map parameters = URISupport.parseParameters(new URI(uri));
+        Map<String, Object> parameters = URISupport.parseParameters(new URI(uri));
         parameters.putAll(URISupport.parseQuery(queryString));
 
         if (uri.contains("?")) {

@@ -75,6 +75,26 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("Hello World", "Hello World");
     }
 
+    public void testEmptyExpression() throws Exception {
+        assertExpression("", "");
+        assertExpression(" ", "");
+        try {
+            assertExpression(null, null);
+            fail("Should have thrown exception");
+        } catch (IllegalArgumentException e) {
+            assertEquals("expression must be specified", e.getMessage());
+        }
+
+        assertPredicate("", false);
+        assertPredicate(" ", false);
+        try {
+            assertPredicate(null, false);
+            fail("Should have thrown exception");
+        } catch (IllegalArgumentException e) {
+            assertEquals("expression must be specified", e.getMessage());
+        }
+    }
+
     public void testBodyExpression() throws Exception {
         Expression exp = SimpleLanguage.simple("${body}");
         assertNotNull(exp);
@@ -103,6 +123,13 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("in.headers.foo", "abc");
         assertExpression("header.foo", "abc");
         assertExpression("headers.foo", "abc");
+    }
+    
+    public void testTrimSimpleExpressions() throws Exception {
+        assertExpression(" \texchangeId\n", exchange.getExchangeId());
+        assertExpression("\nid\r", exchange.getIn().getMessageId());
+        assertExpression("\t\r body", "<hello id='m123'>world!</hello>");
+        assertExpression("\nin.body\r", "<hello id='m123'>world!</hello>");
     }
 
     public void testSimpleThreadName() throws Exception {
@@ -135,14 +162,18 @@ public class SimpleTest extends LanguageTestSupport {
             assertExpression("sysenv.PATH", path);
         }
     }
-    
+
+    public void testSimpleCamelId() throws Exception {
+        assertExpression("camelId", context.getName());
+    }
+
     public void testOGNLBodyListAndMap() throws Exception {
         Map<String, Object> map = new HashMap<String, Object>();
         map.put("cool", "Camel rocks");
         map.put("dude", "Hey dude");
         map.put("code", 4321);
 
-        List<Map> lines = new ArrayList<Map>();
+        List<Map<String, Object>> lines = new ArrayList<Map<String, Object>>();
         lines.add(map);
 
         exchange.getIn().setBody(lines);
@@ -158,7 +189,7 @@ public class SimpleTest extends LanguageTestSupport {
         map.put("camel", new OrderLine(123, "Camel in Action"));
         map.put("amq", new OrderLine(456, "ActiveMQ in Action"));
 
-        List<Map> lines = new ArrayList<Map>();
+        List<Map<String, Object>> lines = new ArrayList<Map<String, Object>>();
         lines.add(map);
 
         exchange.getIn().setBody(lines);
@@ -401,6 +432,12 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("${in.headers.foo}", "abc");
     }
 
+    public void testHeadersWithBracket() throws Exception {
+        assertExpression("headers[foo]", "abc");
+        assertExpression("${headers[foo]}", "abc");
+        assertExpression("${in.headers[foo]}", "abc");
+    }
+
     public void testIsInstanceOfEmptyBody() throws Exception {
         // set an empty body
         exchange.getIn().setBody(null);
@@ -414,7 +451,7 @@ public class SimpleTest extends LanguageTestSupport {
     }
 
     public void testHeaders() throws Exception {
-        Map headers = exchange.getIn().getHeaders();
+        Map<String, Object> headers = exchange.getIn().getHeaders();
         assertEquals(2, headers.size());
 
         assertExpression("headers", headers);
@@ -1008,6 +1045,18 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("${body.dangerous}", "false");
     }
 
+    public void testBodyOgnlOnString() throws Exception {
+        exchange.getIn().setBody("Camel");
+
+        assertExpression("${body.substring(2)}", "mel");
+        assertExpression("${body.substring(2, 4)}", "me");
+        assertExpression("${body.length()}", 5);
+        assertExpression("${body.toUpperCase()}", "CAMEL");
+        assertExpression("${body.toUpperCase()}", "CAMEL");
+        assertExpression("${body.toUpperCase().substring(2)}", "MEL");
+        assertExpression("${body.toLowerCase().length()}", 5);
+    }
+
     public void testClassSimpleName() throws Exception {
         Animal tiger = new Animal("Tony the Tiger", 13);
         exchange.getIn().setBody(tiger);
@@ -1015,6 +1064,11 @@ public class SimpleTest extends LanguageTestSupport {
         assertExpression("${body.getClass().getSimpleName()}", "Animal");
         assertExpression("${body.getClass.getSimpleName}", "Animal");
         assertExpression("${body.class.simpleName}", "Animal");
+    }
+    
+    public void testSlashBeforeHeader() throws Exception {
+        assertExpression("foo/${header.foo}", "foo/abc");
+        assertExpression("foo\\${header.foo}", "foo\\abc");
     }
 
     protected String getLanguageName() {

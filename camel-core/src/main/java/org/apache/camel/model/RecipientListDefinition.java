@@ -34,7 +34,6 @@ import org.apache.camel.processor.Pipeline;
 import org.apache.camel.processor.RecipientList;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.processor.aggregate.UseLatestAggregationStrategy;
-import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
 
@@ -45,7 +44,7 @@ import org.apache.camel.util.CamelContextHelper;
  */
 @XmlRootElement(name = "recipientList")
 @XmlAccessorType(XmlAccessType.FIELD)
-public class RecipientListDefinition<Type extends ProcessorDefinition> extends NoOutputExpressionNode implements ExecutorServiceAwareDefinition<RecipientListDefinition> {
+public class RecipientListDefinition<Type extends ProcessorDefinition<Type>> extends NoOutputExpressionNode implements ExecutorServiceAwareDefinition<RecipientListDefinition<Type>> {
     @XmlTransient
     private AggregationStrategy aggregationStrategy;
     @XmlTransient
@@ -128,12 +127,11 @@ public class RecipientListDefinition<Type extends ProcessorDefinition> extends N
         if (getTimeout() != null) {
             answer.setTimeout(getTimeout());
         }
-        if (isParallelProcessing() && executorService == null) {
-            String ref = this.executorServiceRef != null ? this.executorServiceRef : "RecipientList";
-            ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
-            executorService = manager.newDefaultThreadPool(this, ref);
-        }
-        answer.setExecutorService(executorService);
+
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, isParallelProcessing());
+        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "RecipientList", this, isParallelProcessing());
+        answer.setExecutorService(threadPool);
+        answer.setShutdownExecutorService(shutdownThreadPool);
         long timeout = getTimeout() != null ? getTimeout() : 0;
         if (timeout > 0 && !isParallelProcessing()) {
             throw new IllegalArgumentException("Timeout is used but ParallelProcessing has not been enabled.");

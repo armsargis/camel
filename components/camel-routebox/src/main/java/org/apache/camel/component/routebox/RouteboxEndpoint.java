@@ -24,13 +24,14 @@ public abstract class RouteboxEndpoint extends DefaultEndpoint {
     RouteboxConfiguration config;
 
     public RouteboxEndpoint() {
-        super();
     }
     
+    @Deprecated
     public RouteboxEndpoint(String endpointUri) {
         super(endpointUri);
     }
     
+    @Deprecated
     public RouteboxEndpoint(String endpointUri, CamelContext camelContext) {
         super(endpointUri, camelContext);
     }

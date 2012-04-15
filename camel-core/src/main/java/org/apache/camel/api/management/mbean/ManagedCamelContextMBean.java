@@ -24,7 +24,7 @@ import org.apache.camel.api.management.ManagedOperation;
 
 public interface ManagedCamelContextMBean {
 
-    @ManagedAttribute(description = "Camel id")
+    @ManagedAttribute(description = "Camel ID")
     String getCamelId();
 
     @ManagedAttribute(description = "Camel Version")
@@ -111,6 +111,9 @@ public interface ManagedCamelContextMBean {
     @ManagedOperation(description = "Adds or updates existing routes from XML")
     void addOrUpdateRoutesFromXml(String xml) throws Exception;
 
+    @ManagedOperation(description = "Dumps the routes stats as XML")
+    String dumpRoutesStatsAsXml(boolean fullStats, boolean includeProcessors) throws Exception;
+
     /**
      * Creates the endpoint by the given uri
      *
@@ -118,7 +121,7 @@ public interface ManagedCamelContextMBean {
      * @return <tt>true</tt> if a new endpoint was created, <tt>false</tt> if the endpoint already existed
      * @throws Exception is thrown if error occurred
      */
-    @ManagedOperation(description = "Creates the endpoint by the given uri")
+    @ManagedOperation(description = "Creates the endpoint by the given URI")
     boolean createEndpoint(String uri) throws Exception;
 
     /**

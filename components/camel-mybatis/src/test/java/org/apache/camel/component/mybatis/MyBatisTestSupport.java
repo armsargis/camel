@@ -17,18 +17,13 @@
 package org.apache.camel.component.mybatis;
 
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Properties;
 
 import org.apache.camel.test.junit4.CamelTestSupport;
-import org.apache.derby.jdbc.EmbeddedDriver;
+
 import org.junit.After;
 import org.junit.Before;
 
-/**
- * @version 
- */
 public abstract class MyBatisTestSupport extends CamelTestSupport {
 
     protected boolean createTestData() {
@@ -36,7 +31,7 @@ public abstract class MyBatisTestSupport extends CamelTestSupport {
     }
     
     protected String createStatement() {
-        return "create table ACCOUNT ( ACC_ID INTEGER , ACC_FIRST_NAME VARCHAR(255), ACC_LAST_NAME VARCHAR(255), ACC_EMAIL VARCHAR(255)  )";
+        return "create table ACCOUNT (ACC_ID INTEGER, ACC_FIRST_NAME VARCHAR(255), ACC_LAST_NAME VARCHAR(255), ACC_EMAIL VARCHAR(255))";
     }
 
     @Override
@@ -44,42 +39,43 @@ public abstract class MyBatisTestSupport extends CamelTestSupport {
     public void setUp() throws Exception {
         super.setUp();
 
-        // lets create the database...
+        // lets create the table...
         Connection connection = createConnection();
         Statement statement = connection.createStatement();
         statement.execute(createStatement());
         connection.commit();
+        statement.close();
         connection.close();
 
         if (createTestData()) {
-            Account account = new Account();
-            account.setId(123);
-            account.setFirstName("James");
-            account.setLastName("Strachan");
-            account.setEmailAddress("TryGuessing@gmail.com");
-            template.sendBody("mybatis:insertAccount?statementType=Insert", account);
+            Account account1 = new Account();
+            account1.setId(123);
+            account1.setFirstName("James");
+            account1.setLastName("Strachan");
+            account1.setEmailAddress("TryGuessing@gmail.com");
 
-            account = new Account();
-            account.setId(456);
-            account.setFirstName("Claus");
-            account.setLastName("Ibsen");
-            account.setEmailAddress("Noname@gmail.com");
-            template.sendBody("mybatis:insertAccount?statementType=Insert", account);
+            Account account2 = new Account();
+            account2.setId(456);
+            account2.setFirstName("Claus");
+            account2.setLastName("Ibsen");
+            account2.setEmailAddress("Noname@gmail.com");
+            
+            template.sendBody("mybatis:insertAccount?statementType=Insert", new Account[]{account1, account2});
         }
     }
 
     @Override
     @After
     public void tearDown() throws Exception {
+        // should drop the table properly to avoid any side effects while running all the tests together under maven
+        Connection connection = createConnection();
+        Statement statement = connection.createStatement();
+        statement.execute("drop table ACCOUNT");
+        connection.commit();
+        statement.close();
+        connection.close();
+
         super.tearDown();
-        
-        try {
-            new EmbeddedDriver().connect("jdbc:derby:memory:mybatis;drop=true", new Properties());
-        } catch (SQLException ex) {
-            if (!"08006".equals(ex.getSQLState())) {
-                throw ex;
-            }
-        }
     }
 
     private Connection createConnection() throws Exception {

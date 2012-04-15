@@ -29,9 +29,9 @@ public class LuceneEndpoint extends DefaultEndpoint {
     boolean insertFlag;
 
     public LuceneEndpoint() {
-        super();
     }
 
+    @SuppressWarnings("deprecation")
     public LuceneEndpoint(String endpointUri, CamelContext camelContext) {
         super(endpointUri, camelContext);
     }
@@ -40,6 +40,7 @@ public class LuceneEndpoint extends DefaultEndpoint {
         super(endpointUri, component);
     }
 
+    @SuppressWarnings("deprecation")
     public LuceneEndpoint(String endpointUri) {
         super(endpointUri);
     }

@@ -36,6 +36,7 @@ import org.apache.camel.spi.DataFormat;
 import org.apache.camel.spi.PackageScanClassResolver;
 import org.apache.camel.util.IOHelper;
 import org.apache.camel.util.ObjectHelper;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,7 +78,7 @@ public class BindyCsvDataFormat extends BindyAbstractDataFormat {
         // the body is not a prepared list so help a bit here and create one for us
         if (exchange.getContext().getTypeConverter().convertTo(List.class, body) == null) {
             models = new ArrayList<Map<String, Object>>();
-            Iterator it = ObjectHelper.createIterator(body);
+            Iterator<Object> it = ObjectHelper.createIterator(body);
             while (it.hasNext()) {
                 Object model = it.next();
                 String name = model.getClass().getName();
@@ -112,7 +113,7 @@ public class BindyCsvDataFormat extends BindyAbstractDataFormat {
         // Pojos of the model
         Map<String, Object> model;
 
-        InputStreamReader in = new InputStreamReader(inputStream);
+        InputStreamReader in = new InputStreamReader(inputStream, IOHelper.getCharsetName(exchange));
 
         // Scanner is used to read big file
         Scanner scanner = new Scanner(in);

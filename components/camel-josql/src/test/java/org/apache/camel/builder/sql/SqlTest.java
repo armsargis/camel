@@ -18,14 +18,11 @@ package org.apache.camel.builder.sql;
 
 import java.util.List;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Message;
-import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.impl.DefaultExchange;
 import org.apache.camel.test.junit4.CamelTestSupport;
-import org.apache.camel.test.junit4.TestSupport;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -36,35 +33,29 @@ import static org.apache.camel.builder.sql.SqlBuilder.sql;
  */
 public class SqlTest extends CamelTestSupport {
 
-    //protected CamelContext context = new DefaultCamelContext();
     protected Exchange exchange;
 
     @Test
     public void testExpression() throws Exception {
         Expression expression = sql("SELECT * FROM org.apache.camel.builder.sql.Person where city = 'London'");
-        List value = expression.evaluate(exchange, List.class);
+        List<?> value = expression.evaluate(exchange, List.class);
+        assertEquals("List size", 2, value.size());
 
-        List list = (List)value;
-        assertEquals("List size", 2, list.size());
-
-        for (Object person : list) {
+        for (Object person : value) {
             log.info("Found: " + person);
         }
     }
 
-    @SuppressWarnings("unchecked")
     @Test
     public void testExpressionWithHeaderVariable() throws Exception {
         Expression expression = sql("SELECT * FROM org.apache.camel.builder.sql.Person where name = :fooHeader");
-        List value = expression.evaluate(exchange, List.class);
+        List<?> value = expression.evaluate(exchange, List.class);
+        assertEquals("List size", 1, value.size());
 
-        List<Person> list = (List<Person>)value;
-        assertEquals("List size", 1, list.size());
-
-        for (Person person : list) {
+        for (Object person : value) {
             log.info("Found: " + person);
 
-            assertEquals("name", "James", person.getName());
+            assertEquals("name", "James", ((Person)person).getName());
         }
     }
 

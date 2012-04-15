@@ -18,7 +18,6 @@ package org.apache.camel.component.cxf;
 
 import javax.xml.namespace.QName;
 
-import org.apache.camel.CamelContext;
 import org.apache.camel.component.cxf.common.message.CxfConstants;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.cxf.BusFactory;
@@ -48,7 +47,6 @@ public class CxfSpringEndpoint extends CxfEndpoint implements ApplicationContext
     }
     
     public CxfSpringEndpoint() {
-        super();
     }
 
     /**
@@ -145,7 +143,7 @@ public class CxfSpringEndpoint extends CxfEndpoint implements ApplicationContext
             
             checkName(factoryBean.getEndpointName(), "endpoint/port name");
             checkName(factoryBean.getServiceName(), "service name");
-            return (Client)factoryBean.create();
+            return factoryBean.create();
         }
     }
 

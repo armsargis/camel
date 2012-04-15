@@ -31,7 +31,6 @@ import org.apache.camel.component.bean.BeanInfo;
 import org.apache.camel.component.bean.MethodNotFoundException;
 import org.apache.camel.component.bean.RegistryBean;
 import org.apache.camel.language.bean.BeanExpression;
-import org.apache.camel.util.CamelContextHelper;
 import org.apache.camel.util.ObjectHelper;
 import org.apache.camel.util.OgnlHelper;
 
@@ -76,8 +75,9 @@ public class MethodCallExpression extends ExpressionDefinition {
     
     public MethodCallExpression(Object instance, String method) {
         super(ObjectHelper.className(instance));
-        this.instance = instance;
-        this.method = method;
+        // must use setter as they have special logic
+        setInstance(instance);
+        setMethod(method);
     }
 
     public MethodCallExpression(Class<?> type) {
@@ -124,6 +124,7 @@ public class MethodCallExpression extends ExpressionDefinition {
 
     public void setBeanType(Class<?> beanType) {
         this.beanType = beanType;
+        this.instance = null;
     }
 
     public String getBeanTypeName() {
@@ -139,7 +140,14 @@ public class MethodCallExpression extends ExpressionDefinition {
     }
 
     public void setInstance(Object instance) {
-        this.instance = instance;
+        // people may by mistake pass in a class type as the instance
+        if (instance instanceof Class) {
+            this.beanType = (Class<?>) instance;
+            this.instance = null;
+        } else {
+            this.beanType = null;
+            this.instance = instance;
+        }
     }
 
     @Override

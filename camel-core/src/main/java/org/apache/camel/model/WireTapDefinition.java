@@ -32,8 +32,9 @@ import org.apache.camel.Endpoint;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.Expression;
 import org.apache.camel.Processor;
+import org.apache.camel.Producer;
+import org.apache.camel.processor.UnitOfWorkProcessor;
 import org.apache.camel.processor.WireTapProcessor;
-import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 import org.apache.camel.util.CamelContextHelper;
 
@@ -42,7 +43,7 @@ import org.apache.camel.util.CamelContextHelper;
  */
 @XmlRootElement(name = "wireTap")
 @XmlAccessorType(XmlAccessType.FIELD)
-public class WireTapDefinition<Type extends ProcessorDefinition> extends NoOutputDefinition implements ExecutorServiceAwareDefinition<ProcessorDefinition> {
+public class WireTapDefinition<Type extends ProcessorDefinition<Type>> extends NoOutputDefinition<Type> implements ExecutorServiceAwareDefinition<WireTapDefinition<Type>> {
     @XmlAttribute
     protected String uri;
     @XmlAttribute
@@ -72,24 +73,28 @@ public class WireTapDefinition<Type extends ProcessorDefinition> extends NoOutpu
     }
 
     public WireTapDefinition(String uri) {
-        this();
         setUri(uri);
     }
 
     public WireTapDefinition(Endpoint endpoint) {
-        this();
         setEndpoint(endpoint);
     }
 
     @Override
     public Processor createProcessor(RouteContext routeContext) throws Exception {
+        // executor service is mandatory for wire tap
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, true);
+        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "WireTap", this, true);
+
+        // create the producer to send to the wire tapped endpoint
         Endpoint endpoint = resolveEndpoint(routeContext);
+        Producer producer = endpoint.createProducer();
+        // create error handler we need to use for processing the wire tapped
+        Processor target = wrapInErrorHandler(routeContext, producer);
+        // and wrap in UoW, which is needed for error handler as well
+        target = new UnitOfWorkProcessor(routeContext, target);
 
-        String ref = this.executorServiceRef != null ? this.executorServiceRef : "WireTap";
-        ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
-        executorService = manager.newDefaultThreadPool(this, ref);
-        WireTapProcessor answer = new WireTapProcessor(endpoint, getPattern(), executorService);
-
+        WireTapProcessor answer = new WireTapProcessor(endpoint, target, getPattern(), threadPool, shutdownThreadPool);
         answer.setCopy(isCopy());
         if (newExchangeProcessorRef != null) {
             newExchangeProcessor = routeContext.lookup(newExchangeProcessorRef, Processor.class);
@@ -147,7 +152,7 @@ public class WireTapDefinition<Type extends ProcessorDefinition> extends NoOutpu
     }
 
     @Override
-    public void addOutput(ProcessorDefinition output) {
+    public void addOutput(ProcessorDefinition<?> output) {
         // add outputs on parent as this wiretap does not support outputs
         getParent().addOutput(output);
     }

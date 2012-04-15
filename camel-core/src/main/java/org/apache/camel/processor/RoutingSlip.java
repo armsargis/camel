@@ -358,14 +358,16 @@ public class RoutingSlip extends ServiceSupport implements AsyncProcessor, Trace
     protected void doStart() throws Exception {
         if (producerCache == null) {
             producerCache = new ProducerCache(this, camelContext);
-            // add it as a service so we can manage it
-            camelContext.addService(producerCache);
         }
         ServiceHelper.startService(producerCache);
     }
 
     protected void doStop() throws Exception {
         ServiceHelper.stopService(producerCache);
+    }
+
+    protected void doShutdown() throws Exception {
+        ServiceHelper.stopAndShutdownService(producerCache);
     }
 
     /**

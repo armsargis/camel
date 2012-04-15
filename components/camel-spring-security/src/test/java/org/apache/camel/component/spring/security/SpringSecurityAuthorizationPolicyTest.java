@@ -17,7 +17,6 @@
 package org.apache.camel.component.spring.security;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import javax.security.auth.Subject;
@@ -32,7 +31,7 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.GrantedAuthorityImpl;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 public class SpringSecurityAuthorizationPolicyTest extends CamelSpringTestSupport {
@@ -90,8 +89,8 @@ public class SpringSecurityAuthorizationPolicyTest extends CamelSpringTestSuppor
         Authentication authToken;
         if (roles != null && roles.length > 0) {
             List<GrantedAuthority> authorities = new ArrayList<GrantedAuthority>(roles.length);
-            for (int i = 0; i < roles.length; i++) {
-                authorities.add(new GrantedAuthorityImpl(roles[i]));
+            for (String role : roles) {
+                authorities.add(new SimpleGrantedAuthority(role));
             }
             authToken = new UsernamePasswordAuthenticationToken(username, password, authorities);
         } else {

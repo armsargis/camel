@@ -23,7 +23,6 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.mock.MockEndpoint;
-import org.apache.karaf.testing.Helper;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ops4j.pax.exam.Option;
@@ -31,7 +30,6 @@ import org.ops4j.pax.exam.junit.Configuration;
 import org.ops4j.pax.exam.junit.JUnit4TestRunner;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.Constants;
-import org.osgi.service.blueprint.container.BlueprintContainer;
 
 import static org.ops4j.pax.exam.CoreOptions.equinox;
 import static org.ops4j.pax.exam.CoreOptions.felix;
@@ -53,7 +51,6 @@ public class CamelBlueprintTcclTest extends OSGiBlueprintTestSupport {
 
     @Test
     public void testCorrectTcclSetForRoutes() throws Exception {
-        BlueprintContainer ctn = getOsgiService(BlueprintContainer.class, "(osgi.blueprint.container.symbolicname=CamelBlueprintTcclTestBundle)", 10000);
         CamelContext ctx = getOsgiService(CamelContext.class, "(camel.context.symbolicname=CamelBlueprintTcclTestBundle)", 10000);
         assertBundleDelegatingClassLoader(ctx.getApplicationContextClassLoader());
 
@@ -113,7 +110,6 @@ public class CamelBlueprintTcclTest extends OSGiBlueprintTestSupport {
         private final ClassLoader tccl;
 
         public ThreadContextClassLoaderBean() {
-            super();
             tccl = Thread.currentThread().getContextClassLoader();
         }
 

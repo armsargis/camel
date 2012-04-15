@@ -77,7 +77,7 @@ import org.slf4j.LoggerFactory;
  * @version 
  */
 @XmlAccessorType(XmlAccessType.PROPERTY)
-public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>> extends OptionalIdentifiedDefinition implements Block {
+public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>> extends OptionalIdentifiedDefinition<Type> implements Block {
     protected final transient Logger log = LoggerFactory.getLogger(getClass());
     protected Boolean inheritErrorHandler;
     private NodeFactory nodeFactory;
@@ -89,7 +89,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     private Map<QName, Object> otherAttributes;
 
     // else to use an optional attribute in JAXB2
-    public abstract List<ProcessorDefinition> getOutputs();
+    public abstract List<ProcessorDefinition<?>> getOutputs();
 
     public abstract boolean isOutputSupported();
 
@@ -126,7 +126,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * Prefer to use {#link #createChildProcessor}.
      */
     public Processor createOutputsProcessor(RouteContext routeContext) throws Exception {
-        Collection<ProcessorDefinition> outputs = getOutputs();
+        Collection<ProcessorDefinition<?>> outputs = getOutputs();
         return createOutputsProcessor(routeContext, outputs);
     }
 
@@ -155,7 +155,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         return children;
     }
 
-    public void addOutput(ProcessorDefinition output) {
+    @Override
+    public void addOutput(ProcessorDefinition<?> output) {
         if (!blocks.isEmpty()) {
             // let the Block deal with the output
             Block block = blocks.getLast();
@@ -216,7 +217,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         return wrapChannel(routeContext, processor, null);
     }
 
-    protected Processor wrapChannel(RouteContext routeContext, Processor processor, ProcessorDefinition child) throws Exception {
+    protected Processor wrapChannel(RouteContext routeContext, Processor processor, ProcessorDefinition<?> child) throws Exception {
         // put a channel in between this and each output to control the route flow logic
         ModelChannel channel = createChannel(routeContext);
         channel.setNextProcessor(processor);
@@ -227,7 +228,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         addInterceptStrategies(routeContext, channel, this.getInterceptStrategies());
 
         // must do this ugly cast to avoid compiler error on AIX/HP-UX
-        ProcessorDefinition defn = (ProcessorDefinition) this;
+        ProcessorDefinition<?> defn = (ProcessorDefinition<?>) this;
 
         // set the child before init the channel
         channel.setChildDefinition(child);
@@ -254,17 +255,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
                 // only wrap the parent (not the children of the multicast)
                 wrapChannelInErrorHandler(channel, routeContext);
             } else {
-                log.trace("{} is part of multicast/recipientList which have special error handling so no error handler is applied", defn);
-            }
-        } else if (defn instanceof RecipientListDefinition) {
-            // do not use error handler for recipient list as it offers fine grained error handlers for its outputs
-            // however if share unit of work is enabled, we need to wrap an error handler on the recipient list parent
-            RecipientListDefinition def = (RecipientListDefinition) defn;
-            if (def.isShareUnitOfWork()) {
-                // note a recipient list cannot have children so no need for a child == null check
-                wrapChannelInErrorHandler(channel, routeContext);
-            } else {
-                log.trace("{} is part of multicast/recipientList which have special error handling so no error handler is applied", defn);
+                log.trace("{} is part of multicast which have special error handling so no error handler is applied", defn);
             }
         } else {
             // use error handler by default or if configured to do so
@@ -374,7 +365,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         return new DefaultChannel();
     }
 
-    protected Processor createOutputsProcessor(RouteContext routeContext, Collection<ProcessorDefinition> outputs) throws Exception {
+    protected Processor createOutputsProcessor(RouteContext routeContext, Collection<ProcessorDefinition<?>> outputs) throws Exception {
         List<Processor> list = new ArrayList<Processor>();
         for (ProcessorDefinition<?> output : outputs) {
 
@@ -418,14 +409,28 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     protected Processor makeProcessor(RouteContext routeContext) throws Exception {
         Processor processor = null;
 
+        // allow any custom logic before we create the processor
+        preCreateProcessor();
+
         // resolve properties before we create the processor
         resolvePropertyPlaceholders(routeContext, this);
 
         // resolve constant fields (eg Exchange.FILE_NAME)
         resolveKnownConstantFields(this);
 
-        // allow any custom logic before we create the processor
-        preCreateProcessor();
+        // also resolve properties and constant fields on embedded expressions
+        ProcessorDefinition<?> me = (ProcessorDefinition<?>) this;
+        if (me instanceof ExpressionNode) {
+            ExpressionNode exp = (ExpressionNode) me;
+            ExpressionDefinition expressionDefinition = exp.getExpression();
+            if (expressionDefinition != null) {
+                // resolve properties before we create the processor
+                resolvePropertyPlaceholders(routeContext, expressionDefinition);
+
+                // resolve constant fields (eg Exchange.FILE_NAME)
+                resolveKnownConstantFields(expressionDefinition);
+            }
+        }
 
         // at first use custom factory
         if (routeContext.getCamelContext().getProcessorFactory() != null) {
@@ -444,32 +449,36 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     }
 
     /**
-     * Inspects the given processor definition and resolves any property placeholders from its properties.
+     * Inspects the given definition and resolves any property placeholders from its properties.
      * <p/>
      * This implementation will check all the getter/setter pairs on this instance and for all the values
      * (which is a String type) will be property placeholder resolved.
      *
      * @param routeContext the route context
-     * @param definition   the processor definition
+     * @param definition   the definition
      * @throws Exception is thrown if property placeholders was used and there was an error resolving them
      * @see org.apache.camel.CamelContext#resolvePropertyPlaceholders(String)
      * @see org.apache.camel.component.properties.PropertiesComponent
      */
-    protected void resolvePropertyPlaceholders(RouteContext routeContext, ProcessorDefinition definition) throws Exception {
+    protected void resolvePropertyPlaceholders(RouteContext routeContext, Object definition) throws Exception {
         log.trace("Resolving property placeholders for: {}", definition);
 
         // find all getter/setter which we can use for property placeholders
-        Map<Object, Object> properties = new HashMap<Object, Object>();
+        Map<String, Object> properties = new HashMap<String, Object>();
         IntrospectionSupport.getProperties(definition, properties, null);
 
+        ProcessorDefinition<?> processorDefinition = null;
+        if (definition instanceof ProcessorDefinition) {
+            processorDefinition = (ProcessorDefinition<?>) definition;
+        }
         // include additional properties which have the Camel placeholder QName
         // and when the definition parameter is this (otherAttributes belong to this)
-        if (definition.getOtherAttributes() != null) {
-            for (Object key : definition.getOtherAttributes().keySet()) {
+        if (processorDefinition != null && processorDefinition.getOtherAttributes() != null) {
+            for (Object key : processorDefinition.getOtherAttributes().keySet()) {
                 QName qname = (QName) key;
                 if (Constants.PLACEHOLDER_QNAME.equals(qname.getNamespaceURI())) {
                     String local = qname.getLocalPart();
-                    Object value = definition.getOtherAttributes().get(key);
+                    Object value = processorDefinition.getOtherAttributes().get(key);
                     if (value != null && value instanceof String) {
                         // value must be enclosed with placeholder tokens
                         String s = (String) value;
@@ -495,9 +504,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         if (!properties.isEmpty()) {
             log.trace("There are {} properties on: {}", properties.size(), definition);
             // lookup and resolve properties for String based properties
-            for (Map.Entry entry : properties.entrySet()) {
+            for (Map.Entry<String, Object> entry : properties.entrySet()) {
                 // the name is always a String
-                String name = (String) entry.getKey();
+                String name = entry.getKey();
                 Object value = entry.getValue();
                 if (value instanceof String) {
                     // value must be a String, as a String is the key for a property placeholder
@@ -519,27 +528,26 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     }
 
     /**
-     * Inspects the given processor definition and resolves known fields
+     * Inspects the given definition and resolves known fields
      * <p/>
      * This implementation will check all the getter/setter pairs on this instance and for all the values
      * (which is a String type) will check if it refers to a known field (such as on Exchange).
      *
-     * @param definition   the processor definition
+     * @param definition   the definition
      */
-    protected void resolveKnownConstantFields(ProcessorDefinition definition) throws Exception {
+    protected void resolveKnownConstantFields(Object definition) throws Exception {
         log.trace("Resolving known fields for: {}", definition);
 
         // find all String getter/setter
-        Map<Object, Object> properties = new HashMap<Object, Object>();
+        Map<String, Object> properties = new HashMap<String, Object>();
         IntrospectionSupport.getProperties(definition, properties, null);
 
         if (!properties.isEmpty()) {
             log.trace("There are {} properties on: {}", properties.size(), definition);
 
             // lookup and resolve known constant fields for String based properties
-            for (Map.Entry entry : properties.entrySet()) {
-                // the name is always a String
-                String name = (String) entry.getKey();
+            for (Map.Entry<String, Object> entry : properties.entrySet()) {
+                String name = entry.getKey();
                 Object value = entry.getValue();
                 if (value instanceof String) {
                     // we can only resolve String typed values
@@ -576,7 +584,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      *
      * @param output the child to be added as output to this
      */
-    protected void configureChild(ProcessorDefinition output) {
+    protected void configureChild(ProcessorDefinition<?> output) {
         // noop
     }
 
@@ -965,10 +973,10 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
             // set it on last output as this is what the user means to do
             // for Block(s) with non empty getOutputs() the id probably refers
             //  to the last definition in the current Block
-            List<ProcessorDefinition> outputs = getOutputs();
+            List<ProcessorDefinition<?>> outputs = getOutputs();
             if (!blocks.isEmpty()) {
                 if (blocks.getLast() instanceof ProcessorDefinition) {
-                    ProcessorDefinition block = (ProcessorDefinition)blocks.getLast();
+                    ProcessorDefinition<?> block = (ProcessorDefinition<?>)blocks.getLast();
                     if (!block.getOutputs().isEmpty()) {
                         outputs = block.getOutputs();
                     }
@@ -988,7 +996,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     @SuppressWarnings("unchecked")
     public Type routeId(String id) {
-        ProcessorDefinition def = this;
+        ProcessorDefinition<?> def = this;
 
         RouteDefinition route = ProcessorDefinitionHelper.getRoute(def);
         if (route != null) {
@@ -1155,9 +1163,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      *
      * @return the builder
      */
-    public ProcessorDefinition end() {
+    public ProcessorDefinition<?> end() {
         // must do this ugly cast to avoid compiler error on AIX/HP-UX
-        ProcessorDefinition defn = (ProcessorDefinition) this;
+        ProcessorDefinition<?> defn = (ProcessorDefinition<?>) this;
         
         // when using doTry .. doCatch .. doFinally we should always
         // end the try definition to avoid having to use 2 x end() in the route
@@ -1187,7 +1195,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      *
      * @return the end
      */
-    public ProcessorDefinition endParent() {
+    public ProcessorDefinition<?> endParent() {
         return this;
     }
 
@@ -1197,7 +1205,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return the builder
      */
     public ChoiceDefinition endChoice() {
-        ProcessorDefinition def = end();
+        ProcessorDefinition<?> def = end();
         if (def instanceof WhenDefinition) {
             return (ChoiceDefinition) def.getParent();
         } else if (def instanceof OtherwiseDefinition) {
@@ -1532,7 +1540,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     @SuppressWarnings("unchecked")
     @Deprecated
     public Type routingSlip(String header, String uriDelimiter) {
-        RoutingSlipDefinition answer = new RoutingSlipDefinition(header, uriDelimiter);
+        RoutingSlipDefinition<Type> answer = new RoutingSlipDefinition<Type>(header, uriDelimiter);
         addOutput(answer);
         return (Type) this;
     }
@@ -1554,7 +1562,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     @SuppressWarnings("unchecked")
     @Deprecated
     public Type routingSlip(String header) {
-        RoutingSlipDefinition answer = new RoutingSlipDefinition(header);
+        RoutingSlipDefinition<Type> answer = new RoutingSlipDefinition<Type>(header);
         addOutput(answer);
         return (Type) this;
     }
@@ -1578,7 +1586,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     @SuppressWarnings("unchecked")
     @Deprecated
     public Type routingSlip(String header, String uriDelimiter, boolean ignoreInvalidEndpoints) {
-        RoutingSlipDefinition answer = new RoutingSlipDefinition(header, uriDelimiter);
+        RoutingSlipDefinition<Type> answer = new RoutingSlipDefinition<Type>(header, uriDelimiter);
         answer.setIgnoreInvalidEndpoints(ignoreInvalidEndpoints);
         addOutput(answer);
         return (Type) this;
@@ -1603,7 +1611,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     @SuppressWarnings("unchecked")
     @Deprecated
     public Type routingSlip(String header, boolean ignoreInvalidEndpoints) {
-        RoutingSlipDefinition answer = new RoutingSlipDefinition(header);
+        RoutingSlipDefinition<Type> answer = new RoutingSlipDefinition<Type>(header);
         answer.setIgnoreInvalidEndpoints(ignoreInvalidEndpoints);
         addOutput(answer);
         return (Type) this;
@@ -2253,7 +2261,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @param exceptionType  the exception to catch
      * @return the exception builder to configure
      */
-    public OnExceptionDefinition onException(Class exceptionType) {
+    public OnExceptionDefinition onException(Class<? extends Throwable> exceptionType) {
         OnExceptionDefinition answer = new OnExceptionDefinition(exceptionType);
         addOutput(answer);
         return answer;
@@ -2266,7 +2274,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @param exceptions list of exceptions to catch
      * @return the exception builder to configure
      */
-    public OnExceptionDefinition onException(Class... exceptions) {
+    public OnExceptionDefinition onException(Class<? extends Throwable>... exceptions) {
         OnExceptionDefinition answer = new OnExceptionDefinition(Arrays.asList(exceptions));
         addOutput(answer);
         return answer;
@@ -2401,9 +2409,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return the builder
      */
     @SuppressWarnings("unchecked")
-    public Type bean(Class beanType) {
+    public Type bean(Class<?> beanType) {
         BeanDefinition answer = new BeanDefinition();
-        answer.setBeanType(beanType.getName());
+        answer.setBeanType(beanType);
         addOutput(answer);
         return (Type) this;
     }
@@ -2417,9 +2425,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return the builder
      */
     @SuppressWarnings("unchecked")
-    public Type bean(Class beanType, String method) {
+    public Type bean(Class<?> beanType, String method) {
         BeanDefinition answer = new BeanDefinition();
-        answer.setBeanType(beanType.getName());
+        answer.setBeanType(beanType);
         answer.setMethod(method);
         addOutput(answer);
         return (Type) this;
@@ -2689,7 +2697,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return the builder
      */
     @SuppressWarnings("unchecked")
-    public Type convertBodyTo(Class type) {
+    public Type convertBodyTo(Class<?> type) {
         addOutput(new ConvertBodyDefinition(type));
         return (Type) this;
     }
@@ -2702,7 +2710,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return the builder
      */
     @SuppressWarnings("unchecked")
-    public Type convertBodyTo(Class type, String charset) {
+    public Type convertBodyTo(Class<?> type, String charset) {
         addOutput(new ConvertBodyDefinition(type, charset));
         return (Type) this;
     }
@@ -2725,8 +2733,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @return the builder
      */
     @SuppressWarnings("unchecked")
-    public Type sort(Expression expression, Comparator comparator) {
-        addOutput(new SortDefinition(expression, comparator));
+    public <T> Type sort(Expression expression, Comparator<T> comparator) {
+        addOutput(new SortDefinition<T>(expression, comparator));
         return (Type) this;
     }
 
@@ -2735,8 +2743,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      *
      * @return the builder
      */
-    public ExpressionClause<SortDefinition> sort() {
-        SortDefinition answer = new SortDefinition();
+    public <T> ExpressionClause<SortDefinition<T>> sort() {
+        SortDefinition<T> answer = new SortDefinition<T>();
         addOutput(answer);
         return ExpressionClause.createAndSetExpression(answer);
     }
@@ -2802,7 +2810,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * The difference between this and {@link #enrich(String)} is that this uses a consumer
      * to obtain the additional data, where as enrich uses a producer.
      * <p/>
-     * This method will block until data is avialable, use the method with timeout if you do not
+     * This method will <tt>block</tt> until data is available, use the method with timeout if you do not
      * want to risk waiting a long time before data is available from the resourceUri.
      *
      * @param resourceUri           URI of resource endpoint for obtaining additional data.
@@ -2811,7 +2819,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     @SuppressWarnings("unchecked")
     public Type pollEnrich(String resourceUri) {
-        addOutput(new PollEnrichDefinition(null, resourceUri, 0));
+        addOutput(new PollEnrichDefinition(null, resourceUri, -1));
         return (Type) this;
     }
 
@@ -2823,7 +2831,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * The difference between this and {@link #enrich(String)} is that this uses a consumer
      * to obtain the additional data, where as enrich uses a producer.
      * <p/>
-     * This method will block until data is avialable, use the method with timeout if you do not
+     * This method will <b>block</b> until data is available, use the method with timeout if you do not
      * want to risk waiting a long time before data is available from the resourceUri.
      *
      * @param resourceUri           URI of resource endpoint for obtaining additional data.
@@ -2833,7 +2841,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     @SuppressWarnings("unchecked")
     public Type pollEnrich(String resourceUri, AggregationStrategy aggregationStrategy) {
-        addOutput(new PollEnrichDefinition(aggregationStrategy, resourceUri, 0));
+        addOutput(new PollEnrichDefinition(aggregationStrategy, resourceUri, -1));
         return (Type) this;
     }
 
@@ -3066,7 +3074,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
             setInheritErrorHandler(inheritErrorHandler);
         } else {
             // configure on last output as its the intended
-            ProcessorDefinition output = getOutputs().get(size - 1);
+            ProcessorDefinition<?> output = getOutputs().get(size - 1);
             if (output != null) {
                 output.setInheritErrorHandler(inheritErrorHandler);
             }
@@ -3077,11 +3085,11 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     // Properties
     // -------------------------------------------------------------------------
     @XmlTransient
-    public ProcessorDefinition getParent() {
+    public ProcessorDefinition<?> getParent() {
         return parent;
     }
 
-    public void setParent(ProcessorDefinition parent) {
+    public void setParent(ProcessorDefinition<?> parent) {
         this.parent = parent;
     }
 

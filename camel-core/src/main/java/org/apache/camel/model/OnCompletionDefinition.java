@@ -17,8 +17,11 @@
 package org.apache.camel.model;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 import javax.xml.bind.annotation.XmlAccessType;
@@ -33,7 +36,6 @@ import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.processor.OnCompletionProcessor;
 import org.apache.camel.processor.UnitOfWorkProcessor;
-import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
 
 /**
@@ -55,11 +57,29 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
     @XmlAttribute(name = "useOriginalMessage")
     private Boolean useOriginalMessagePolicy;
     @XmlElementRef
-    private List<ProcessorDefinition> outputs = new ArrayList<ProcessorDefinition>();
+    private List<ProcessorDefinition<?>> outputs = new ArrayList<ProcessorDefinition<?>>();
     @XmlTransient
     private ExecutorService executorService;
+    @XmlTransient
+    private Boolean routeScoped;
+    // TODO: in Camel 3.0 the OnCompletionDefinition should not contain state and OnCompletion processors
+    @XmlTransient
+    private final Map<String, Processor> onCompletions = new HashMap<String, Processor>();
 
     public OnCompletionDefinition() {
+    }
+
+    public boolean isRouteScoped() {
+        // is context scoped by default
+        return routeScoped != null ? routeScoped : false;
+    }
+
+    public Processor getOnCompletion(String routeId) {
+        return onCompletions.get(routeId);
+    }
+
+    public Collection<Processor> getOnCompletions() {
+        return onCompletions.values();
     }
 
     @Override
@@ -84,28 +104,39 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
 
     @Override
     public Processor createProcessor(RouteContext routeContext) throws Exception {
+        // assign whether this was a route scoped onCompletion or not
+        // we need to know this later when setting the parent, as only route scoped should have parent
+        // Note: this logic can possible be removed when the Camel routing engine decides at runtime
+        // to apply onCompletion in a more dynamic fashion than current code base
+        // and therefore is in a better position to decide among context/route scoped OnCompletion at runtime
+        if (routeScoped == null) {
+            routeScoped = super.getParent() != null;
+        }
+
         if (isOnCompleteOnly() && isOnFailureOnly()) {
             throw new IllegalArgumentException("Both onCompleteOnly and onFailureOnly cannot be true. Only one of them can be true. On node: " + this);
         }
 
         Processor childProcessor = this.createChildProcessor(routeContext, true);
-
         // wrap the on completion route in a unit of work processor
         childProcessor = new UnitOfWorkProcessor(routeContext, childProcessor);
+
+        String id = routeContext.getRoute().getId();
+        onCompletions.put(id, childProcessor);
 
         Predicate when = null;
         if (onWhen != null) {
             when = onWhen.getExpression().createPredicate(routeContext);
         }
 
-        String ref = this.executorServiceRef != null ? this.executorServiceRef : "OnCompletion";
-        ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
-        executorService = manager.newDefaultThreadPool(this, ref);
+        // executor service is mandatory for on completion
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, true);
+        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "OnCompletion", this, true);
 
         // should be false by default
         boolean original = getUseOriginalMessagePolicy() != null ? getUseOriginalMessagePolicy() : false;
         OnCompletionProcessor answer = new OnCompletionProcessor(routeContext.getCamelContext(), childProcessor,
-                executorService, isOnCompleteOnly(), isOnFailureOnly(), when, original);
+                threadPool, shutdownThreadPool, isOnCompleteOnly(), isOnFailureOnly(), when, original);
         return answer;
     }
 
@@ -117,10 +148,9 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
      *
      * @param definition the parent definition that is the route
      */
-    @SuppressWarnings("unchecked")
-    public void removeAllOnCompletionDefinition(ProcessorDefinition definition) {
-        for (Iterator<ProcessorDefinition> it = definition.getOutputs().iterator(); it.hasNext();) {
-            ProcessorDefinition out = it.next();
+    public void removeAllOnCompletionDefinition(ProcessorDefinition<?> definition) {
+        for (Iterator<ProcessorDefinition<?>> it = definition.getOutputs().iterator(); it.hasNext();) {
+            ProcessorDefinition<?> out = it.next();
             if (out instanceof OnCompletionDefinition) {
                 it.remove();
             }
@@ -128,7 +158,7 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
     }
 
     @Override
-    public ProcessorDefinition end() {
+    public ProcessorDefinition<?> end() {
         // pop parent block, as we added our self as block to parent when synchronized was defined in the route
         getParent().popBlock();
         return super.end();
@@ -201,11 +231,11 @@ public class OnCompletionDefinition extends ProcessorDefinition<OnCompletionDefi
         return this;
     }
 
-    public List<ProcessorDefinition> getOutputs() {
+    public List<ProcessorDefinition<?>> getOutputs() {
         return outputs;
     }
 
-    public void setOutputs(List<ProcessorDefinition> outputs) {
+    public void setOutputs(List<ProcessorDefinition<?>> outputs) {
         this.outputs = outputs;
     }
 

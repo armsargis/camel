@@ -33,7 +33,6 @@ import org.apache.camel.Processor;
 import org.apache.camel.builder.ExpressionBuilder;
 import org.apache.camel.processor.CatchProcessor;
 import org.apache.camel.spi.RouteContext;
-import org.apache.camel.util.CastUtils;
 import org.apache.camel.util.ExpressionToPredicateAdapter;
 
 /**
@@ -51,21 +50,21 @@ public class CatchDefinition extends ProcessorDefinition<CatchDefinition> {
     @XmlElement(name = "handled")
     private ExpressionSubElementDefinition handled;
     @XmlElementRef
-    private List<ProcessorDefinition> outputs = new ArrayList<ProcessorDefinition>();
+    private List<ProcessorDefinition<?>> outputs = new ArrayList<ProcessorDefinition<?>>();
     @XmlTransient
-    private List<Class> exceptionClasses;
+    private List<Class<? extends Throwable>> exceptionClasses;
     @XmlTransient
     private Predicate handledPolicy;
 
     public CatchDefinition() {
     }
 
-    public CatchDefinition(List<Class> exceptionClasses) {
+    public CatchDefinition(List<Class<? extends Throwable>> exceptionClasses) {
         this.exceptionClasses = exceptionClasses;
     }
 
-    public CatchDefinition(Class exceptionType) {
-        exceptionClasses = new ArrayList<Class>();
+    public CatchDefinition(Class<? extends Throwable> exceptionType) {
+        exceptionClasses = new ArrayList<Class<? extends Throwable>>();
         exceptionClasses.add(exceptionType);
     }
 
@@ -112,11 +111,12 @@ public class CatchDefinition extends ProcessorDefinition<CatchDefinition> {
         return new CatchProcessor(exceptionClasses, childProcessor, when, handle);
     }
 
-    public List<ProcessorDefinition> getOutputs() {
+    @Override
+    public List<ProcessorDefinition<?>> getOutputs() {
         return outputs;
     }
 
-    public void setOutputs(List<ProcessorDefinition> outputs) {
+    public void setOutputs(List<ProcessorDefinition<?>> outputs) {
         this.outputs = outputs;
     }
 
@@ -124,11 +124,11 @@ public class CatchDefinition extends ProcessorDefinition<CatchDefinition> {
         return true;
     }
 
-    public List<Class> getExceptionClasses() {
+    public List<Class<? extends Throwable>> getExceptionClasses() {
         return exceptionClasses;
     }
 
-    public void setExceptionClasses(List<Class> exceptionClasses) {
+    public void setExceptionClasses(List<Class<? extends Throwable>> exceptionClasses) {
         this.exceptionClasses = exceptionClasses;
     }
     
@@ -140,7 +140,7 @@ public class CatchDefinition extends ProcessorDefinition<CatchDefinition> {
      * @param exceptionClasses  a list of the exception classes
      * @return the builder
      */
-    public CatchDefinition exceptionClasses(List<Class> exceptionClasses) {
+    public CatchDefinition exceptionClasses(List<Class<? extends Throwable>> exceptionClasses) {
         setExceptionClasses(exceptionClasses);
         return this;
     }
@@ -207,8 +207,8 @@ public class CatchDefinition extends ProcessorDefinition<CatchDefinition> {
      * @param exception  the exception of class
      * @return the builder
      */
-    public CatchDefinition exceptionClasses(Class exception) {
-        List<Class> list = getExceptionClasses();
+    public CatchDefinition exceptionClasses(Class<? extends Throwable> exception) {
+        List<Class<? extends Throwable>> list = getExceptionClasses();
         list.add(exception);
         return this;
     }
@@ -245,13 +245,13 @@ public class CatchDefinition extends ProcessorDefinition<CatchDefinition> {
         this.handled = handled;
     }
 
-    protected List<Class> createExceptionClasses(CamelContext context) throws ClassNotFoundException {
+    protected List<Class<? extends Throwable>> createExceptionClasses(CamelContext context) throws ClassNotFoundException {
         // must use the class resolver from CamelContext to load classes to ensure it can
         // be loaded in all kind of environments such as JEE servers and OSGi etc.
         List<String> list = getExceptions();
-        List<Class> answer = new ArrayList<Class>(list.size());
+        List<Class<? extends Throwable>> answer = new ArrayList<Class<? extends Throwable>>(list.size());
         for (String name : list) {
-            Class<Exception> type = CastUtils.cast(context.getClassResolver().resolveMandatoryClass(name));
+            Class<Throwable> type = context.getClassResolver().resolveMandatoryClass(name, Throwable.class);
             answer.add(type);
         }
         return answer;

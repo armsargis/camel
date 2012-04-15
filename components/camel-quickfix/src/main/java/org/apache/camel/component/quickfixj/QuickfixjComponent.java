@@ -16,15 +16,12 @@
  */
 package org.apache.camel.component.quickfixj;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.camel.Endpoint;
 import org.apache.camel.impl.DefaultComponent;
-import org.apache.camel.util.UnsafeUriCharactersEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import quickfix.LogFactory;
@@ -68,7 +65,7 @@ public class QuickfixjComponent extends DefaultComponent {
                     }
                 }
 
-                endpoint = new QuickfixjEndpoint(engine, uri, getCamelContext());
+                endpoint = new QuickfixjEndpoint(engine, uri, this);
                 engine.addEventListener(endpoint);
                 endpoints.put(uri, endpoint);
             }
@@ -131,18 +128,4 @@ public class QuickfixjComponent extends DefaultComponent {
         this.configurations = configurations;
     }
 
-    private static String getPath(String uri) throws URISyntaxException {
-        // Adapted from DefaultComponent
-        URI u = new URI(UnsafeUriCharactersEncoder.encode(uri));
-        String path = u.getSchemeSpecificPart();
-        // lets trim off any query arguments
-        if (path.startsWith("//")) {
-            path = path.substring(2);
-        }
-        int idx = path.indexOf('?');
-        if (idx > 0) {
-            path = path.substring(0, idx);
-        }
-        return path;
-    }
 }

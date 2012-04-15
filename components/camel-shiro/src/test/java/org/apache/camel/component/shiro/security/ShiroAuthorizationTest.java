@@ -27,9 +27,6 @@ import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.test.junit4.CamelTestSupport;
 import org.apache.shiro.authz.Permission;
 import org.apache.shiro.authz.permission.WildcardPermission;
-import org.apache.shiro.config.IniSecurityManagerFactory;
-import org.apache.shiro.mgt.SecurityManager;
-import org.apache.shiro.util.Factory;
 import org.junit.Test;
 
 public class ShiroAuthorizationTest extends CamelTestSupport {
@@ -107,8 +104,8 @@ public class ShiroAuthorizationTest extends CamelTestSupport {
                     to("mock:authorizationException");
                 
                 from("direct:secureEndpoint").
-                    to("log:incoming payload").
                     policy(securityPolicy).
+                    to("log:incoming payload").
                     to("mock:success");
             }
         };
@@ -117,8 +114,7 @@ public class ShiroAuthorizationTest extends CamelTestSupport {
     
     private static class TestShiroSecurityTokenInjector extends ShiroSecurityTokenInjector {
 
-        public TestShiroSecurityTokenInjector(
-                ShiroSecurityToken shiroSecurityToken, byte[] bytes) {
+        public TestShiroSecurityTokenInjector(ShiroSecurityToken shiroSecurityToken, byte[] bytes) {
             super(shiroSecurityToken, bytes);
         }
         

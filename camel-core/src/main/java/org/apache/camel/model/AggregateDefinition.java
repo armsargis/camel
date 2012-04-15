@@ -39,9 +39,7 @@ import org.apache.camel.processor.aggregate.AggregateProcessor;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.processor.aggregate.GroupedExchangeAggregationStrategy;
 import org.apache.camel.spi.AggregationRepository;
-import org.apache.camel.spi.ExecutorServiceManager;
 import org.apache.camel.spi.RouteContext;
-import org.apache.camel.spi.ThreadPoolProfile;
 import org.apache.camel.util.concurrent.SynchronousExecutorService;
 
 /**
@@ -63,7 +61,7 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     @XmlTransient
     private ExpressionDefinition expression;
     @XmlElementRef
-    private List<ProcessorDefinition> outputs = new ArrayList<ProcessorDefinition>();
+    private List<ProcessorDefinition<?>> outputs = new ArrayList<ProcessorDefinition<?>>();
     @XmlTransient
     private AggregationStrategy aggregationStrategy;
     @XmlTransient
@@ -107,21 +105,18 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
     }
 
     public AggregateDefinition(Predicate predicate) {
-        this();
         if (predicate != null) {
             setExpression(new ExpressionDefinition(predicate));
         }
     }    
     
     public AggregateDefinition(Expression correlationExpression) {
-        this();
         if (correlationExpression != null) {
             setExpression(new ExpressionDefinition(correlationExpression));
         }
     }
 
     public AggregateDefinition(ExpressionDefinition correlationExpression) {
-        this();
         this.expression = correlationExpression;
     }
 
@@ -162,31 +157,41 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         Expression correlation = getExpression().createExpression(routeContext);
         AggregationStrategy strategy = createAggregationStrategy(routeContext);
 
-        executorService = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "Aggregator", this);
-        if (executorService == null) {
+        boolean shutdownThreadPool = ProcessorDefinitionHelper.willCreateNewThreadPool(routeContext, this, isParallelProcessing());
+        ExecutorService threadPool = ProcessorDefinitionHelper.getConfiguredExecutorService(routeContext, "Aggregator", this, isParallelProcessing());
+        if (threadPool == null && !isParallelProcessing()) {
             // executor service is mandatory for the Aggregator
-            ExecutorServiceManager executorServiceManager = routeContext.getCamelContext().getExecutorServiceManager();
-            if (isParallelProcessing()) {
-                executorService = executorServiceManager.newDefaultThreadPool(this, "Aggregator");
-            } else {
-                // we do not run in parallel mode, but use a synchronous executor, so we run in current thread
-                executorService = new SynchronousExecutorService();
-            }
+            // we do not run in parallel mode, but use a synchronous executor, so we run in current thread
+            threadPool = new SynchronousExecutorService();
+            shutdownThreadPool = true;
         }
-       
-        if (timeoutCheckerExecutorServiceRef != null && timeoutCheckerExecutorService == null) {
-            timeoutCheckerExecutorService = getConfiguredScheduledExecutorService(routeContext);
-        }
-        AggregateProcessor answer = new AggregateProcessor(routeContext.getCamelContext(), processor, correlation, strategy, executorService);
+
+        AggregateProcessor answer = new AggregateProcessor(routeContext.getCamelContext(), processor,
+                correlation, strategy, threadPool, shutdownThreadPool);
 
         AggregationRepository repository = createAggregationRepository(routeContext);
         if (repository != null) {
             answer.setAggregationRepository(repository);
         }
-        
-        if (getTimeoutCheckerExecutorService() != null) {
-            answer.setTimeoutCheckerExecutorService(timeoutCheckerExecutorService);
+
+        // this EIP supports using a shared timeout checker thread pool or fallback to create a new thread pool
+        boolean shutdownTimeoutThreadPool = false;
+        ScheduledExecutorService timeoutThreadPool = timeoutCheckerExecutorService;
+        if (timeoutThreadPool == null && timeoutCheckerExecutorServiceRef != null) {
+            // lookup existing thread pool
+            timeoutThreadPool = routeContext.getCamelContext().getRegistry().lookup(timeoutCheckerExecutorServiceRef, ScheduledExecutorService.class);
+            if (timeoutThreadPool == null) {
+                // then create a thread pool assuming the ref is a thread pool profile id
+                timeoutThreadPool = routeContext.getCamelContext().getExecutorServiceManager().newScheduledThreadPool(this,
+                        AggregateProcessor.AGGREGATE_TIMEOUT_CHECKER, timeoutCheckerExecutorServiceRef);
+                if (timeoutThreadPool == null) {
+                    throw new IllegalArgumentException("ExecutorServiceRef " + timeoutCheckerExecutorServiceRef + " not found in registry or as a thread pool profile.");
+                }
+                shutdownTimeoutThreadPool = true;
+            }
         }
+        answer.setTimeoutCheckerExecutorService(timeoutThreadPool);
+        answer.setShutdownTimeoutCheckerExecutorService(shutdownTimeoutThreadPool);
 
         // set other options
         answer.setParallelProcessing(isParallelProcessing());
@@ -233,32 +238,10 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         return answer;
     }
 
-    private ScheduledExecutorService getConfiguredScheduledExecutorService(RouteContext routeContext) {
-        // TODO: maybe rather than this one-off method to support an executorService & scheduledExecutorService for the aggregator,
-        // create ScheduledExecutorServiceAwareDefinition and the change other definitions that currently use ScheduledExecutorServices to
-        // use that one instead of the more generic ExecutorServiceAwareDefinition
-        ScheduledExecutorService answer = routeContext.getCamelContext().getRegistry().lookup(timeoutCheckerExecutorServiceRef, ScheduledExecutorService.class);
-        if (answer == null) {
-            ExecutorServiceManager manager = routeContext.getCamelContext().getExecutorServiceManager();
-            // then create a thread pool assuming the ref is a thread pool profile id                
-            ThreadPoolProfile profile = manager.getThreadPoolProfile(timeoutCheckerExecutorServiceRef);
-            if (profile != null) {
-                // okay we need to grab the pool size from the ref
-                Integer poolSize = profile.getPoolSize();
-                if (poolSize == null) {
-                    // fallback and use the default pool size, if none was set on the profile
-                    poolSize = manager.getDefaultThreadPoolProfile().getPoolSize();
-                }
-                answer = manager.newScheduledThreadPool(this, "Aggregator", poolSize);
-            }
-        }
-        return answer;
-    }
-
     @Override
-    protected void configureChild(ProcessorDefinition output) {
+    protected void configureChild(ProcessorDefinition<?> output) {
         if (expression != null && expression instanceof ExpressionClause) {
-            ExpressionClause clause = (ExpressionClause) expression;
+            ExpressionClause<?> clause = (ExpressionClause<?>) expression;
             if (clause.getExpressionType() != null) {
                 // if using the Java DSL then the expression may have been set using the
                 // ExpressionClause which is a fancy builder to define expressions and predicates
@@ -788,7 +771,8 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         this.expression = expression;
     }
 
-    public List<ProcessorDefinition> getOutputs() {
+    @Override
+    public List<ProcessorDefinition<?>> getOutputs() {
         return outputs;
     }
 
@@ -796,7 +780,7 @@ public class AggregateDefinition extends ProcessorDefinition<AggregateDefinition
         return true;
     }
 
-    public void setOutputs(List<ProcessorDefinition> outputs) {
+    public void setOutputs(List<ProcessorDefinition<?>> outputs) {
         this.outputs = outputs;
     }
 

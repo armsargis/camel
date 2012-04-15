@@ -17,12 +17,9 @@
 package org.apache.camel.component.http4;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.camel.Exchange;
-import org.apache.camel.Processor;
-import org.apache.http.Header;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
@@ -48,7 +45,7 @@ public class HttpProducerTwoParametersWithSameKeyTest extends BaseHttpTest {
         assertEquals("OK", out.getOut().getBody(String.class));
         assertEquals("yes", out.getOut().getHeader("bar"));
 
-        List foo = out.getOut().getHeader("foo", List.class);
+        List<?> foo = out.getOut().getHeader("foo", List.class);
         assertNotNull(foo);
         assertEquals(2, foo.size());
         assertEquals("123", foo.get(0));

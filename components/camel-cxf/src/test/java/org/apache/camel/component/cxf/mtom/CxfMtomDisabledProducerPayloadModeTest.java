@@ -36,8 +36,6 @@ import javax.xml.ws.Holder;
 import javax.xml.ws.WebServiceContext;
 import javax.xml.ws.handler.MessageContext;
 
-import org.w3c.dom.Element;
-
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangePattern;
 import org.apache.camel.Processor;
@@ -45,6 +43,7 @@ import org.apache.camel.component.cxf.CxfPayload;
 import org.apache.camel.cxf.mtom_feature.Hello;
 import org.apache.cxf.attachment.AttachmentDataSource;
 import org.apache.cxf.binding.soap.SoapHeader;
+import org.apache.cxf.helpers.CastUtils;
 import org.apache.cxf.helpers.DOMUtils;
 import org.apache.cxf.helpers.IOUtils;
 import org.junit.Assert;
@@ -123,12 +122,12 @@ public class CxfMtomDisabledProducerPayloadModeTest extends CxfMtomProducerPaylo
         @Resource
         WebServiceContext ctx;
         
-        @SuppressWarnings("unchecked")
         @Override
         public void detail(Holder<byte[]> photo, Holder<Image> image) {
             
             // verify request attachments
-            Map<String, DataHandler> map = (Map) ctx.getMessageContext().get(MessageContext.INBOUND_MESSAGE_ATTACHMENTS); 
+            Map<String, DataHandler> map 
+                = CastUtils.cast((Map<?, ?>)ctx.getMessageContext().get(MessageContext.INBOUND_MESSAGE_ATTACHMENTS));
             Assert.assertEquals(2, map.size());
             
             DataHandler dh = map.get(MtomTestHelper.REQ_PHOTO_CID);
@@ -156,7 +155,7 @@ public class CxfMtomDisabledProducerPayloadModeTest extends CxfMtomProducerPaylo
             Assert.assertEquals(39, bufferedImage.getHeight());  
 
             // add output attachments
-            map = (Map) ctx.getMessageContext().get(MessageContext.OUTBOUND_MESSAGE_ATTACHMENTS); 
+            map = CastUtils.cast((Map<?, ?>)ctx.getMessageContext().get(MessageContext.OUTBOUND_MESSAGE_ATTACHMENTS)); 
 
             try {
                 DataSource ds = new AttachmentDataSource("image/jpeg", getClass().getResourceAsStream("/Splash.jpg"));

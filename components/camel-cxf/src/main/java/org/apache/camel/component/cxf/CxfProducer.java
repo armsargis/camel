@@ -35,6 +35,7 @@ import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.component.cxf.common.message.CxfConstants;
 import org.apache.camel.impl.DefaultProducer;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.cxf.Bus;
 import org.apache.cxf.binding.soap.model.SoapHeaderInfo;
 import org.apache.cxf.endpoint.Client;
 import org.apache.cxf.jaxws.context.WrappedMessageContext;
@@ -68,7 +69,23 @@ public class CxfProducer extends DefaultProducer implements AsyncProcessor {
     public CxfProducer(CxfEndpoint endpoint) throws Exception {
         super(endpoint);
         this.endpoint = endpoint;
-        client = endpoint.createClient();
+    }
+    
+    @Override
+    protected void doStart() throws Exception {
+        if (client == null) {
+            client = endpoint.createClient();
+        }
+    }
+    
+    @Override
+    protected void doStop() throws Exception {
+        super.doStop();
+        if (client != null) {
+            // It will help to release the request context map
+            client.destroy();
+            client = null;
+        }
     }
    
     // As the cxf client async and sync api is implement different,
@@ -79,6 +96,8 @@ public class CxfProducer extends DefaultProducer implements AsyncProcessor {
         try {
             // create CXF exchange
             ExchangeImpl cxfExchange = new ExchangeImpl();
+            // set the Bus on the exchange in case the CXF interceptor need to access it from exchange
+            cxfExchange.put(Bus.class, endpoint.getBus());
             
             // prepare binding operation info
             BindingOperationInfo boi = prepareBindingOperation(camelExchange, cxfExchange);
@@ -115,6 +134,8 @@ public class CxfProducer extends DefaultProducer implements AsyncProcessor {
         
         // create CXF exchange
         ExchangeImpl cxfExchange = new ExchangeImpl();
+        // set the Bus on the exchange in case the CXF interceptor need to access it from exchange
+        cxfExchange.put(Bus.class, endpoint.getBus());
         
         // prepare binding operation info
         BindingOperationInfo boi = prepareBindingOperation(camelExchange, cxfExchange);
@@ -259,7 +280,7 @@ public class CxfProducer extends DefaultProducer implements AsyncProcessor {
             } else {
                 // maybe we can iterate the body and that way create a list for the parameters
                 // then end users do not need to trouble with List
-                Iterator it = exchange.getIn().getBody(Iterator.class);
+                Iterator<?> it = exchange.getIn().getBody(Iterator.class);
                 if (it != null && it.hasNext()) {
                     list = exchange.getContext().getTypeConverter().convertTo(List.class, it);
                     if (list != null) {

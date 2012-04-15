@@ -19,7 +19,6 @@ package org.apache.camel.component.hazelcast;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 
@@ -34,7 +33,7 @@ public class HazelcastMapConsumerTest extends CamelTestSupport {
 
     @Override
     protected void doPostSetup() throws Exception {
-        HazelcastComponent component = (HazelcastComponent) context().getComponent("hazelcast");
+        HazelcastComponent component = context().getComponent("hazelcast", HazelcastComponent.class);
         HazelcastInstance hazelcastInstance = component.getHazelcastInstance();
         map = hazelcastInstance.getMap("foo");
         map.clear();

@@ -72,7 +72,6 @@
     <dependency>
         <groupId>org.osgi</groupId>
         <artifactId>org.osgi.core</artifactId>
-        <version>4.1.0</version>
         <scope>provided</scope>
         <optional>true</optional>
     </dependency>
@@ -152,10 +151,10 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <forkMode>once</forkMode>
+          <forkedProcessTimeoutInSeconds>3000</forkedProcessTimeoutInSeconds>
           <excludes>
             <!-- TODO FIXME ASAP -->
             <exclude>**/XXXTest.*</exclude>            
-            <exclude>**/LRUSoftCacheTest.*</exclude>  <!-- CAMEL-4069 -->          
           </excludes>
         </configuration>
       </plugin>
@@ -207,6 +206,14 @@
             <group>
               <title>Camel Components</title>
               <packages>org.apache.camel.component.*</packages>
+            </group>
+            <group>
+              <title>Support APIs for implementors</title>
+              <packages>org.apache.camel.support.*</packages>
+            </group>
+            <group>
+              <title>Main class for running Camel standalone</title>
+              <packages>org.apache.camel.main.*</packages>
             </group>
             <group>
               <title>Camel Runtime</title>
@@ -286,6 +293,14 @@
                 <group>
                   <title>Camel Support having base classes to extend</title>
                   <packages>org.apache.camel.support</packages>
+                </group>
+                <group>
+                  <title>Support APIs for implementors</title>
+                  <packages>org.apache.camel.support.*</packages>
+                </group>
+                <group>
+                  <title>Main class for running Camel standalone</title>
+                  <packages>org.apache.camel.main.*</packages>
                 </group>
                 <group>
                   <title>Camel Runtime</title>

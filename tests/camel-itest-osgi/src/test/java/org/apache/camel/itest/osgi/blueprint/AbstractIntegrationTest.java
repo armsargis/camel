@@ -23,7 +23,6 @@ import java.util.Dictionary;
 import java.util.Enumeration;
 
 import org.apache.camel.itest.osgi.OSGiIntegrationTestSupport;
-import org.junit.Before;
 import org.ops4j.pax.exam.CoreOptions;
 import org.ops4j.pax.exam.Inject;
 import org.ops4j.pax.exam.options.MavenArtifactProvisionOption;
@@ -71,6 +70,7 @@ public abstract class AbstractIntegrationTest extends OSGiIntegrationTestSupport
             // This is buggy, as the service reference may change i think
             Object svc = type.cast(tracker.waitForService(timeout));
             if (svc == null) {
+                @SuppressWarnings("rawtypes")
                 Dictionary dic = bundleContext.getBundle().getHeaders();
                 System.err.println("Test bundle headers: " + explode(dic));
 
@@ -112,8 +112,8 @@ public abstract class AbstractIntegrationTest extends OSGiIntegrationTestSupport
     /*
      * Explode the dictionary into a ,-delimited list of key=value pairs
      */
-    private static String explode(Dictionary dictionary) {
-        Enumeration keys = dictionary.keys();
+    private static String explode(Dictionary<?, ?> dictionary) {
+        Enumeration<?> keys = dictionary.keys();
         StringBuffer result = new StringBuffer();
         while (keys.hasMoreElements()) {
             Object key = keys.nextElement();

@@ -46,17 +46,20 @@ public class DataSetEndpoint extends MockEndpoint implements Service {
     private long consumeDelay;
     private long preloadSize;
     private long initialDelay = 1000;
-    private Processor reporter;
 
     @Deprecated
     public DataSetEndpoint() {
         this.log = LoggerFactory.getLogger(DataSetEndpoint.class);
+        // optimize as we dont need to copy the exchange
+        copyOnExchange = false;
     }
 
     public DataSetEndpoint(String endpointUri, Component component, DataSet dataSet) {
         super(endpointUri, component);
         this.dataSet = dataSet;
         this.log = LoggerFactory.getLogger(endpointUri);
+        // optimize as we dont need to copy the exchange
+        copyOnExchange = false;
     }
 
     public static void assertEquals(String description, Object expected, Object actual, Exchange exchange) {
@@ -160,13 +163,6 @@ public class DataSetEndpoint extends MockEndpoint implements Service {
         this.produceDelay = produceDelay;
     }
 
-    /**
-     * Sets a custom progress reporter
-     */
-    public void setReporter(Processor reporter) {
-        this.reporter = reporter;
-    }
-
     public long getInitialDelay() {
         return initialDelay;
     }
@@ -184,17 +180,13 @@ public class DataSetEndpoint extends MockEndpoint implements Service {
         long index = receivedCount - 1;
         Exchange expected = createExchange(index);
 
-        // now lets assert that they are the same
+        // now let's assert that they are the same
         if (log.isDebugEnabled()) {
             log.debug("Received message: {} (DataSet index={}) = {}",
                     new Object[]{index, copy.getIn().getHeader(Exchange.DATASET_INDEX, Integer.class), copy});
         }
 
         assertMessageExpected(index, expected, copy);
-
-        if (reporter != null) {
-            reporter.process(copy);
-        }
 
         if (consumeDelay > 0) {
             Thread.sleep(consumeDelay);
@@ -215,17 +207,16 @@ public class DataSetEndpoint extends MockEndpoint implements Service {
         return answer;
     }
 
-    public void start() throws Exception {
+    @Override
+    protected void doStart() throws Exception {
+        super.doStart();
+
         long size = getDataSet().getSize();
         expectedMessageCount((int) size);
         if (reporter == null) {
             reporter = createReporter();
         }
-        log.info("Start: " + this + " expecting " + size + " messages");
-    }
-
-    public void stop() throws Exception {
-        log.info("Stop: " + this);
+        log.info(this + " expecting " + size + " messages");
     }
 
 }

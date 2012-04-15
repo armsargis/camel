@@ -53,11 +53,11 @@ public class LuceneIndexAndQueryProducerTest extends CamelTestSupport {
         JndiRegistry registry = new JndiRegistry(createJndiContext());
         registry.bind("std", new File("target/stdindexDir"));
         registry.bind("load_dir", new File("src/test/resources/sources"));
-        registry.bind("stdAnalyzer", new StandardAnalyzer(Version.LUCENE_30));
+        registry.bind("stdAnalyzer", new StandardAnalyzer(Version.LUCENE_35));
         registry.bind("simple", new File("target/simpleindexDir"));
-        registry.bind("simpleAnalyzer", new SimpleAnalyzer());
+        registry.bind("simpleAnalyzer", new SimpleAnalyzer(Version.LUCENE_35));
         registry.bind("whitespace", new File("target/whitespaceindexDir"));
-        registry.bind("whitespaceAnalyzer", new WhitespaceAnalyzer());
+        registry.bind("whitespaceAnalyzer", new WhitespaceAnalyzer(Version.LUCENE_35));
         return registry;
     }
     
@@ -93,7 +93,7 @@ public class LuceneIndexAndQueryProducerTest extends CamelTestSupport {
     
     @Test
     public void testLuceneIndexProducer() throws Exception {
-        MockEndpoint mockEndpoint = new MockEndpoint("mock:result");
+        MockEndpoint mockEndpoint = getMockEndpoint("mock:result");
 
         context.stop();
         context.addRoutes(new RouteBuilder() {
@@ -120,7 +120,7 @@ public class LuceneIndexAndQueryProducerTest extends CamelTestSupport {
 
     @Test
     public void testLucenePhraseQueryProducer() throws Exception {
-        MockEndpoint mockSearchEndpoint = new MockEndpoint("mock:searchResult");
+        MockEndpoint mockSearchEndpoint = getMockEndpoint("mock:searchResult");
         
         context.stop();
         context.addRoutes(new RouteBuilder() {
@@ -159,7 +159,7 @@ public class LuceneIndexAndQueryProducerTest extends CamelTestSupport {
     
     @Test
     public void testLuceneWildcardQueryProducer() throws Exception {
-        MockEndpoint mockSearchEndpoint = new MockEndpoint("mock:searchResult");
+        MockEndpoint mockSearchEndpoint = getMockEndpoint("mock:searchResult");
         
         context.stop();
         context.addRoutes(new RouteBuilder() {

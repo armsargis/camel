@@ -25,8 +25,6 @@ import org.apache.camel.spring.CamelBeanPostProcessor;
 import org.apache.camel.spring.SpringCamelContext;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
-import org.springframework.beans.factory.FactoryBean;
-import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.AutowireCapableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -35,8 +33,6 @@ import org.springframework.context.MessageSourceAware;
 import org.springframework.context.ResourceLoaderAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-
 
 /**
  * A useful base class for writing
@@ -129,10 +125,8 @@ public abstract class CamelConfiguration implements BeanFactoryAware, Applicatio
     @Bean
     public CamelBeanPostProcessor camelBeanPostProcessor() throws Exception {
         CamelBeanPostProcessor answer = new CamelBeanPostProcessor();
-
-        CamelContext camelContext = getBean(CamelContext.class);
-        // lets lookup a bean
-        answer.setCamelContext(camelContext);        
+        answer.setApplicationContext(getApplicationContext());
+        // do not set CamelContext as we will lazy evaluate that later
         return answer;
     }
 

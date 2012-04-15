@@ -89,17 +89,19 @@ public class BeanProcessor extends ServiceSupport implements AsyncProcessor {
         }
 
         // do we have a custom adapter for this POJO to a Processor
-        // should not be invoked if an explicit method has been set
-        Processor processor = getProcessor();
-        if (explicitMethodName == null && processor != null) {
-            LOG.trace("Using a custom adapter as bean invocation: {}", processor);
-            try {
-                processor.process(exchange);
-            } catch (Throwable e) {
-                exchange.setException(e);
+        // but only do this if allowed
+        if (allowProcessor(explicitMethodName, beanInfo)) {
+            Processor processor = getProcessor();
+            if (processor != null) {
+                LOG.trace("Using a custom adapter as bean invocation: {}", processor);
+                try {
+                    processor.process(exchange);
+                } catch (Throwable e) {
+                    exchange.setException(e);
+                }
+                callback.done(true);
+                return true;
             }
-            callback.done(true);
-            return true;
         }
 
         Message in = exchange.getIn();
@@ -139,30 +141,26 @@ public class BeanProcessor extends ServiceSupport implements AsyncProcessor {
         }
 
         MethodInvocation invocation;
-        if (methodObject != null) {
-            invocation = beanInfo.createInvocation(methodObject, bean, exchange);
-        } else {
-            // set explicit method name to invoke as a header, which is how BeanInfo can detect it
-            if (explicitMethodName != null) {
-                in.setHeader(Exchange.BEAN_METHOD_NAME, explicitMethodName);
-            }
-            try {
-                invocation = beanInfo.createInvocation(bean, exchange);
-            } catch (Throwable e) {
-                exchange.setException(e);
-                callback.done(true);
-                return true;
-            }
+        // set explicit method name to invoke as a header, which is how BeanInfo can detect it
+        if (explicitMethodName != null) {
+            in.setHeader(Exchange.BEAN_METHOD_NAME, explicitMethodName);
+        }
+        try {
+            invocation = beanInfo.createInvocation(bean, exchange);
+        } catch (Throwable e) {
+            exchange.setException(e);
+            callback.done(true);
+            return true;
+        } finally {
+            // must remove headers as they were provisional
+            in.removeHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY);
+            in.removeHeader(Exchange.BEAN_METHOD_NAME);
         }
         if (invocation == null) {
             throw new IllegalStateException("No method invocation could be created, no matching method could be found on: " + bean);
         }
 
-        // remove headers as they should not be propagated
-        in.removeHeader(Exchange.BEAN_MULTI_PARAMETER_ARRAY);
-        in.removeHeader(Exchange.BEAN_METHOD_NAME);
-
-        Object value = null;
+        Object value;
         try {
             AtomicBoolean sync = new AtomicBoolean(true);
             value = invocation.proceed(callback, sync);
@@ -175,7 +173,7 @@ public class BeanProcessor extends ServiceSupport implements AsyncProcessor {
 
             LOG.trace("Processing exchangeId: {} is continued being processed synchronously", exchange.getExchangeId());
         } catch (InvocationTargetException e) {
-            // lets unwrap the exception when its an invocation target exception
+            // let's unwrap the exception when it's an invocation target exception
             exchange.setException(e.getCause());
             callback.done(true);
             return true;
@@ -214,14 +212,6 @@ public class BeanProcessor extends ServiceSupport implements AsyncProcessor {
 
     // Properties
     // -----------------------------------------------------------------------
-
-    public Method getMethodObject() {
-        return methodObject;
-    }
-
-    public void setMethodObject(Method methodObject) {
-        this.methodObject = methodObject;
-    }
 
     public String getMethod() {
         return method;
@@ -264,5 +254,24 @@ public class BeanProcessor extends ServiceSupport implements AsyncProcessor {
 
     protected void doStop() throws Exception {
         ServiceHelper.stopService(getProcessor());
+    }
+
+    private boolean allowProcessor(String explicitMethodName, BeanInfo info) {
+        if (explicitMethodName != null) {
+            // don't allow if explicit method name is given, as we then must invoke this method
+            return false;
+        }
+
+        // don't allow if any of the methods has a @Handler annotation
+        // as the @Handler annotation takes precedence and is supposed to trigger invocation
+        // of the given method
+        for (MethodInfo method : info.getMethods()) {
+            if (method.hasHandlerAnnotation()) {
+                return false;
+            }
+        }
+
+        // fallback and allow using the processor
+        return true;
     }
 }

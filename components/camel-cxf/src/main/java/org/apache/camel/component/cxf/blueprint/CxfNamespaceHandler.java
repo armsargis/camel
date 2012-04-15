@@ -27,7 +27,6 @@ import org.w3c.dom.Node;
 
 import org.apache.aries.blueprint.NamespaceHandler;
 import org.apache.aries.blueprint.ParserContext;
-import org.apache.cxf.bus.blueprint.BlueprintBus;
 import org.osgi.service.blueprint.reflect.ComponentMetadata;
 import org.osgi.service.blueprint.reflect.Metadata;
 import org.slf4j.Logger;
@@ -42,7 +41,7 @@ public class CxfNamespaceHandler implements NamespaceHandler {
         return getClass().getClassLoader().getResource("schema/blueprint/camel-cxf.xsd");
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public Set<Class> getManagedClasses() {
         return new HashSet<Class>(Arrays.asList(CxfNamespaceHandler.class));
     }

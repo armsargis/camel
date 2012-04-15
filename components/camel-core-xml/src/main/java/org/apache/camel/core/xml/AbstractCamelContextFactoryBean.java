@@ -36,7 +36,6 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.properties.PropertiesComponent;
 import org.apache.camel.component.properties.PropertiesParser;
 import org.apache.camel.component.properties.PropertiesResolver;
-import org.apache.camel.core.xml.scan.PatternBasedPackageScanFilter;
 import org.apache.camel.management.DefaultManagementAgent;
 import org.apache.camel.management.DefaultManagementLifecycleStrategy;
 import org.apache.camel.management.DefaultManagementStrategy;
@@ -74,6 +73,7 @@ import org.apache.camel.spi.InterceptStrategy;
 import org.apache.camel.spi.LifecycleStrategy;
 import org.apache.camel.spi.ManagementNamingStrategy;
 import org.apache.camel.spi.ManagementStrategy;
+import org.apache.camel.spi.NodeIdFactory;
 import org.apache.camel.spi.PackageScanClassResolver;
 import org.apache.camel.spi.PackageScanFilter;
 import org.apache.camel.spi.ProcessorFactory;
@@ -110,17 +110,15 @@ public abstract class AbstractCamelContextFactoryBean<T extends ModelCamelContex
     private ClassLoader contextClassLoaderOnStart;
 
     public AbstractCamelContextFactoryBean() {
-        // Lets keep track of the class loader for when we actually do start things up
+        // Keep track of the class loader for when we actually do start things up
         contextClassLoaderOnStart = Thread.currentThread().getContextClassLoader();
     }
 
-    public Object getObject() throws Exception {
+    public T getObject() throws Exception {
         return getContext();
     }
 
-    public Class getObjectType() {
-        return CamelContext.class;
-    }
+    public abstract Class<T> getObjectType();
 
     public boolean isSingleton() {
         return true;
@@ -149,41 +147,7 @@ public abstract class AbstractCamelContextFactoryBean<T extends ModelCamelContex
         // and enable lazy loading of type converters if applicable
         initLazyLoadTypeConverteres();
 
-        ClassResolver classResolver = getBeanForType(ClassResolver.class);
-        if (classResolver != null) {
-            LOG.info("Using custom ClassResolver: " + classResolver);
-            getContext().setClassResolver(classResolver);
-        }
-        FactoryFinderResolver factoryFinderResolver = getBeanForType(FactoryFinderResolver.class);
-        if (factoryFinderResolver != null) {
-            LOG.info("Using custom FactoryFinderResolver: " + factoryFinderResolver);
-            getContext().setFactoryFinderResolver(factoryFinderResolver);
-        }
-        ExecutorServiceManager executorServiceStrategy = getBeanForType(ExecutorServiceManager.class);
-        if (executorServiceStrategy != null) {
-            LOG.info("Using custom ExecutorServiceStrategy: " + executorServiceStrategy);
-            getContext().setExecutorServiceManager(executorServiceStrategy);
-        }
-        ThreadPoolFactory threadPoolFactory = getBeanForType(ThreadPoolFactory.class);
-        if (threadPoolFactory != null) {
-            LOG.info("Using custom ThreadPoolFactory: " + threadPoolFactory);
-            getContext().getExecutorServiceManager().setThreadPoolFactory(threadPoolFactory);
-        }
-        ProcessorFactory processorFactory = getBeanForType(ProcessorFactory.class);
-        if (processorFactory != null) {
-            LOG.info("Using custom ProcessorFactory: " + processorFactory);
-            getContext().setProcessorFactory(processorFactory);
-        }
-        Debugger debugger = getBeanForType(Debugger.class);
-        if (debugger != null) {
-            LOG.info("Using custom Debugger: " + debugger);
-            getContext().setDebugger(debugger);
-        }
-        UuidGenerator uuidGenerator = getBeanForType(UuidGenerator.class);
-        if (uuidGenerator != null) {
-            LOG.info("Using custom UuidGenerator: " + uuidGenerator);
-            getContext().setUuidGenerator(uuidGenerator);
-        }
+        setupCustomServices();
 
         // set the custom registry if defined
         initCustomRegistry(getContext());
@@ -333,6 +297,7 @@ public abstract class AbstractCamelContextFactoryBean<T extends ModelCamelContex
 
     protected abstract void initCustomRegistry(T context);
     
+    @SuppressWarnings("deprecation")
     protected void initLazyLoadTypeConverteres() {
         if (getLazyLoadTypeConverters() != null) {
             getContext().setLazyLoadTypeConverters(getLazyLoadTypeConverters());
@@ -397,6 +362,14 @@ public abstract class AbstractCamelContextFactoryBean<T extends ModelCamelContex
 
             PropertiesComponent pc = new PropertiesComponent();
             pc.setLocation(def.getLocation());
+
+            if (def.isCache() != null) {
+                pc.setCache(def.isCache());
+            }
+
+            if (def.isIgnoreMissingLocation() != null) {
+                pc.setIgnoreMissingLocation(def.isIgnoreMissingLocation());
+            }
 
             // if using a custom resolver
             if (ObjectHelper.isNotEmpty(def.getPropertiesResolverRef())) {
@@ -496,6 +469,12 @@ public abstract class AbstractCamelContextFactoryBean<T extends ModelCamelContex
 
     public abstract String getUseBreadcrumb();
 
+    public abstract String getManagementNamePattern();
+
+    /**
+     * @deprecated this option is no longer supported, will be removed in a future Camel release.
+     */
+    @Deprecated
     public abstract Boolean getLazyLoadTypeConverters();
 
     public abstract CamelJMXAgentDefinition getCamelJMXAgent();
@@ -553,6 +532,9 @@ public abstract class AbstractCamelContextFactoryBean<T extends ModelCamelContex
         }
         if (getUseBreadcrumb() != null) {
             ctx.setUseBreadcrumb(CamelContextHelper.parseBoolean(getContext(), getUseBreadcrumb()));
+        }
+        if (getManagementNamePattern() != null) {
+            ctx.getManagementNameStrategy().setNamePattern(getManagementNamePattern());
         }
         if (getShutdownRoute() != null) {
             ctx.setShutdownRoute(getShutdownRoute());
@@ -740,4 +722,46 @@ public abstract class AbstractCamelContextFactoryBean<T extends ModelCamelContex
         return packages.toArray(new String[packages.size()]);
     }
 
+    private void setupCustomServices() {
+        ClassResolver classResolver = getBeanForType(ClassResolver.class);
+        if (classResolver != null) {
+            LOG.info("Using custom ClassResolver: " + classResolver);
+            getContext().setClassResolver(classResolver);
+        }
+        FactoryFinderResolver factoryFinderResolver = getBeanForType(FactoryFinderResolver.class);
+        if (factoryFinderResolver != null) {
+            LOG.info("Using custom FactoryFinderResolver: " + factoryFinderResolver);
+            getContext().setFactoryFinderResolver(factoryFinderResolver);
+        }
+        ExecutorServiceManager executorServiceStrategy = getBeanForType(ExecutorServiceManager.class);
+        if (executorServiceStrategy != null) {
+            LOG.info("Using custom ExecutorServiceStrategy: " + executorServiceStrategy);
+            getContext().setExecutorServiceManager(executorServiceStrategy);
+        }
+        ThreadPoolFactory threadPoolFactory = getBeanForType(ThreadPoolFactory.class);
+        if (threadPoolFactory != null) {
+            LOG.info("Using custom ThreadPoolFactory: " + threadPoolFactory);
+            getContext().getExecutorServiceManager().setThreadPoolFactory(threadPoolFactory);
+        }
+        ProcessorFactory processorFactory = getBeanForType(ProcessorFactory.class);
+        if (processorFactory != null) {
+            LOG.info("Using custom ProcessorFactory: " + processorFactory);
+            getContext().setProcessorFactory(processorFactory);
+        }
+        Debugger debugger = getBeanForType(Debugger.class);
+        if (debugger != null) {
+            LOG.info("Using custom Debugger: " + debugger);
+            getContext().setDebugger(debugger);
+        }
+        UuidGenerator uuidGenerator = getBeanForType(UuidGenerator.class);
+        if (uuidGenerator != null) {
+            LOG.info("Using custom UuidGenerator: " + uuidGenerator);
+            getContext().setUuidGenerator(uuidGenerator);
+        }
+        NodeIdFactory nodeIdFactory = getBeanForType(NodeIdFactory.class);
+        if (nodeIdFactory != null) {
+            LOG.info("Using custom NodeIdFactory: " + nodeIdFactory);
+            getContext().setNodeIdFactory(nodeIdFactory);
+        }
+    }
 }

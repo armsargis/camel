@@ -17,19 +17,14 @@
 package org.apache.camel.testng;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.apache.camel.CamelContext;
-import org.apache.camel.Route;
-import org.apache.camel.impl.DefaultPackageScanClassResolver;
-import org.apache.camel.impl.scan.AssignableToPackageScanFilter;
-import org.apache.camel.impl.scan.InvertingPackageScanFilter;
+import org.apache.camel.spring.CamelBeanPostProcessor;
 import org.apache.camel.spring.SpringCamelContext;
+import org.apache.camel.test.ExcludingPackageScanClassResolver;
 import org.apache.camel.util.CastUtils;
-import org.apache.camel.util.ObjectHelper;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.AbstractApplicationContext;
@@ -37,10 +32,6 @@ import org.springframework.context.support.GenericApplicationContext;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.AfterTest;
 
-
-/**
- * @version $Revision$
- */
 public abstract class CamelSpringTestSupport extends CamelTestSupport {
     protected static ThreadLocal<AbstractApplicationContext> threadAppContext
         = new ThreadLocal<AbstractApplicationContext>();
@@ -54,6 +45,13 @@ public abstract class CamelSpringTestSupport extends CamelTestSupport {
         if (isCreateCamelContextPerClass()) {
             applicationContext = threadAppContext.get();
         }
+
+        // use the bean post processor from camel-spring
+        CamelBeanPostProcessor processor = new CamelBeanPostProcessor();
+        processor.setApplicationContext(applicationContext);
+        processor.setCamelContext(context);
+        processor.postProcessBeforeInitialization(this, getClass().getName());
+        processor.postProcessAfterInitialization(this, getClass().getName());
     }
 
     @Override
@@ -100,16 +98,6 @@ public abstract class CamelSpringTestSupport extends CamelTestSupport {
             threadAppContext.get().destroy();
             threadAppContext.remove();
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static class ExcludingPackageScanClassResolver extends DefaultPackageScanClassResolver {
-
-        public void setExcludedClasses(Set<Class<?>> excludedClasses) {
-            excludedClasses = excludedClasses == null ? Collections.EMPTY_SET : excludedClasses;
-            addFilter(new InvertingPackageScanFilter(new AssignableToPackageScanFilter(excludedClasses)));
-        }
-
     }
 
     /**
@@ -170,23 +158,6 @@ public abstract class CamelSpringTestSupport extends CamelTestSupport {
      */
     public <T> T getMandatoryBean(Class<T> type, String name) {
         return applicationContext.getBean(name, type);
-    }
-
-    @Override
-    protected void assertValidContext(CamelContext context) {
-        super.assertValidContext(context);
-
-        List<Route> routes = context.getRoutes();
-        int routeCount = getExpectedRouteCount();
-        if (routeCount > 0) {
-            assertNotNull(routes, "Should have some routes defined");
-            assertTrue(routes.size() >= routeCount, "Should have at least one route");
-        }
-        log.debug("Camel Routes: " + routes);
-    }
-
-    protected int getExpectedRouteCount() {
-        return 1;
     }
 
     @Override

@@ -37,7 +37,6 @@ import org.apache.camel.model.language.ExpressionDefinition;
 public class NoOutputExpressionNode extends ExpressionNode {
 
     public NoOutputExpressionNode() {
-        super();
     }
 
     public NoOutputExpressionNode(ExpressionDefinition expression) {
@@ -53,9 +52,8 @@ public class NoOutputExpressionNode extends ExpressionNode {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public List<ProcessorDefinition> getOutputs() {
-        return Collections.EMPTY_LIST;
+    public List<ProcessorDefinition<?>> getOutputs() {
+        return Collections.emptyList();
     }
 
     @Override
@@ -64,7 +62,7 @@ public class NoOutputExpressionNode extends ExpressionNode {
     }
 
     @Override
-    public void addOutput(ProcessorDefinition output) {
+    public void addOutput(ProcessorDefinition<?> output) {
         // add it to the parent as we do not support outputs
         getParent().addOutput(output);
     }

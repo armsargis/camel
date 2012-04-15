@@ -43,7 +43,7 @@ public class CamelControllerImpl implements CamelController {
     }
 
     public List<CamelContext> getCamelContexts() {
-        ArrayList<CamelContext> camelContexts = new ArrayList<CamelContext>();
+        List<CamelContext> camelContexts = new ArrayList<CamelContext>();
         try {
             ServiceReference[] references = bundleContext.getServiceReferences(CamelContext.class.getName(), null);
             if (references != null) {
@@ -78,7 +78,7 @@ public class CamelControllerImpl implements CamelController {
                 return context.getRoutes();
             }
         } else {
-            ArrayList<Route> routes = new ArrayList<Route>();
+            List<Route> routes = new ArrayList<Route>();
             List<CamelContext> camelContexts = this.getCamelContexts();
             for (CamelContext camelContext : camelContexts) {
                 for (Route route : camelContext.getRoutes()) {
@@ -90,7 +90,7 @@ public class CamelControllerImpl implements CamelController {
         return null;
     }
 
-
+    @SuppressWarnings("deprecation")
     public List<RouteDefinition> getRouteDefinitions(String camelContextName) {
         if (camelContextName != null) {
             CamelContext context = this.getCamelContext(camelContextName);
@@ -98,7 +98,7 @@ public class CamelControllerImpl implements CamelController {
                 return context.getRouteDefinitions();
             }
         } else {
-            ArrayList<RouteDefinition> routeDefinitions = new ArrayList<RouteDefinition>();
+            List<RouteDefinition> routeDefinitions = new ArrayList<RouteDefinition>();
             List<CamelContext> camelContexts = this.getCamelContexts();
             for (CamelContext camelContext : camelContexts) {
                 for (RouteDefinition routeDefinition : camelContext.getRouteDefinitions()) {
@@ -120,6 +120,7 @@ public class CamelControllerImpl implements CamelController {
         return null;
     }
 
+    @SuppressWarnings("deprecation")
     public RouteDefinition getRouteDefinition(String routeId, String camelContextName) {
         CamelContext context = this.getCamelContext(camelContextName);
         if (context == null) {

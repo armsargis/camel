@@ -21,6 +21,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.camel.AsyncCallback;
+import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.apache.camel.util.ObjectHelper;
@@ -37,7 +38,9 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class DelayProcessorSupport extends DelegateAsyncProcessor {
     protected final transient Logger log = LoggerFactory.getLogger(getClass());
+    private final CamelContext camelContext;
     private final ScheduledExecutorService executorService;
+    private final boolean shutdownExecutorService;
     private boolean asyncDelayed;
     private boolean callerRunsWhenRejected = true;
 
@@ -57,19 +60,30 @@ public abstract class DelayProcessorSupport extends DelegateAsyncProcessor {
             if (!isRunAllowed()) {
                 exchange.setException(new RejectedExecutionException("Run is not allowed"));
             }
-            DelayProcessorSupport.super.process(exchange, callback);
-            // signal callback we are done async
-            callback.done(false);
+
+            // process the exchange now that we woke up
+            DelayProcessorSupport.super.process(exchange, new AsyncCallback() {
+                @Override
+                public void done(boolean doneSync) {
+                    log.trace("Delayed task done for exchangeId: {}", exchange.getExchangeId());
+                    // we must done the callback from this async callback as well, to ensure callback is done correctly
+                    // must invoke done on callback with false, as that is what the original caller would
+                    // expect as we returned false in the process method
+                    callback.done(false);
+                }
+            });
         }
     }
 
-    public DelayProcessorSupport(Processor processor) {
-        this(processor, null);
+    public DelayProcessorSupport(CamelContext camelContext, Processor processor) {
+        this(camelContext, processor, null, false);
     }
 
-    public DelayProcessorSupport(Processor processor, ScheduledExecutorService executorService) {
+    public DelayProcessorSupport(CamelContext camelContext, Processor processor, ScheduledExecutorService executorService, boolean shutdownExecutorService) {
         super(processor);
+        this.camelContext = camelContext;
         this.executorService = executorService;
+        this.shutdownExecutorService = shutdownExecutorService;
     }
 
     @Override
@@ -81,11 +95,18 @@ public abstract class DelayProcessorSupport extends DelegateAsyncProcessor {
         }
 
         // calculate delay and wait
-        long delay = calculateDelay(exchange);
-        if (delay <= 0) {
-            // no delay then continue routing
-            log.trace("No delay for exchangeId: {}", exchange.getExchangeId());
-            return super.process(exchange, callback);
+        long delay;
+        try {
+            delay = calculateDelay(exchange);
+            if (delay <= 0) {
+                // no delay then continue routing
+                log.trace("No delay for exchangeId: {}", exchange.getExchangeId());
+                return super.process(exchange, callback);
+            }
+        } catch (Throwable e) {
+            exchange.setException(e);
+            callback.done(true);
+            return true;
         }
 
         if (!isAsyncDelayed() || exchange.isTransacted()) {
@@ -206,5 +227,13 @@ public abstract class DelayProcessorSupport extends DelegateAsyncProcessor {
             ObjectHelper.notNull(executorService, "executorService", this);
         }
         super.doStart();
+    }
+
+    @Override
+    protected void doShutdown() throws Exception {
+        if (shutdownExecutorService && executorService != null) {
+            camelContext.getExecutorServiceManager().shutdownNow(executorService);
+        }
+        super.doShutdown();
     }
 }

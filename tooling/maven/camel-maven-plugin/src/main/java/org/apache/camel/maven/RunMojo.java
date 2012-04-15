@@ -54,9 +54,9 @@ import org.codehaus.mojo.exec.ExecutableDependency;
 import org.codehaus.mojo.exec.Property;
 
 /**
- * Runs a CamelContext using any Spring XML configuration files found in
- * <code>META-INF/spring/*.xml</code> and <code>camel-*.xml</code> and
- * starting up the context.
+ * Runs a CamelContext using any Spring or Blueprint XML configuration files found in
+ * <code>META-INF/spring/*.xml</code>, and <code>OSGI-INF/blueprint/*.xml</code>,
+ * and <code>camel-*.xml</code> and starting up the context.
  *
  * @goal run
  * @requiresDependencyResolution runtime
@@ -64,7 +64,6 @@ import org.codehaus.mojo.exec.Property;
  */
 public class RunMojo extends AbstractExecMojo {
 
-    // TODO
     // this code is based on a copy-and-paste of maven-exec-plugin
     //
     // If we could avoid the mega-cut-n-paste it would really really help!
@@ -108,6 +107,21 @@ public class RunMojo extends AbstractExecMojo {
     protected boolean useDot;
 
     /**
+     * Whether to log the classpath when starting
+     *
+     * @parameter expression="false"
+     */
+    protected boolean logClasspath;
+
+    /**
+     * Whether to use Blueprint when running, instead of Spring
+     *
+     * @parameter expression="${camel.blueprint}"
+     *            default-value="false"
+     */
+    protected boolean useBlueprint;
+
+    /**
      * @component
      */
     private ArtifactResolver artifactResolver;
@@ -132,7 +146,7 @@ public class RunMojo extends AbstractExecMojo {
     /**
      * @parameter expression="${project.remoteArtifactRepositories}"
      */
-    private List remoteRepositories;
+    private List<?> remoteRepositories;
 
     /**
      * @component
@@ -165,8 +179,6 @@ public class RunMojo extends AbstractExecMojo {
      * The main class to execute.
      *
      * @parameter expression="${camel.mainClass}"
-     *            default-value="org.apache.camel.spring.Main"
-     * @required
      */
     private String mainClass;
 
@@ -338,6 +350,7 @@ public class RunMojo extends AbstractExecMojo {
      */
     public void execute() throws MojoExecutionException, MojoFailureException {
         boolean usingSpringJavaConfigureMain = false;
+        boolean usingBlueprintMain = useBlueprint;
         if (killAfter != -1) {
             getLog().warn("Warning: killAfter is now deprecated. Do you need it ? Please comment on MEXEC-6.");
         }
@@ -386,11 +399,22 @@ public class RunMojo extends AbstractExecMojo {
         
         if (usingSpringJavaConfigureMain) {
             mainClass = "org.apache.camel.spring.javaconfig.Main";
-            getLog().info("Using the org.apache.camel.spring.javaconfig.Main to initiate a CamelContext");
+            getLog().info("Using org.apache.camel.spring.javaconfig.Main to initiate a CamelContext");
+        } else if (usingBlueprintMain) {
+            mainClass = "org.apache.camel.test.blueprint.Main";
+            // must include plugin dependencies for blueprint
+            includePluginDependencies = true;
+            getLog().info("Using org.apache.camel.test.blueprint.Main to initiate a CamelContext");
+        } else if (mainClass != null) {
+            getLog().info("Using custom " + mainClass + " to initiate a CamelContext");
+        } else {
+            // use spring by default
+            getLog().info("Using org.apache.camel.spring.Main to initiate a CamelContext");
+            mainClass = "org.apache.camel.spring.Main";
         }
         
         if (getLog().isDebugEnabled()) {
-            StringBuffer msg = new StringBuffer("Invoking : ");
+            StringBuffer msg = new StringBuffer("Invoking: ");
             msg.append(mainClass);
             msg.append(".main(");
             for (int i = 0; i < arguments.length; i++) {
@@ -493,9 +517,8 @@ public class RunMojo extends AbstractExecMojo {
         boolean foundNonDaemon;
         do {
             foundNonDaemon = false;
-            Collection threads = getActiveThreads(threadGroup);
-            for (Iterator iter = threads.iterator(); iter.hasNext();) {
-                Thread thread = (Thread)iter.next();
+            Collection<Thread> threads = getActiveThreads(threadGroup);
+            for (Thread thread : threads) {
                 if (thread.isDaemon()) {
                     continue;
                 }
@@ -532,15 +555,13 @@ public class RunMojo extends AbstractExecMojo {
             // Interrupt all threads we know about as of this instant (harmless
             // if spuriously went dead (! isAlive())
             // or if something else interrupted it ( isInterrupted() ).
-            for (Iterator iter = threads.iterator(); iter.hasNext();) {
-                Thread thread = (Thread)iter.next();
+            for (Thread thread : threads) {
                 getLog().debug("interrupting thread " + thread);
                 thread.interrupt();
             }
             // Now join with a timeout and call stop() (assuming flags are set
             // right)
-            for (Iterator iter = threads.iterator(); iter.hasNext();) {
-                Thread thread = (Thread)iter.next();
+            for (Thread thread : threads) {
                 if (!thread.isAlive()) {
                     continue; // and, presumably it won't show up in
                     // getActiveThreads() next iteration
@@ -603,8 +624,7 @@ public class RunMojo extends AbstractExecMojo {
     private void setSystemProperties() {
         if (systemProperties != null) {
             originalSystemProperties = System.getProperties();
-            for (int i = 0; i < systemProperties.length; i++) {
-                Property systemProperty = systemProperties[i];
+            for (Property systemProperty : systemProperties) {
                 String value = systemProperty.getValue();
                 System.setProperty(systemProperty.getKey(), value == null ? "" : value);
             }
@@ -622,8 +642,10 @@ public class RunMojo extends AbstractExecMojo {
         this.addRelevantPluginDependenciesToClasspath(classpathURLs);
         this.addRelevantProjectDependenciesToClasspath(classpathURLs);
 
-        getLog().info("Classpath = " + classpathURLs);
-        return new URLClassLoader((URL[])classpathURLs.toArray(new URL[classpathURLs.size()]));
+        if (logClasspath) {
+            getLog().info("Classpath = " + classpathURLs);
+        }
+        return new URLClassLoader(classpathURLs.toArray(new URL[classpathURLs.size()]));
     }
 
     /**
@@ -639,9 +661,9 @@ public class RunMojo extends AbstractExecMojo {
         }
 
         try {
-            Iterator iter = this.determineRelevantPluginDependencies().iterator();
+            Iterator<Artifact> iter = this.determineRelevantPluginDependencies().iterator();
             while (iter.hasNext()) {
-                Artifact classPathElement = (Artifact)iter.next();
+                Artifact classPathElement = iter.next();
                 getLog().debug("Adding plugin dependency artifact: " + classPathElement.getArtifactId()
                                    + " to classpath");
                 path.add(classPathElement.getFile().toURI().toURL());
@@ -674,9 +696,9 @@ public class RunMojo extends AbstractExecMojo {
                 // MEXEC-17
                 dependencies.addAll(getAllNonTestScopedDependencies());
 
-                Iterator iter = dependencies.iterator();
+                Iterator<Artifact> iter = dependencies.iterator();
                 while (iter.hasNext()) {
-                    Artifact classPathElement = (Artifact)iter.next();
+                    Artifact classPathElement = iter.next();
                     getLog().debug("Adding project dependency artifact: " + classPathElement.getArtifactId()
                                        + " to classpath");
                     File file = classPathElement.getFile();
@@ -697,8 +719,7 @@ public class RunMojo extends AbstractExecMojo {
     private Collection<Artifact> getAllNonTestScopedDependencies() throws MojoExecutionException {
         List<Artifact> answer = new ArrayList<Artifact>();
 
-        for (Iterator artifacts = getAllDependencies().iterator(); artifacts.hasNext();) {
-            Artifact artifact = (Artifact)artifacts.next();
+        for (Artifact artifact : getAllDependencies()) {
 
             // do not add test artifacts
             if (!artifact.getScope().equals(Artifact.SCOPE_TEST)) {
@@ -712,7 +733,7 @@ public class RunMojo extends AbstractExecMojo {
     private Collection<Artifact> getAllDependencies() throws MojoExecutionException {
         List<Artifact> artifacts = new ArrayList<Artifact>();
 
-        for (Iterator dependencies = project.getDependencies().iterator(); dependencies.hasNext();) {
+        for (Iterator<?> dependencies = project.getDependencies().iterator(); dependencies.hasNext();) {
             Dependency dependency = (Dependency)dependencies.next();
 
             String groupId = dependency.getGroupId();
@@ -744,7 +765,7 @@ public class RunMojo extends AbstractExecMojo {
             }
 
             List<String> exclusions = new ArrayList<String>();
-            for (Iterator j = dependency.getExclusions().iterator(); j.hasNext();) {
+            for (Iterator<?> j = dependency.getExclusions().iterator(); j.hasNext();) {
                 Exclusion e = (Exclusion)j.next();
                 exclusions.add(e.getGroupId() + ":" + e.getArtifactId());
             }
@@ -808,8 +829,7 @@ public class RunMojo extends AbstractExecMojo {
         // this.getExecutableToolAssembly();
 
         Artifact executableTool = null;
-        for (Iterator iter = this.pluginDependencies.iterator(); iter.hasNext();) {
-            Artifact pluginDep = (Artifact)iter.next();
+        for (Artifact pluginDep : this.pluginDependencies) {
             if (this.executableDependency.matches(pluginDep)) {
                 executableTool = pluginDep;
                 break;

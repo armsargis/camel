@@ -66,7 +66,7 @@ abstract class AbstractTracked {
      * 
      * @GuardedBy this
      */
-    private final Map tracked;
+    private final Map<Object, Object> tracked;
 
     /**
      * Modification count. This field is initialized to zero and incremented by
@@ -88,7 +88,7 @@ abstract class AbstractTracked {
      * 
      * @GuardedBy this
      */
-    private final List adding;    
+    private final List<Object> adding;    
 
     /**
      * Initial list of items for the tracker. This is used to correctly process
@@ -104,16 +104,16 @@ abstract class AbstractTracked {
      * 
      * @GuardedBy this
      */
-    private final LinkedList initial;
+    private final LinkedList<Object> initial;
 
     /**
      * AbstractTracked constructor.
      */
     AbstractTracked() {
-        tracked = new HashMap();
+        tracked = new HashMap<Object, Object>();
         trackingCount = 0;
-        adding = new ArrayList(6);
-        initial = new LinkedList();
+        adding = new ArrayList<Object>(6);
+        initial = new LinkedList<Object>();
         closed = false;
     }
 
@@ -127,7 +127,6 @@ abstract class AbstractTracked {
      *            entries in the list are ignored.
      * @GuardedBy this
      */
-    @SuppressWarnings("unchecked")
     void setInitial(Object[] list) {
         if (list == null) {
             return;
@@ -139,7 +138,7 @@ abstract class AbstractTracked {
                 continue;
             }
             if (DEBUG) {
-                System.out.println("AbstractTracked.setInitial: " + item); //$NON-NLS-1$
+                System.out.println("AbstractTracked.setInitial: " + item);
             }
             initial.add(item);
         }
@@ -150,7 +149,6 @@ abstract class AbstractTracked {
      * be received. This method must be called from Tracker's open method while
      * not synchronized on this object after the add listener call.
      */
-    @SuppressWarnings("unchecked")
     void trackInitial() {
         while (true) {
             Object item;
@@ -169,7 +167,7 @@ abstract class AbstractTracked {
                 if (tracked.get(item) != null) {
                     /* if we are already tracking this item */
                     if (DEBUG) {
-                        System.out.println("AbstractTracked.trackInitial[already tracked]: " + item); //$NON-NLS-1$
+                        System.out.println("AbstractTracked.trackInitial[already tracked]: " + item);
                     }
                     continue; /* skip this item */
                 }
@@ -178,14 +176,14 @@ abstract class AbstractTracked {
                      * if this item is already in the process of being added.
                      */
                     if (DEBUG) {
-                        System.out.println("AbstractTracked.trackInitial[already adding]: " + item); //$NON-NLS-1$
+                        System.out.println("AbstractTracked.trackInitial[already adding]: " + item);
                     }
                     continue; /* skip this item */
                 }
                 adding.add(item);
             }
             if (DEBUG) {
-                System.out.println("AbstractTracked.trackInitial: " + item); //$NON-NLS-1$
+                System.out.println("AbstractTracked.trackInitial: " + item);
             }
             trackAdding(item, null); /*
                                       * Begin tracking it. We call trackAdding
@@ -208,7 +206,6 @@ abstract class AbstractTracked {
      * @param item Item to be tracked.
      * @param related Action related object.
      */
-    @SuppressWarnings("unchecked")
     void track(final Object item, final Object related) {
         final Object object;
         synchronized (this) {
@@ -220,14 +217,14 @@ abstract class AbstractTracked {
                 if (adding.contains(item)) {
                     /* if this item is already in the process of being added. */
                     if (DEBUG) {
-                        System.out.println("AbstractTracked.track[already adding]: " + item); //$NON-NLS-1$
+                        System.out.println("AbstractTracked.track[already adding]: " + item);
                     }
                     return;
                 }
                 adding.add(item); /* mark this item is being added */
             } else { /* we are currently tracking this item */
                 if (DEBUG) {
-                    System.out.println("AbstractTracked.track[modified]: " + item); //$NON-NLS-1$
+                    System.out.println("AbstractTracked.track[modified]: " + item);
                 }
                 modified(); /* increment modification count */
             }
@@ -253,10 +250,9 @@ abstract class AbstractTracked {
      * @param item Item to be tracked.
      * @param related Action related object.
      */
-    @SuppressWarnings("unchecked")
     private void trackAdding(final Object item, final Object related) {
         if (DEBUG) {
-            System.out.println("AbstractTracked.trackAdding: " + item); //$NON-NLS-1$
+            System.out.println("AbstractTracked.trackAdding: " + item);
         }
         Object object = null;
         boolean becameUntracked = false;
@@ -289,7 +285,7 @@ abstract class AbstractTracked {
          */
         if (becameUntracked && (object != null)) {
             if (DEBUG) {
-                System.out.println("AbstractTracked.trackAdding[removed]: " + item); //$NON-NLS-1$
+                System.out.println("AbstractTracked.trackAdding[removed]: " + item);
             }
             /* Call customizer outside of synchronized region */
             customizerRemoved(item, related, object);
@@ -314,7 +310,7 @@ abstract class AbstractTracked {
                                          * of initial references to process
                                          */
                 if (DEBUG) {
-                    System.out.println("AbstractTracked.untrack[removed from initial]: " + item); //$NON-NLS-1$
+                    System.out.println("AbstractTracked.untrack[removed from initial]: " + item);
                 }
                 return; /*
                          * we have removed it from the list and it will not be
@@ -327,7 +323,7 @@ abstract class AbstractTracked {
                                         * added
                                         */
                 if (DEBUG) {
-                    System.out.println("AbstractTracked.untrack[being added]: " + item); //$NON-NLS-1$
+                    System.out.println("AbstractTracked.untrack[being added]: " + item);
                 }
                 return; /*
                          * in case the item is untracked while in the process of
@@ -344,7 +340,7 @@ abstract class AbstractTracked {
             modified(); /* increment modification count */
         }
         if (DEBUG) {
-            System.out.println("AbstractTracked.untrack[removed]: " + item); //$NON-NLS-1$
+            System.out.println("AbstractTracked.untrack[removed]: " + item);
         }
         /* Call customizer outside of synchronized region */
         customizerRemoved(item, related, object);
@@ -383,7 +379,6 @@ abstract class AbstractTracked {
      *         items or a new array large enough to hold the tracked items.
      * @GuardedBy this
      */
-    @SuppressWarnings("unchecked")
     Object[] getTracked(final Object[] list) {
         return tracked.keySet().toArray(list);
     }

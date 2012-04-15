@@ -19,7 +19,6 @@ package org.apache.camel.component.hazelcast;
 import java.io.Serializable;
 import java.util.Collection;
 
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
 
@@ -32,12 +31,13 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 public class HazelcastMapProducerForSpringTest extends CamelSpringTestSupport implements Serializable {
 
+    private static final long serialVersionUID = 1L;
     private IMap<String, Object> map;
 
     @Override
     protected void doPostSetup() throws Exception {
         super.doPostSetup();
-        HazelcastComponent component = (HazelcastComponent) context().getComponent("hazelcast");
+        HazelcastComponent component = context().getComponent("hazelcast", HazelcastComponent.class);
         HazelcastInstance hazelcastInstance = component.getHazelcastInstance();
         this.map = hazelcastInstance.getMap("foo");
         this.map.clear();
@@ -110,7 +110,7 @@ public class HazelcastMapProducerForSpringTest extends CamelSpringTestSupport im
 
     public class Dummy implements Serializable {
 
-        private static final long serialVersionUID = 3688457704655925278L;
+        private static final long serialVersionUID = 1L;
 
         private String foo;
         private int bar;
